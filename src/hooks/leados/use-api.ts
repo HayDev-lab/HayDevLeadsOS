@@ -246,7 +246,22 @@ export function useAnalytics() {
         days: { date: string; count: number }[];
         funnel: { stage: string; type: string; color: string | null; count: number; value: number }[];
         openPipelineValue: number; wonValue: number;
+        sourceRoi: { type: string; name: string; count: number; won: number; lost: number; value: number; conversion: number }[];
       }>("/analytics"),
+  });
+}
+export function useTeamPerformance() {
+  return useQuery({
+    queryKey: ["team"],
+    queryFn: () =>
+      api.get<{
+        users: {
+          userId: string; name: string; email: string; role: string; avatarColor: string | null;
+          totalAssigned: number; activeLeads: number; won: number; lost: number; conversionRate: number;
+          overdueTasks: number; openTasks: number; avgResponseHours: number | null; wonValue: number; pipelineValue: number;
+        }[];
+        totals: Record<string, number>;
+      }>("/team"),
   });
 }
 export function useCustomFields() {

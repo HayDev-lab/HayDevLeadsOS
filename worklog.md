@@ -272,3 +272,57 @@ Next-phase priorities:
 3. Real auth (NextAuth) — demo session context works but needs production auth.
 4. Deeper analytics: response time distribution, source ROI, team performance.
 5. Saved filters sync to backend (currently localStorage only).
+
+---
+Task ID: 6
+Agent: main (cron round 3)
+Task: QA + add Team Performance view, Source ROI analytics, enhanced CSV export, styling polish.
+
+QA Assessment:
+- Dev server stable (HTTP 200) — survived from round 2's manual restart.
+- All views verified: dashboard, leads, lead detail, inbox (4 conversations), analytics, pipeline kanban, tasks, settings. No console errors.
+- Dark mode + mobile (390×844) verified on all views.
+
+Work completed this round:
+1. Team Performance view (NEW — #team):
+   - lib/leados/team-service.ts: per-user metrics (totalAssigned, active, won, lost, conversionRate, overdueTasks, openTasks, avgResponseHours, wonValue, pipelineValue)
+   - API: /api/v1/team
+   - Hook: useTeamPerformance
+   - team-view.tsx: team KPI row (6 cards), recharts BarChart (won vs active per user), user cards grid with avatar + metrics + response time + overdue + won/pipeline value, framer-motion staggered entrance
+   - Nav entry "Team" added
+
+2. Source ROI analytics (NEW):
+   - analytics-service.ts extended: sourceRoi[] with per-source (type, name, count, won, lost, value, conversion)
+   - analytics-view.tsx: Source ROI table with source icons, color-coded conversion badges, won value per source — for ad spend decisions
+   - 11 sources tracked (Website, Business Audit, Instagram, Referral, Google Ads, etc.)
+
+3. Enhanced CSV export (NEW):
+   - Export now includes utmSource, utmCampaign (attribution) columns
+   - Custom field values appended as cf_<key> columns (text/number/bool/date)
+   - take: 2000 leads, includes attributions + customValues
+
+4. Styling polish:
+   - globals.css: skeleton shimmer animation (leados-skeleton), chart text color vars (recharts), dialog backdrop blur, tab indicator transition, tabular-nums utility
+   - Dark mode charts: recharts text uses var(--muted-foreground) for proper dark contrast
+   - Team view: leados-lift hover on user cards, motion staggered entrance
+
+5. i18n: added nav.team key (HY: Թիմ, RU: Команда, EN: Team)
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: team view (4 users, chart renders), analytics with Source ROI table (11 sources), dark mode, mobile 390×844
+- API checks: team (4 users — David 13 assigned/1 won, Narek 13/1, Aram 0/0, Lilit 0/0), sourceRoi (11 entries — Website 9 leads/1 won/11%, Business Audit 5/1/20%)
+- CSV export verified: includes utmSource, utmCampaign columns
+
+Unresolved issues / risks:
+- Dev server requires manual restart if it crashes (system auto-restart not reliable). Currently stable from round 2's nohup restart.
+- Inbox reply composer still disabled (outbound adapter not connected — by design).
+- Real auth (NextAuth) still deferred — demo session works with org isolation.
+
+Next-phase priorities:
+1. Notification channel adapters (email/Telegram/WhatsApp delivery).
+2. Real auth (NextAuth) for production.
+3. Saved filters sync to backend (currently localStorage).
+4. Deeper analytics: response time distribution, trend over time.
+5. Pipeline stage reordering (drag to reorder positions).

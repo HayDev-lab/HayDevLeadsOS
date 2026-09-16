@@ -5,8 +5,9 @@ import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, PieChart, Pie } from "recharts";
-import { TrendingUp, Clock, Trophy, XCircle, Target, DollarSign, Activity, AlertCircle } from "lucide-react";
+import { TrendingUp, Clock, Trophy, XCircle, Target, DollarSign, Activity, AlertCircle, Instagram, Facebook, MessageCircle, Send, Mail, Globe, Megaphone, Phone, Link2, User, Plus } from "lucide-react";
 import { EmptyState, formatMoney } from "../primitives";
+import { cn } from "@/lib/utils";
 
 const SOURCE_COLOR: Record<string, string> = {
   instagram: "#E1306C",
@@ -20,7 +21,26 @@ const SOURCE_COLOR: Record<string, string> = {
   website: "#0ea5e9",
   manual: "#64748b",
   api: "#a855f7",
+  email: "#64748b",
+  phone: "#6366f1",
   other: "#94a3b8",
+};
+
+const SOURCE_ICON_MAP: Record<string, typeof Instagram> = {
+  website: Globe,
+  business_audit: Target,
+  instagram: Instagram,
+  facebook: Facebook,
+  whatsapp: MessageCircle,
+  telegram: Send,
+  google_ads: Megaphone,
+  meta_ads: Megaphone,
+  referral: Link2,
+  manual: User,
+  api: Plus,
+  email: Mail,
+  phone: Phone,
+  other: Link2,
 };
 
 export function AnalyticsView() {
@@ -155,6 +175,59 @@ export function AnalyticsView() {
           )}
         </CardContent>
       </Card>
+
+      {/* source ROI */}
+      {data.sourceRoi && data.sourceRoi.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2"><DollarSign className="h-4 w-4" />Source ROI</CardTitle>
+            <CardDescription className="text-xs">Which sources bring leads, wins & revenue — for ad spend decisions</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b text-xs text-muted-foreground">
+                  <tr>
+                    <th className="text-left font-medium px-2 py-2">Source</th>
+                    <th className="text-right font-medium px-2 py-2">Leads</th>
+                    <th className="text-right font-medium px-2 py-2">Won</th>
+                    <th className="text-right font-medium px-2 py-2">Lost</th>
+                    <th className="text-right font-medium px-2 py-2">Conv.</th>
+                    <th className="text-right font-medium px-2 py-2">Won value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.sourceRoi.map((s) => {
+                    const Icon = SOURCE_ICON_MAP[s.type] ?? Link2;
+                    const color = SOURCE_COLOR[s.type] ?? "#64748b";
+                    return (
+                      <tr key={s.type} className="border-b last:border-0 hover:bg-accent/40 transition">
+                        <td className="px-2 py-2">
+                          <span className="inline-flex items-center gap-2">
+                            <span className="inline-flex items-center justify-center h-6 w-6 rounded-full" style={{ backgroundColor: color + "1a" }}>
+                              <Icon className="h-3 w-3" style={{ color }} />
+                            </span>
+                            <span className="font-medium">{s.name}</span>
+                          </span>
+                        </td>
+                        <td className="text-right tabular-nums px-2 py-2">{s.count}</td>
+                        <td className="text-right tabular-nums px-2 py-2 text-emerald-600 dark:text-emerald-400 font-medium">{s.won}</td>
+                        <td className="text-right tabular-nums px-2 py-2 text-rose-600 dark:text-rose-400">{s.lost}</td>
+                        <td className="text-right tabular-nums px-2 py-2">
+                          <span className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium", s.conversion >= 20 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>
+                            {s.conversion}%
+                          </span>
+                        </td>
+                        <td className="text-right tabular-nums px-2 py-2 font-semibold">{formatMoney(s.value)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

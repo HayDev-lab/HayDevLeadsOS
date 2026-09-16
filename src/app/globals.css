@@ -167,3 +167,27 @@ table.leados-table tbody tr { transition: background 0.12s ease; }
 /* Hide horizontal scrollbar on kanban when not needed */
 .kanban-scroll { scrollbar-width: thin; }
 
+/* Skeleton shimmer */
+@keyframes leados-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.leados-skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, color-mix(in oklch, var(--muted) 60%, transparent) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: leados-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Chart text color helper (recharts uses inline fill; we provide a CSS var) */
+.recharts-cartesian-axis-tick-value { fill: var(--muted-foreground); }
+.recharts-text { fill: var(--muted-foreground); }
+
+/* Smooth backdrop for dialogs/sheets */
+[data-radix-dialog-overlay] { backdrop-filter: blur(2px); }
+
+/* Tab indicator transition */
+[data-state="active"][role="tab"] { transition: all 0.15s ease; }
+
+/* Number tabular for all .tabular-nums elements */
+.tabular-nums { font-variant-numeric: tabular-nums; }
+

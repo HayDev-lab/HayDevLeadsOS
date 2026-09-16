@@ -34,30 +34,44 @@ export async function GET(req: Request) {
     }
     const rows = await db.lead.findMany({
       where,
-      include: { stage: true, source: true, owner: { select: { name: true } }, leadTags: { include: { tag: true } } },
+      include: { stage: true, source: true, owner: { select: { name: true } }, leadTags: { include: { tag: true } }, customValues: { include: { field: true } }, attributions: { take: 1 } },
       orderBy: { createdAt: "desc" },
       take: 2000,
     });
-    const exportRows = rows.map((l) => ({
-      firstName: l.firstName ?? "",
-      lastName: l.lastName ?? "",
-      company: l.company ?? "",
-      phone: l.phone ?? "",
-      email: l.email ?? "",
-      source: l.source?.name ?? "",
-      stage: l.stage?.name ?? "",
-      status: l.status,
-      priority: l.priority,
-      score: l.leadScore,
-      owner: l.owner?.name ?? "",
-      estimatedValue: l.estimatedValue ?? "",
-      currency: l.currency ?? "",
+    const exportRows = rows.map((l) => {
+      const base: Record<string, unknown> = {
+        firstName: l.firstName ?? "",
+        lastName: l.lastName ?? "",
+        company: l.company ?? "",
+        phone: l.phone ?? "",
+        email: l.email ?? "",
+        source: l.source?.name ?? "",
+        stage: l.stage?.name ?? "",
+        status: l.status,
+        priority: l.priority,
+        score: l.leadScore,
+        owner: l.owner?.name ?? "",
+        estimatedValue: l.estimatedValue ?? "",
+        currency: l.currency ?? "",
       summary: l.summary ?? "",
       nextActionAt: l.nextActionAt ? new Date(l.nextActionAt).toISOString() : "",
       lastContactAt: l.lastContactAt ? new Date(l.lastContactAt).toISOString() : "",
       tags: l.leadTags.map((t) => t.tag.name).join("; "),
+      utmSource: l.attributions[0]?.utmSource ?? "",
+      utmCampaign: l.attributions[0]?.utmCampaign ?? "",
       createdAt: new Date(l.createdAt).toISOString(),
-    }));
+      };
+      // append custom field values as columns
+      for (const cv of l.customValues) {
+        const key = `cf_${cv.field.key}`;
+        if (cv.valueText != null) base[key] = cv.valueText;
+        else if (cv.valueNumber != null) base[key] = cv.valueNumber;
+        else if (cv.valueBool != null) base[key] = cv.valueBool;
+        else if (cv.valueDate != null) base[key] = new Date(cv.valueDate).toISOString().slice(0, 10);
+        else base[key] = "";
+      }
+      return base;
+    });
     const csv = toCsv(exportRows);
     return new Response(csv, {
       headers: {

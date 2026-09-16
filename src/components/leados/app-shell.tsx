@@ -7,7 +7,7 @@ import { useLostDetector, useSession, useSeed } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database, Inbox as InboxIcon, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database, Inbox as InboxIcon, BarChart3, UserCircle } from "lucide-react";
 import { LangSwitcher, NotificationsBell, SearchTrigger, ThemeToggle, UserSwitcher } from "./header-controls";
 import { DemoBadge } from "./primitives";
 import { toast } from "sonner";
@@ -19,6 +19,7 @@ import { TasksView } from "./tasks-view";
 import { SettingsView } from "./settings-view";
 import { InboxView } from "./inbox/inbox-view";
 import { AnalyticsView } from "./analytics/analytics-view";
+import { TeamView } from "./team/team-view";
 import { useInboxStats } from "@/hooks/leados/use-api";
 
 const NAV = [
@@ -28,6 +29,7 @@ const NAV = [
   { view: "tasks", icon: CheckSquare, key: "nav.tasks" as const },
   { view: "inbox", icon: InboxIcon, key: "nav.inbox" as const },
   { view: "analytics", icon: BarChart3, key: "nav.analytics" as const },
+  { view: "team", icon: UserCircle, key: "nav.team" as const },
   { view: "settings", icon: Settings, key: "nav.settings" as const },
 ];
 
@@ -92,6 +94,8 @@ export function LeadOSApp() {
         return <InboxView />;
       case "analytics":
         return <AnalyticsView />;
+      case "team":
+        return <TeamView />;
       case "settings":
         return <SettingsView />;
       default:

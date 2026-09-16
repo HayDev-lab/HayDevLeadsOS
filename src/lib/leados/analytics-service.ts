@@ -98,6 +98,56 @@ export async function getAnalytics(orgId: string) {
     _sum: { estimatedValue: true },
   });
 
+  // Source ROI — leads count, won count, conversion, value per source
+  const sourceLeads = await db.lead.groupBy({
+    by: ["sourceId"],
+    where: { organizationId: orgId, status: { notIn: ["ARCHIVED"] } },
+    _count: { _all: true },
+  });
+  const sourceWon = await db.lead.groupBy({
+    by: ["sourceId"],
+    where: { organizationId: orgId, status: "WON" },
+    _count: { _all: true },
+  });
+  const sourceLost = await db.lead.groupBy({
+    by: ["sourceId"],
+    where: { organizationId: orgId, status: "LOST" },
+    _count: { _all: true },
+  });
+  const sourceValue = await db.lead.groupBy({
+    by: ["sourceId"],
+    where: { organizationId: orgId, status: "WON" },
+    _sum: { estimatedValue: true },
+  });
+  const allSources = await db.leadSource.findMany({ where: { organizationId: orgId } });
+  const sourceMap = new Map(allSources.map((s) => [s.id, s]));
+  const sourceRoiMap = new Map<string, { type: string; name: string; count: number; won: number; lost: number; value: number; conversion: number }>();
+  for (const r of sourceLeads) {
+    if (!r.sourceId) continue;
+    const src = sourceMap.get(r.sourceId);
+    if (!src) continue;
+    sourceRoiMap.set(r.sourceId, { type: src.type, name: src.name, count: r._count._all, won: 0, lost: 0, value: 0, conversion: 0 });
+  }
+  for (const r of sourceWon) {
+    if (!r.sourceId) continue;
+    const entry = sourceRoiMap.get(r.sourceId);
+    if (entry) entry.won = r._count._all;
+  }
+  for (const r of sourceLost) {
+    if (!r.sourceId) continue;
+    const entry = sourceRoiMap.get(r.sourceId);
+    if (entry) entry.lost = r._count._all;
+  }
+  for (const r of sourceValue) {
+    if (!r.sourceId) continue;
+    const entry = sourceRoiMap.get(r.sourceId);
+    if (entry) entry.value = r._sum.estimatedValue ?? 0;
+  }
+  for (const entry of sourceRoiMap.values()) {
+    entry.conversion = entry.count > 0 ? Math.round((entry.won / entry.count) * 100) : 0;
+  }
+  const sourceRoi = Array.from(sourceRoiMap.values()).sort((a, b) => b.count - a.count);
+
   return {
     totalLeads,
     won: wonCount,
@@ -111,5 +161,6 @@ export async function getAnalytics(orgId: string) {
     funnel,
     openPipelineValue: openValueRaw._sum.estimatedValue ?? 0,
     wonValue: wonValueRaw._sum.estimatedValue ?? 0,
+    sourceRoi,
   };
 }
