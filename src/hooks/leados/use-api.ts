@@ -166,6 +166,45 @@ export function useTasks(status?: string[]) {
     queryFn: () => api.get<{ rows: any[] }>(`/tasks?${p.toString()}`),
   });
 }
+export function useInbox(source?: string, unassigned?: boolean) {
+  const p = new URLSearchParams();
+  if (source) p.set("source", source);
+  if (unassigned) p.set("unassigned", "1");
+  return useQuery({
+    queryKey: ["inbox", p.toString()],
+    queryFn: () => api.get<{ rows: any[]; conversations: any[]; total: number }>(`/inbox?${p.toString()}`),
+    refetchInterval: 30_000,
+  });
+}
+export function useInboxStats() {
+  return useQuery({
+    queryKey: ["inbox-stats"],
+    queryFn: () => api.get<{ total: number; unassigned: number; last24h: number; bySource: { source: string; count: number }[] }>("/inbox?view=stats"),
+    refetchInterval: 60_000,
+  });
+}
+export function useLinkMessage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (leadId: string) => api.patch<{ ok: boolean }>(`/inbox/${id}`, { leadId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inbox"] });
+      qc.invalidateQueries({ queryKey: ["inbox-stats"] });
+    },
+  });
+}
+export function useCreateLeadFromMessage(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ leadId: string | null }>(`/inbox/${id}`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inbox"] });
+      qc.invalidateQueries({ queryKey: ["inbox-stats"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}
 export function useSources() {
   return useQuery({ queryKey: ["sources"], queryFn: () => api.get<{ rows: any[] }>("/sources") });
 }
@@ -193,6 +232,50 @@ export function useSearch(q: string) {
     queryKey: ["search", q],
     queryFn: () => api.get<{ rows: any[] }>(`/search?q=${encodeURIComponent(q)}`),
     enabled: q.trim().length >= 2,
+  });
+}
+export function useAnalytics() {
+  return useQuery({
+    queryKey: ["analytics"],
+    queryFn: () =>
+      api.get<{
+        totalLeads: number; won: number; lost: number; archived: number;
+        conversionRate: number; avgResponseHours: number | null;
+        winsBySource: { type: string; name: string; count: number; value: number }[];
+        lostReasons: { reason: string; count: number }[];
+        days: { date: string; count: number }[];
+        funnel: { stage: string; type: string; color: string | null; count: number; value: number }[];
+        openPipelineValue: number; wonValue: number;
+      }>("/analytics"),
+  });
+}
+export function useCustomFields() {
+  return useQuery({ queryKey: ["custom-fields"], queryFn: () => api.get<{ rows: any[] }>("/custom-fields") });
+}
+export function useCreateCustomField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; key: string; type: string; options?: string[] }) =>
+      api.post<{ field: any }>("/custom-fields", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["custom-fields"] }),
+  });
+}
+export function useDeleteCustomField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/custom-fields/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["custom-fields"] }),
+  });
+}
+export function useSetCustomValue(fieldId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { leadId: string; valueText?: string | null; valueNumber?: number | null; valueBool?: boolean | null; valueDate?: string | null }) =>
+      api.post<{ value: any }>(`/custom-fields/${fieldId}/values`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["custom-fields"] });
+      qc.invalidateQueries({ queryKey: ["lead"] });
+    },
   });
 }
 

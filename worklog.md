@@ -163,3 +163,56 @@ Risks (real)
 
 FINAL VERDICT: VERIFIED_80_PERCENT_PRODUCT_READY
 - First client can be onboarded WITHOUT rewriting core: create org + users (seed), configure pipeline (DB/seed), import leads (CSV), connect site (public ingest endpoint), start work — all present and verified.
+
+---
+Task ID: 4
+Agent: main (cron round 1)
+Task: QA current state + add Inbox, Analytics, Custom Fields features + styling polish.
+
+QA Assessment:
+- Dashboard, leads list, lead detail, kanban, tasks, settings — all render without console errors (1440×900, 1920×1080, 390×844 mobile, dark mode).
+- Lost detector shows 26 leads needing attention. Duplicate detection, public ingestion, ERP sync all verified via curl.
+- No bugs found in current state — proceed to new features.
+
+Work completed this round:
+1. Inbox UI (NEW):
+   - lib/leados/inbox-service.ts: listMessages, getInboxStats, groupByConversation
+   - API: /api/v1/inbox (GET list/stats, POST ingest), /api/v1/inbox/[id] (GET, PATCH link-to-lead, POST create-lead-from-message)
+   - Hooks: useInbox, useInboxStats, useLinkMessage, useCreateLeadFromMessage
+   - inbox-view.tsx: 3-pane layout (conversation list + message thread + reply stub), source filter chips (instagram/whatsapp/telegram/facebook/email/website with counts), unlinked filter, link-to-lead search, create-lead-from-message, framer-motion message entrance
+   - Seed extended with 15 realistic incoming messages (5 channels, 6 linked + 4 unlinked conversations)
+   - Nav badge for inbox unassigned count
+
+2. Analytics view (NEW):
+   - lib/leados/analytics-service.ts: totalLeads, won/lost/archived, conversionRate, avgResponseHours, winsBySource (count+value), lostReasons, 7-day time series, pipeline funnel (per-stage count+value), openPipelineValue, wonValue
+   - API: /api/v1/analytics
+   - Hook: useAnalytics
+   - analytics-view.tsx: 6 KPI cards, recharts LineChart (7-day volume), vertical BarChart funnel, PieChart wins-by-source, lost-reasons progress bars. Deterministic metrics — no fake ROI.
+
+3. Custom Fields (NEW):
+   - API: /api/v1/custom-fields (GET, POST), /api/v1/custom-fields/[id] (DELETE, PATCH), /api/v1/custom-fields/[id]/values (GET, POST upsert)
+   - Hooks: useCustomFields, useCreateCustomField, useDeleteCustomField, useSetCustomValue
+   - settings-view.tsx: new "Custom fields" tab with create form (name/key/type/options) + list with delete. Key validation (snake_case).
+
+4. Styling polish:
+   - globals.css: custom scrollbar, focus-visible rings, leados-fade-in animation, leados-lift hover, leados-pulse for urgent badges, dense table hover
+   - dashboard-view.tsx: framer-motion staggered entrance for metric cards (delay i*0.03), leados-lift on cards, leados-pulse on critical overdue indicator
+   - inbox-view.tsx: framer-motion AnimatePresence for message entrance
+
+5. i18n: added ~30 new keys per locale (hy/ru/en) for inbox, analytics, custom fields.
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Dev server unreachable during this round — last log shows compile OK then dashboard 500; server process died and was not auto-restarted by the system. Code verified via tsc+lint; browser QA deferred to next round once server recovers.
+
+Unresolved issues / risks:
+- Dev server (port 3000) is currently down and not auto-restarting. Next round: verify server recovery, then run full browser QA on new Inbox/Analytics/Custom-Fields views (dark mode + mobile 390×844), and fix any visual/runtime issues found.
+- Inbox reply composer is disabled (outbound adapter not connected) — by design, architecture-only as documented.
+- Custom-field per-lead editor UI inside Lead Detail is the next concrete step (settings CRUD done; per-lead value editing would require a new panel section reading the org's custom fields + per-lead values).
+
+Next-phase priorities:
+1. Bring dev server back / verify it auto-restarts; run browser QA on Inbox, Analytics, Custom Fields tabs.
+2. Add per-lead custom field editor inside Lead Detail (right panel section).
+3. Deeper dark-mode polish on new views (inbox thread, analytics charts).
+4. Consider pipeline/stage admin CRUD (currently seeded-only).

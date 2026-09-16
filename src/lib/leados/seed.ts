@@ -448,5 +448,42 @@ export async function seed(): Promise<{ orgId: string }> {
     },
   });
 
+  // incoming messages — a realistic inbox sample across channels. Some linked
+  // to existing leads (by index into LEADS), some unassigned.
+  const msgSeeds: { source: string; handle: string; leadIdx: number | null; convId: string; content: string; minsAgo: number }[] = [
+    { source: "instagram", handle: "@arev.beauty", leadIdx: 3, convId: "ig:arev.beauty", content: "Բարև, հետաքրքրում է ձեր առաջարկը CRM-ի համար", minsAgo: 25 },
+    { source: "instagram", handle: "@arev.beauty", leadIdx: 3, convId: "ig:arev.beauty", content: "Մենք ունենք 2 մասնագետ և շուրջ 200 հաճախորդ", minsAgo: 22 },
+    { source: "instagram", handle: "@arev.beauty", leadIdx: 3, convId: "ig:arev.beauty", content: "Ե՞րբ կարող ենք զանգահարել", minsAgo: 20 },
+    { source: "whatsapp", handle: "+37493677881", leadIdx: 4, convId: "wa:arev", content: "Hello, I saw your post about automation — can you send pricing?", minsAgo: 120 },
+    { source: "whatsapp", handle: "+37493677881", leadIdx: 4, convId: "wa:arev", content: "We're a beauty studio in Yerevan", minsAgo: 118 },
+    { source: "telegram", handle: "@dmitry_aqua", leadIdx: 8, convId: "tg:dmitry", content: "Добрый день! Нужна автоматизация для доставки воды", minsAgo: 240 },
+    { source: "telegram", handle: "@dmitry_aqua", leadIdx: 8, convId: "tg:dmitry", content: "У нас 4 машины, хотим GPS + CRM", minsAgo: 238 },
+    { source: "instagram", handle: "@sunset.group", leadIdx: 15, convId: "ig:sunset", content: "Hi, restaurant group inquiry about reservations automation", minsAgo: 480 },
+    { source: "facebook", handle: "BookWorld AM", leadIdx: 17, convId: "fb:bookworld", content: "Hello, do you integrate with our existing POS?", minsAgo: 600 },
+    { source: "whatsapp", handle: "+37495556677", leadIdx: 10, convId: "wa:elite", content: "Հետաքրքրում է CRM + agent portal արժեքը", minsAgo: 90 },
+    { source: "whatsapp", handle: "+37495556677", leadIdx: 10, convId: "wa:elite", content: "Ունենք 12 գործակալ", minsAgo: 88 },
+    // unassigned (leadIdx = null)
+    { source: "instagram", handle: "@newclient.2026", leadIdx: null, convId: "ig:newclient", content: "Hi, saw your ad — can you tell me about your services?", minsAgo: 5 },
+    { source: "telegram", handle: "@unknown_user", leadIdx: null, convId: "tg:unknown", content: "Здравствуйте, хочу узнать про ERP для магазина", minsAgo: 12 },
+    { source: "whatsapp", handle: "+37499111223", leadIdx: null, convId: "wa:anon", content: "Բարև, հետաքրքրում է ավտոմատացման համակարգ", minsAgo: 35 },
+    { source: "facebook", handle: "Anonymous Page", leadIdx: null, convId: "fb:anon", content: "Do you do clinics? Need appointment automation", minsAgo: 75 },
+  ];
+  for (const m of msgSeeds) {
+    await db.incomingMessage.create({
+      data: {
+        organizationId: orgId,
+        source: m.source,
+        direction: "inbound",
+        content: m.content,
+        fromHandle: m.handle,
+        conversationId: m.convId,
+        leadId: m.leadIdx != null ? (await db.lead.findFirst({ where: { organizationId: orgId, company: LEADS[m.leadIdx].company }, select: { id: true } }))?.id ?? null : null,
+        channel: m.source === "instagram" || m.source === "facebook" ? "dm" : "chat",
+        metadata: {} as Prisma.InputJsonValue,
+        timestamp: new Date(Date.now() - m.minsAgo * 60_000),
+      },
+    });
+  }
+
   return { orgId };
 }

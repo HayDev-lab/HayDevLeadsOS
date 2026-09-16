@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit } from "@/hooks/leados/use-api";
+import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Check, Plus, RefreshCw, Save, Sparkles, Webhook } from "lucide-react";
+import { Brain, Check, Plus, RefreshCw, Save, Sparkles, Webhook, Trash2, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { LeadAvatar, formatDate, timeAgo } from "./primitives";
@@ -38,6 +38,7 @@ export function SettingsView() {
           <TabsTrigger value="pipeline">{t("settings.pipeline")}</TabsTrigger>
           <TabsTrigger value="sources">{t("settings.sources")}</TabsTrigger>
           <TabsTrigger value="tags">{t("settings.tags")}</TabsTrigger>
+          <TabsTrigger value="custom">{t("settings.custom_fields")}</TabsTrigger>
           <TabsTrigger value="scoring">{t("settings.scoring")}</TabsTrigger>
           <TabsTrigger value="audit">Audit Ingest</TabsTrigger>
           <TabsTrigger value="erp">ERP / Events</TabsTrigger>
@@ -47,6 +48,7 @@ export function SettingsView() {
         <TabsContent value="pipeline" className="mt-4"><PipelineTab /></TabsContent>
         <TabsContent value="sources" className="mt-4"><SourcesTab /></TabsContent>
         <TabsContent value="tags" className="mt-4"><TagsTab /></TabsContent>
+        <TabsContent value="custom" className="mt-4"><CustomFieldsTab /></TabsContent>
         <TabsContent value="scoring" className="mt-4"><ScoringTab /></TabsContent>
         <TabsContent value="audit" className="mt-4"><AuditIngestTab /></TabsContent>
         <TabsContent value="erp" className="mt-4"><ErpTab /></TabsContent>
@@ -239,6 +241,103 @@ function ErpTab() {
         <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><RefreshCw className="h-4 w-4" />ERP Adapter</CardTitle></CardHeader>
         <CardContent className="pt-0 text-xs text-muted-foreground">
           <p>Provider: <code className="font-mono">HAYDEV_ERP</code> (local-mock). Sync status is tracked per lead. Swap in a real provider by implementing the <code>ErpAdapter</code> interface — no fake production claims.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function CustomFieldsTab() {
+  const { t } = useLocale();
+  const fields = useCustomFields();
+  const create = useCreateCustomField();
+  const del = useDeleteCustomField();
+  const [name, setName] = useState("");
+  const [key, setKey] = useState("");
+  const [type, setType] = useState("text");
+  const [options, setOptions] = useState("");
+
+  const submit = async () => {
+    if (!name.trim() || !key.trim()) return;
+    try {
+      const opts = type === "select" || type === "multiselect"
+        ? options.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
+      await create.mutateAsync({ name, key, type, options: opts });
+      toast.success("Custom field created");
+      setName(""); setKey(""); setType("text"); setOptions("");
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  const remove = async (id: string) => {
+    try { await del.mutateAsync(id); toast.success("Field deleted"); } catch (e) { toast.error((e as Error).message); }
+  };
+
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><Settings2 className="h-4 w-4" />{t("settings.custom_fields")}</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <p className="text-xs text-muted-foreground mb-3">{t("settings.custom_fields.hint")}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+            <div className="space-y-1">
+              <Label className="text-xs">{t("custom.name")}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Industry" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("custom.key")}</Label>
+              <Input value={key} onChange={(e) => setKey(e.target.value)} placeholder="industry" className="font-mono" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("custom.type")}</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">{t("custom.text")}</SelectItem>
+                  <SelectItem value="number">{t("custom.number")}</SelectItem>
+                  <SelectItem value="select">{t("custom.select")}</SelectItem>
+                  <SelectItem value="date">{t("custom.date")}</SelectItem>
+                  <SelectItem value="bool">{t("custom.bool")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t("custom.options")}</Label>
+              <Input value={options} onChange={(e) => setOptions(e.target.value)} placeholder="Construction, Retail,…" disabled={type !== "select" && type !== "multiselect"} />
+            </div>
+          </div>
+          <Button size="sm" onClick={submit} disabled={create.isPending || !name.trim() || !key.trim()}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />{t("custom.create")}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-0 divide-y">
+          {(fields.data?.rows ?? []).length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">No custom fields yet. Add one above — it becomes available on every lead without migrations.</div>
+          )}
+          {(fields.data?.rows ?? []).map((f: any) => {
+            const opts = Array.isArray(f.options) ? f.options : [];
+            return (
+              <div key={f.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{f.name}</span>
+                    <Badge variant="outline" className="font-mono text-[10px]">{f.key}</Badge>
+                    <Badge variant="secondary" className="text-[10px]">{f.type}</Badge>
+                  </div>
+                  {opts.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {opts.map((o: string) => <span key={o} className="text-[10px] px-1.5 py-0.5 rounded bg-muted">{o}</span>)}
+                    </div>
+                  )}
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => remove(f.id)} className="text-muted-foreground hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></Button>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>

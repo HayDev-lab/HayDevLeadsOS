@@ -120,3 +120,50 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* LeadOS — visual polish -------------------------------------------- */
+
+/* Smooth focus-visible rings for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Custom scrollbar — subtle, dense */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  background-clip: content-box;
+}
+
+/* Subtle entrance animation utility */
+@keyframes leados-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.leados-fade-in { animation: leados-fade-in 0.28s ease-out both; }
+
+/* Card hover lift */
+.leados-lift { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
+.leados-lift:hover { transform: translateY(-2px); }
+
+/* Pulse for urgent badges */
+@keyframes leados-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.leados-pulse { animation: leados-pulse 1.6s ease-in-out infinite; }
+
+/* Dense table row hover */
+table.leados-table tbody tr { transition: background 0.12s ease; }
+
+/* Hide horizontal scrollbar on kanban when not needed */
+.kanban-scroll { scrollbar-width: thin; }
+

@@ -7,7 +7,7 @@ import { useLostDetector, useSession, useSeed } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database } from "lucide-react";
+import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database, Inbox as InboxIcon, BarChart3 } from "lucide-react";
 import { LangSwitcher, NotificationsBell, SearchTrigger, ThemeToggle, UserSwitcher } from "./header-controls";
 import { DemoBadge } from "./primitives";
 import { toast } from "sonner";
@@ -17,12 +17,17 @@ import { LeadDetailView } from "./lead-detail-view";
 import { PipelineView } from "./pipeline-view";
 import { TasksView } from "./tasks-view";
 import { SettingsView } from "./settings-view";
+import { InboxView } from "./inbox/inbox-view";
+import { AnalyticsView } from "./analytics/analytics-view";
+import { useInboxStats } from "@/hooks/leados/use-api";
 
 const NAV = [
   { view: "dashboard", icon: LayoutDashboard, key: "nav.dashboard" as const },
   { view: "leads", icon: Users, key: "nav.leads" as const },
   { view: "pipeline", icon: KanbanSquare, key: "nav.pipeline" as const },
   { view: "tasks", icon: CheckSquare, key: "nav.tasks" as const },
+  { view: "inbox", icon: InboxIcon, key: "nav.inbox" as const },
+  { view: "analytics", icon: BarChart3, key: "nav.analytics" as const },
   { view: "settings", icon: Settings, key: "nav.settings" as const },
 ];
 
@@ -31,6 +36,7 @@ export function LeadOSApp() {
   const { t } = useLocale();
   const session = useSession();
   const lost = useLostDetector();
+  const inboxStats = useInboxStats();
   const seed = useSeed();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -38,6 +44,7 @@ export function LeadOSApp() {
   const needsSeed = session.isError && !session.data;
 
   const attentionCount = lost.data?.leadsNeedingAttention ?? 0;
+  const inboxUnassigned = inboxStats.data?.unassigned ?? 0;
 
   useEffect(() => {
     // auto-seed on very first load if there is no org
@@ -81,6 +88,10 @@ export function LeadOSApp() {
         return <PipelineView />;
       case "tasks":
         return <TasksView />;
+      case "inbox":
+        return <InboxView />;
+      case "analytics":
+        return <AnalyticsView />;
       case "settings":
         return <SettingsView />;
       default:
@@ -100,7 +111,7 @@ export function LeadOSApp() {
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0">
                 <SidebarBrand org={org} />
-                <NavList currentView={currentView} attentionCount={attentionCount} onNavigate={() => setMobileOpen(false)} />
+                <NavList currentView={currentView} attentionCount={attentionCount} inboxUnassigned={inboxUnassigned} onNavigate={() => setMobileOpen(false)} />
               </SheetContent>
             </Sheet>
           </div>
@@ -121,7 +132,7 @@ export function LeadOSApp() {
         {/* sidebar (desktop) */}
         <aside className="hidden md:flex w-60 shrink-0 flex-col border-r bg-card/30">
           <SidebarBrand org={org} />
-          <NavList currentView={currentView} attentionCount={attentionCount} />
+          <NavList currentView={currentView} attentionCount={attentionCount} inboxUnassigned={inboxUnassigned} />
           <div className="mt-auto p-3">
             <div className="rounded-lg border bg-muted/40 p-3">
               <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -151,7 +162,7 @@ export function LeadOSApp() {
   );
 }
 
-function NavList({ currentView, attentionCount, onNavigate }: { currentView: string; attentionCount: number; onNavigate?: () => void }) {
+function NavList({ currentView, attentionCount, inboxUnassigned, onNavigate }: { currentView: string; attentionCount: number; inboxUnassigned: number; onNavigate?: () => void }) {
   const { t } = useLocale();
   const [, navigate] = useHashRoute();
   return (
@@ -159,6 +170,7 @@ function NavList({ currentView, attentionCount, onNavigate }: { currentView: str
       {NAV.map((n) => {
         const active = currentView === n.view || (n.view === "leads" && currentView === "lead");
         const Icon = n.icon;
+        const badge = n.view === "dashboard" ? attentionCount : n.view === "inbox" ? inboxUnassigned : 0;
         return (
           <button
             key={n.view}
@@ -170,9 +182,9 @@ function NavList({ currentView, attentionCount, onNavigate }: { currentView: str
           >
             <Icon className="h-4 w-4" />
             <span className="font-medium">{t(n.key)}</span>
-            {n.view === "dashboard" && attentionCount > 0 && (
-              <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold", active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300")}>
-                <AlertTriangle className="h-2.5 w-2.5" />{attentionCount}
+            {badge > 0 && (
+              <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold", active ? "bg-primary-foreground/20 text-primary-foreground" : n.view === "inbox" ? "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300" : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300")}>
+                {n.view === "inbox" ? null : <AlertTriangle className="h-2.5 w-2.5" />}{badge}
               </span>
             )}
           </button>

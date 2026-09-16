@@ -12,6 +12,7 @@ import { LeadFormDialog } from "./lead-form-dialog";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { motion } from "framer-motion";
 
 export function DashboardView() {
   const { t, locale } = useLocale();
@@ -83,12 +84,15 @@ export function DashboardView() {
 
       {/* metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-        {metricCards.map((c) => (
-          <button
+        {metricCards.map((c, i) => (
+          <motion.button
             key={c.key}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.03, duration: 0.22 }}
             onClick={() => navigate(c.view)}
             className={cn(
-              "text-left rounded-xl border bg-card p-3 transition hover:shadow-sm hover:border-primary/30",
+              "text-left rounded-xl border bg-card p-3 transition hover:shadow-sm hover:border-primary/30 leados-lift",
               c.critical && c.value > 0 && "border-red-300/60 dark:border-red-900"
             )}
           >
@@ -96,11 +100,11 @@ export function DashboardView() {
               <span className={cn("inline-flex items-center justify-center rounded-lg h-8 w-8", c.color)}>
                 <c.icon className="h-4 w-4" />
               </span>
-              {c.critical && c.value > 0 && <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />}
+              {c.critical && c.value > 0 && <span className="h-2 w-2 rounded-full bg-red-500 leados-pulse" />}
             </div>
             <div className="mt-2 text-2xl font-bold tabular-nums">{dash.isLoading ? "…" : c.value}</div>
             <div className="text-[11px] text-muted-foreground truncate">{c.label}</div>
-          </button>
+          </motion.button>
         ))}
       </div>
 
