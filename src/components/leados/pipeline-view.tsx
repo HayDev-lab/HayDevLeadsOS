@@ -11,7 +11,9 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { LeadAvatar, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, formatMoney, timeAgo, EmptyState } from "./primitives";
 import { SlaBadge } from "./sla/sla-badge";
+import { FollowUpBadge } from "./sla/followup-badge";
 import { DEFAULT_SLA_THRESHOLDS, type SlaThresholds } from "@/lib/sla";
+import { DEFAULT_FOLLOWUP_SLA_CONFIG, type FollowUpSlaConfig } from "@/lib/sla-followup";
 import { cn } from "@/lib/utils";
 import { KanbanSquare, GripVertical, Phone, Mail, Clock, Calendar, User as UserIcon, ArrowRight, MoreVertical, UserPlus, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
@@ -21,6 +23,7 @@ export function PipelineView() {
   const [, navigate] = useHashRoute();
   const kanban = useKanban();
   const slaConfig: SlaThresholds = kanban.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS;
+  const followUpConfig: FollowUpSlaConfig = kanban.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG;
   const setStage = useSetLeadStage();
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -63,11 +66,11 @@ export function PipelineView() {
         <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 flex-1 min-h-0">
             {columns.map((col: any) => (
-              <Column key={col.id} stage={col} slaConfig={slaConfig} onClick={(id) => navigate("lead", { id })} />
+              <Column key={col.id} stage={col} slaConfig={slaConfig} followUpConfig={followUpConfig} onClick={(id) => navigate("lead", { id })} />
             ))}
           </div>
           <DragOverlay>
-            {activeLead ? <LeadCard lead={activeLead} dragging onClick={() => {}} slaConfig={slaConfig} /> : null}
+            {activeLead ? <LeadCard lead={activeLead} dragging onClick={() => {}} slaConfig={slaConfig} followUpConfig={followUpConfig} /> : null}
           </DragOverlay>
         </DndContext>
       )}
@@ -75,7 +78,7 @@ export function PipelineView() {
   );
 }
 
-function Column({ stage, onClick, slaConfig }: { stage: any; onClick: (id: string) => void; slaConfig: SlaThresholds }) {
+function Column({ stage, onClick, slaConfig, followUpConfig }: { stage: any; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig }) {
   const { t } = useLocale();
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const leads: any[] = stage.leads;
@@ -93,21 +96,21 @@ function Column({ stage, onClick, slaConfig }: { stage: any; onClick: (id: strin
       <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1.5 min-h-[120px]">
         {leads.length === 0 && <div className="text-[10px] text-muted-foreground/60 text-center py-6">{t("common.empty")}</div>}
         {leads.map((l: any) => (
-          <DraggableCard key={l.id} lead={l} onClick={onClick} slaConfig={slaConfig} />
+          <DraggableCard key={l.id} lead={l} onClick={onClick} slaConfig={slaConfig} followUpConfig={followUpConfig} />
         ))}
       </div>
     </div>
   );
 }
 
-function DraggableCard({ lead, onClick, slaConfig }: { lead: any; onClick: (id: string) => void; slaConfig: SlaThresholds }) {
+function DraggableCard({ lead, onClick, slaConfig, followUpConfig }: { lead: any; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id });
   return (
     <div ref={setNodeRef} {...attributes} {...listeners} className={cn("touch-none", isDragging && "opacity-30")}>
       <HoverCard openDelay={400} closeDelay={150}>
         <HoverCardTrigger asChild>
           <div>
-            <LeadCard lead={lead} onClick={onClick} slaConfig={slaConfig} />
+            <LeadCard lead={lead} onClick={onClick} slaConfig={slaConfig} followUpConfig={followUpConfig} />
           </div>
         </HoverCardTrigger>
         <HoverCardContent className="w-80 p-0" side="right" align="start">
@@ -177,7 +180,7 @@ function LeadQuickPreview({ leadId, onOpen }: { leadId: string; onOpen: () => vo
   );
 }
 
-function LeadCard({ lead, dragging, onClick, slaConfig }: { lead: any; dragging?: boolean; onClick: (id: string) => void; slaConfig: SlaThresholds }) {
+function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig }: { lead: any; dragging?: boolean; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig }) {
   const assign = useAssignLead(lead.id);
   const setStage = useSetLeadStage();
   const users = useUsers();
@@ -249,6 +252,21 @@ function LeadCard({ lead, dragging, onClick, slaConfig }: { lead: any; dragging?
               createdAt={lead.createdAt}
               firstResponseAt={lead.sla?.firstResponseAt ?? null}
               thresholds={slaConfig}
+            />
+          )}
+          {lead.followUp && (
+            <FollowUpBadge
+              compact
+              onlyUrgent
+              leadStatus={lead.status}
+              firstResponseAt={lead.sla?.firstResponseAt ?? null}
+              task={
+                lead.followUp.taskId
+                  ? { id: lead.followUp.taskId, title: lead.followUp.taskTitle, dueAt: lead.followUp.dueAt, createdAt: lead.followUp.scheduledAt }
+                  : null
+              }
+              lastCompletedAt={lead.followUp.completedAt ?? null}
+              config={followUpConfig}
             />
           )}
           <ScoreBadge score={lead.leadScore} category={lead.scoreCategory} />

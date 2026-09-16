@@ -6,6 +6,12 @@ import { ActivityCreate } from "@/lib/schemas/lead";
 import { ACTIVITY_TYPE, LEAD_EVENT } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
 import { suggestNextAction } from "@/lib/leados/followup";
+import { QUALIFYING_ACTIVITY_TYPES } from "@/lib/sla";
+import {
+  findOpenFollowUpTask,
+  getFollowUpConfig,
+  scheduleFollowUp,
+} from "@/lib/leados/followup-sla-service";
 import { Prisma } from "@prisma/client";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -59,6 +65,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         patch.nextActionLabel = s.label;
       }
       await db.lead.update({ where: { id }, data: patch as Prisma.LeadUpdateInput });
+    }
+
+    // Optional policy (Settings → Follow-up SLA, default OFF): when the FIRST
+    // qualifying response is logged and no open follow-up exists yet, auto-
+    // schedule one at now + defaultFollowUpHours. Explicitly opt-in — never blind.
+    if (QUALIFYING_ACTIVITY_TYPES.includes(v.value.type)) {
+      const config = await getFollowUpConfig(session.orgId);
+      if (config.autoCreateAfterFirstResponse) {
+        const prior = await db.activity.findFirst({
+          where: { leadId: id, organizationId: session.orgId, type: { in: QUALIFYING_ACTIVITY_TYPES }, createdAt: { lt: activity.createdAt } },
+          select: { id: true },
+        });
+        if (!prior) {
+          const open = await findOpenFollowUpTask(session.orgId, id);
+          if (!open) {
+            await scheduleFollowUp(session.orgId, id, session.userId, {
+              dueAt: new Date(Date.now() + config.defaultFollowUpHours * 3_600_000),
+            });
+          }
+        }
+      }
     }
 
     await publishEvent({

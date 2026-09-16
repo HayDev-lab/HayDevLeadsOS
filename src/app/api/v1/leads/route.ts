@@ -7,7 +7,16 @@ import { createLead } from "@/lib/leados/lead-service";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 import { PRIORITY } from "@/lib/leados/constants";
 import { SLA_STATUS, type SlaStatus } from "@/lib/sla";
+import { FOLLOWUP_SLA_STATUS, type FollowUpSlaStatus } from "@/lib/sla-followup";
 import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds, slaFilterWhere, sortLeadIdsBySlaPriority } from "@/lib/leados/sla-service";
+import {
+  attachFollowUpToLeads,
+  followUpFilterWhere,
+  followUpTodayFilterWhere,
+  getFollowUpConfig,
+  getFollowUpTaskMap,
+  sortLeadIdsByFollowUpUrgency,
+} from "@/lib/leados/followup-sla-service";
 
 export async function GET(req: Request) {
   try {
@@ -29,6 +38,7 @@ export async function GET(req: Request) {
     const dateFrom = qStr(p.get("dateFrom"));
     const dateTo = qStr(p.get("dateTo"));
     const slaStatus = qStr(p.get("sla"));
+    const followUpStatus = qStr(p.get("followUp"));
     const sort = qStr(p.get("sort")) ?? "createdAt:desc";
 
     const where: Record<string, unknown> = { organizationId: session.orgId };
@@ -52,12 +62,27 @@ export async function GET(req: Request) {
 
     // SLA thresholds are resolved ONCE per request (never per lead).
     const slaThresholds = await getSlaThresholds(session.orgId);
+    // Follow-up SLA config — resolved ONCE per request too.
+    const followUpConfig = await getFollowUpConfig(session.orgId);
 
     // Server-side SLA filter — works on the FULL dataset (with pagination/counts).
     if (slaStatus) {
       const upper = slaStatus.toUpperCase();
       if (!(upper in SLA_STATUS)) return badRequest(`Unknown SLA filter: ${slaStatus}`);
       const frag = slaFilterWhere(upper as SlaStatus, slaThresholds);
+      where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
+    }
+
+    // Server-side FOLLOW-UP filter — full dataset, composes with every other filter.
+    if (followUpStatus) {
+      const upper = followUpStatus.toUpperCase();
+      let frag: Record<string, unknown> | null = null;
+      if (upper === "TODAY") {
+        frag = followUpTodayFilterWhere(session.organization.timezone);
+      } else if (upper in FOLLOWUP_SLA_STATUS || upper === "NONE") {
+        frag = followUpFilterWhere(upper as FollowUpSlaStatus | "NONE", followUpConfig.warningBeforeHours);
+      }
+      if (!frag) return badRequest(`Unknown follow-up filter: ${followUpStatus}`);
       where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
     }
     if (q) {
@@ -77,9 +102,10 @@ export async function GET(req: Request) {
     const [sortField, sortDirRaw] = sort.split(":");
     const sortDir = sortDirRaw === "asc" ? "asc" : "desc";
     const isSlaSort = sortField === "sla" || sort === "sla:priority";
+    const isFollowUpSort = sortField === "followup" || sort === "followup:urgency";
     const allowed = ["createdAt", "updatedAt", "leadScore", "priority", "estimatedValue", "nextActionAt", "lastContactAt"];
     const orderBy: Record<string, "asc" | "desc"> = {};
-    if (!isSlaSort) orderBy[allowed.includes(sortField) ? sortField : "createdAt"] = sortDir;
+    if (!isSlaSort && !isFollowUpSort) orderBy[allowed.includes(sortField) ? sortField : "createdAt"] = sortDir;
 
     const include = {
       source: true,
@@ -91,6 +117,7 @@ export async function GET(req: Request) {
     let rows;
     let total: number;
     let firstResponseMap = new Map<string, Date>();
+    let taskMap = await getFollowUpTaskMap(session.orgId, []);
 
     if (isSlaSort) {
       // Default SLA priority order (BREACH → WARNING → TARGET → RESPONDED).
@@ -98,6 +125,20 @@ export async function GET(req: Request) {
       const ranked = await sortLeadIdsBySlaPriority(session.orgId, where, slaThresholds, page, limit);
       total = ranked.total;
       firstResponseMap = ranked.firstResponseMap;
+      if (ranked.ids.length) {
+        taskMap = await getFollowUpTaskMap(session.orgId, ranked.ids);
+        const hydrated = await db.lead.findMany({ where: { ...where, id: { in: ranked.ids } }, include });
+        const byId = new Map(hydrated.map((r) => [r.id, r]));
+        rows = ranked.ids.map((id) => byId.get(id)).filter(Boolean) as typeof hydrated;
+      } else {
+        rows = [];
+      }
+    } else if (isFollowUpSort) {
+      // Explicit follow-up urgency order — same 2-phase pattern as the SLA sort.
+      const ranked = await sortLeadIdsByFollowUpUrgency(session.orgId, where, followUpConfig, page, limit);
+      total = ranked.total;
+      firstResponseMap = ranked.firstResponseMap;
+      taskMap = ranked.taskMap;
       if (ranked.ids.length) {
         const hydrated = await db.lead.findMany({ where: { ...where, id: { in: ranked.ids } }, include });
         const byId = new Map(hydrated.map((r) => [r.id, r]));
@@ -111,18 +152,21 @@ export async function GET(req: Request) {
         db.lead.findMany({ where, include, orderBy, skip, take: limit }),
       ]);
       firstResponseMap = await getFirstResponseMap(session.orgId, rows.map((r) => r.id));
+      taskMap = await getFollowUpTaskMap(session.orgId, rows.map((r) => r.id));
     }
 
-    // Attach SLA to every row (computed by the single engine, N+1-safe).
+    // Attach both SLA layers to every row (single engines, N+1-safe).
     const withSla = attachSlaToLeads(rows, slaThresholds, firstResponseMap);
+    const withFollowUp = attachFollowUpToLeads(withSla, followUpConfig, taskMap, firstResponseMap);
 
     return ok({
-      rows: withSla,
+      rows: withFollowUp,
       total,
       page,
       limit,
       pages: Math.max(1, Math.ceil(total / limit)),
       slaConfig: slaThresholds,
+      followUpConfig,
     });
   } catch (e) {
     return serverError("leads-list-failed", e);

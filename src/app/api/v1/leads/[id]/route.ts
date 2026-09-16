@@ -5,6 +5,11 @@ import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/li
 import { LeadUpdate } from "@/lib/schemas/lead";
 import { updateLead, archiveLead } from "@/lib/leados/lead-service";
 import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds } from "@/lib/leados/sla-service";
+import {
+  attachFollowUpToLeads,
+  getFollowUpConfig,
+  getFollowUpTaskMap,
+} from "@/lib/leados/followup-sla-service";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -26,11 +31,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       },
     });
     if (!lead || lead.organizationId !== session.orgId) return notFound("lead");
-    // SLA (single engine, one grouped activity query, settings read once)
+    // Both SLA layers (single engines, grouped queries, settings read once)
     const slaThresholds = await getSlaThresholds(session.orgId);
+    const followUpConfig = await getFollowUpConfig(session.orgId);
     const firstResponseMap = await getFirstResponseMap(session.orgId, [lead.id]);
+    const taskMap = await getFollowUpTaskMap(session.orgId, [lead.id]);
     const [withSla] = attachSlaToLeads([lead], slaThresholds, firstResponseMap);
-    return ok({ lead: withSla, slaConfig: slaThresholds });
+    const [withFollowUp] = attachFollowUpToLeads([withSla], followUpConfig, taskMap, firstResponseMap);
+    return ok({ lead: withFollowUp, slaConfig: slaThresholds, followUpConfig });
   } catch (e) {
     return serverError("lead-get-failed", e);
   }

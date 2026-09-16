@@ -300,6 +300,8 @@ model Task {
   dueAt          DateTime?
   status         String    @default("TODO") // TaskStatus
   priority       String    @default("MEDIUM") // Priority
+  /** Task discriminator: TASK (generic) | FOLLOW_UP (drives Follow-up SLA). */
+  type           String    @default("TASK") // TaskType
   completedAt    DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -311,6 +313,7 @@ model Task {
   @@index([organizationId, status])
   @@index([organizationId, assignedTo])
   @@index([organizationId, dueAt])
+  @@index([organizationId, type, status])
   @@index([leadId])
 }
 

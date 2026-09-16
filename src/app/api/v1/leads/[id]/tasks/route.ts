@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { TaskCreate } from "@/lib/schemas/lead";
-import { LEAD_EVENT } from "@/lib/leados/constants";
+import { LEAD_EVENT, TASK_TYPE } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -42,6 +42,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         assignedTo: v.value.assignedTo ?? session.userId,
         priority: v.value.priority ?? "MEDIUM",
         dueAt: v.value.dueAt ? new Date(v.value.dueAt) : null,
+        type: v.value.type ?? TASK_TYPE.TASK,
       },
     });
     await publishEvent({

@@ -79,6 +79,12 @@ export const TASK_STATUS = {
 } as const;
 export type TaskStatus = (typeof TASK_STATUS)[keyof typeof TASK_STATUS];
 
+export const TASK_TYPE = {
+  TASK: "TASK",
+  FOLLOW_UP: "FOLLOW_UP",
+} as const;
+export type TaskType = (typeof TASK_TYPE)[keyof typeof TASK_TYPE];
+
 export const LEAD_EVENT = {
   LEAD_CREATED: "LEAD_CREATED",
   LEAD_ASSIGNED: "LEAD_ASSIGNED",
@@ -90,6 +96,10 @@ export const LEAD_EVENT = {
   LEAD_MERGED: "LEAD_MERGED",
   TASK_CREATED: "TASK_CREATED",
   TASK_OVERDUE: "TASK_OVERDUE",
+  FOLLOW_UP_SCHEDULED: "FOLLOW_UP_SCHEDULED",
+  FOLLOW_UP_COMPLETED: "FOLLOW_UP_COMPLETED",
+  FOLLOW_UP_RESCHEDULED: "FOLLOW_UP_RESCHEDULED",
+  FOLLOW_UP_CANCELLED: "FOLLOW_UP_CANCELLED",
   AUDIT_COMPLETED: "AUDIT_COMPLETED",
   NOTE_ADDED: "NOTE_ADDED",
   ACTIVITY_LOGGED: "ACTIVITY_LOGGED",
@@ -115,6 +125,10 @@ export const INTEGRATION_EVENTS = {
   LEAD_LOST: "lead.lost",
   TASK_CREATED: "task.created",
   TASK_OVERDUE: "task.overdue",
+  FOLLOW_UP_SCHEDULED: "followup.scheduled",
+  FOLLOW_UP_COMPLETED: "followup.completed",
+  FOLLOW_UP_RESCHEDULED: "followup.rescheduled",
+  FOLLOW_UP_CANCELLED: "followup.cancelled",
   AUDIT_COMPLETED: "audit.completed",
 } as const;
 

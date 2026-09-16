@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import { PRIORITY } from "./constants";
 import { countSlaBreached } from "./sla-service";
+import { countFollowUpsDueToday, countFollowUpsOverdue } from "./followup-sla-service";
 
 export interface DashboardMetrics {
   newLeads: number;
@@ -16,29 +17,25 @@ export interface DashboardMetrics {
   lost: number;
   totalActive: number;
   slaBreached: number;
+  /** Follow-ups due today (earliest open follow-up task due within today, org tz). */
+  followUpsDueToday: number;
+  /** Tasks (any type) due today and still open. */
+  tasksDueToday: number;
+  /** Meetings logged today. */
+  meetingsToday: number;
 }
 
-export async function getDashboardMetrics(orgId: string): Promise<DashboardMetrics> {
+export async function getDashboardMetrics(orgId: string, timezone = "Asia/Yerevan"): Promise<DashboardMetrics> {
   const now = new Date();
   const where = { organizationId: orgId };
+  // "Today" boundaries in the org timezone; storage stays UTC.
+  const dayStartUtc = new Date(now.getTime() - tzOffsetMinutes(timezone, now) * 60_000);
+  dayStartUtc.setUTCHours(0, 0, 0, 0);
+  const dayEndUtc = new Date(dayStartUtc.getTime() + 24 * 3_600_000);
 
-  const [newLeads, unassigned, overdue, qualified, meetings, proposals, won, lost, totalActive, slaBreached] = await Promise.all([
-    db.lead.count({ where: { ...where, status: "NEW" } }),
-    db.lead.count({ where: { ...where, ownerId: null, status: { notIn: ["WON", "LOST", "ARCHIVED"] } } }),
-    db.lead.count({ where: { ...where, nextActionAt: { lt: now }, status: { notIn: ["WON", "LOST", "ARCHIVED"] } } }),
-    db.lead.count({ where: { ...where, status: "QUALIFIED" } }),
-    db.lead.count({ where: { ...where, stage: { name: "Meeting" } } }),
-    db.lead.count({ where: { ...where, stage: { name: "Proposal" } } }),
-    db.lead.count({ where: { ...where, status: "WON" } }),
-    db.lead.count({ where: { ...where, status: "LOST" } }),
-    db.lead.count({ where: { ...where, status: { notIn: ["ARCHIVED"] } } }),
-    countSlaBreached(orgId),
-  ]);
-
-  return {
+  const [
     newLeads,
     unassigned,
-    overdueFollowups: overdue,
     qualified,
     meetings,
     proposals,
@@ -46,7 +43,76 @@ export async function getDashboardMetrics(orgId: string): Promise<DashboardMetri
     lost,
     totalActive,
     slaBreached,
+    followUpsOverdue,
+    followUpsDueToday,
+    tasksDueToday,
+    meetingsToday,
+  ] = await Promise.all([
+    db.lead.count({ where: { ...where, status: "NEW" } }),
+    db.lead.count({ where: { ...where, ownerId: null, status: { notIn: ["WON", "LOST", "ARCHIVED"] } } }),
+    db.lead.count({ where: { ...where, status: "QUALIFIED" } }),
+    db.lead.count({ where: { ...where, stage: { name: "Meeting" } } }),
+    db.lead.count({ where: { ...where, stage: { name: "Proposal" } } }),
+    db.lead.count({ where: { ...where, status: "WON" } }),
+    db.lead.count({ where: { ...where, status: "LOST" } }),
+    db.lead.count({ where: { ...where, status: { notIn: ["ARCHIVED"] } } }),
+    countSlaBreached(orgId),
+    // REAL follow-up SLA counts (KPI click == filter count by construction).
+    countFollowUpsOverdue(orgId),
+    countFollowUpsDueToday(orgId, timezone),
+    db.task.count({
+      where: { organizationId: orgId, status: { in: ["TODO", "IN_PROGRESS"] }, dueAt: { gte: dayStartUtc, lt: dayEndUtc } },
+    }),
+    db.activity.count({ where: { organizationId: orgId, type: "MEETING", createdAt: { gte: dayStartUtc, lt: dayEndUtc } } }),
+  ]);
+
+  return {
+    newLeads,
+    unassigned,
+    // Rewired to the FOLLOW-UP SLA engine (real overdue follow-up tasks).
+    overdueFollowups: followUpsOverdue,
+    qualified,
+    meetings,
+    proposals,
+    won,
+    lost,
+    totalActive,
+    slaBreached,
+    followUpsDueToday,
+    tasksDueToday,
+    meetingsToday,
   };
+}
+
+/** Offset of a timezone from UTC in minutes (positive = east of UTC) at `at`. */
+function tzOffsetMinutes(timezone: string, at: Date): number {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    const parts = dtf.formatToParts(at).reduce<Record<string, string>>((acc, p) => {
+      if (p.type !== "literal") acc[p.type] = p.value;
+      return acc;
+    }, {});
+    const asUtc = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour === "24" ? "0" : parts.hour),
+      Number(parts.minute),
+      Number(parts.second)
+    );
+    return Math.round((asUtc - at.getTime()) / 60_000);
+  } catch {
+    return 0;
+  }
 }
 
 export async function getLeadsBySource(orgId: string) {

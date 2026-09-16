@@ -6,6 +6,13 @@ import { toCsv } from "@/lib/leados/attribution";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 import { SLA_STATUS, computeFirstResponseSla, type SlaStatus } from "@/lib/sla";
 import { getFirstResponseMap, getSlaThresholds, slaFilterWhere } from "@/lib/leados/sla-service";
+import { FOLLOWUP_SLA_STATUS, computeFollowUpSla, type FollowUpSlaStatus } from "@/lib/sla-followup";
+import {
+  followUpFilterWhere,
+  followUpTodayFilterWhere,
+  getFollowUpConfig,
+  getFollowUpTaskMap,
+} from "@/lib/leados/followup-sla-service";
 
 export async function GET(req: Request) {
   try {
@@ -31,6 +38,21 @@ export async function GET(req: Request) {
         where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
       }
     }
+    // Server-side FOLLOW-UP filter (same engine as the lead list).
+    const followUpStatus = p.get("followUp");
+    const followUpConfig = await getFollowUpConfig(session.orgId);
+    if (followUpStatus) {
+      const upper = followUpStatus.toUpperCase();
+      const frag =
+        upper === "TODAY"
+          ? followUpTodayFilterWhere(session.organization.timezone)
+          : upper in FOLLOWUP_SLA_STATUS || upper === "NONE"
+          ? followUpFilterWhere(upper as FollowUpSlaStatus | "NONE", followUpConfig.warningBeforeHours)
+          : null;
+      if (frag) {
+        where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
+      }
+    }
     if (q) {
       const nPhone = normalizePhone(q);
       const nEmail = normalizeEmail(q);
@@ -52,11 +74,23 @@ export async function GET(req: Request) {
     });
     // First-response SLA per exported row (one grouped query — no N+1).
     const firstResponseMap = await getFirstResponseMap(session.orgId, rows.map((r) => r.id));
+    const taskMap = await getFollowUpTaskMap(session.orgId, rows.map((r) => r.id));
     const now = new Date();
     const exportRows = rows.map((l) => {
       const sla = computeFirstResponseSla(
         { createdAt: l.createdAt, firstResponseAt: firstResponseMap.get(l.id) ?? null },
         slaThresholds,
+        now
+      );
+      const pair = taskMap.get(l.id) ?? { open: null, lastCompleted: null };
+      const fu = computeFollowUpSla(
+        {
+          leadStatus: l.status,
+          firstResponseAt: firstResponseMap.get(l.id) ?? null,
+          openTask: pair.open,
+          lastCompleted: pair.lastCompleted,
+        },
+        followUpConfig,
         now
       );
       const base: Record<string, unknown> = {
@@ -83,6 +117,10 @@ export async function GET(req: Request) {
       slaStatus: sla.status,
       slaElapsedMinutes: sla.isResponded ? "" : sla.elapsedMinutes,
       slaFirstResponseMinutes: sla.responseMinutes ?? "",
+      followUpStatus: fu.status,
+      followUpDueAt: fu.dueAt ? new Date(fu.dueAt).toISOString() : "",
+      followUpOverdueMinutes: fu.overdueMinutes ?? "",
+      followUpCompletedAt: fu.completedAt ? new Date(fu.completedAt).toISOString() : "",
       };
       // append custom field values as columns
       for (const cv of l.customValues) {

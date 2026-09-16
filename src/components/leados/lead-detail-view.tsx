@@ -18,7 +18,11 @@ import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, R
 import ReactMarkdown from "react-markdown";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPill, SourceBadge, TagChip, formatDate, formatDay, formatMoney, timeAgo } from "./primitives";
 import { SlaDetail } from "./sla/sla-detail";
+import { FollowUpBadge } from "./sla/followup-badge";
+import { FollowUpCard } from "./sla/followup-detail";
 import { DEFAULT_SLA_THRESHOLDS, type SlaThresholds } from "@/lib/sla";
+import { DEFAULT_FOLLOWUP_SLA_CONFIG, followUpQuickDate, type FollowUpSlaConfig } from "@/lib/sla-followup";
+import { useScheduleFollowUp } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SCORE_THRESHOLDS } from "@/lib/leados/constants";
@@ -62,7 +66,12 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
       </Button>
 
       {/* header */}
-      <LeadHeader lead={l} slaThresholds={lead.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS} onEdit={() => setEditOpen(true)} />
+      <LeadHeader
+        lead={l}
+        slaThresholds={lead.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS}
+        followUpConfig={lead.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG}
+        onEdit={() => setEditOpen(true)}
+      />
       <EditLeadDialog lead={l} open={editOpen} onOpenChange={setEditOpen} />
 
       {/* duplicate warning */}
@@ -137,6 +146,18 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
 
         {/* right panel */}
         <div className="space-y-4">
+          <FollowUpCard
+            leadId={l.id}
+            leadStatus={l.status}
+            firstResponseAt={l.sla?.firstResponseAt ?? null}
+            task={
+              l.followUp?.taskId
+                ? { id: l.followUp.taskId, title: l.followUp.taskTitle, dueAt: l.followUp.dueAt, createdAt: l.followUp.scheduledAt }
+                : null
+            }
+            lastCompletedAt={l.followUp?.completedAt ?? null}
+            config={lead.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG}
+          />
           <RightPanel lead={l} />
           <StageChanger lead={l} />
         </div>
@@ -160,7 +181,17 @@ function Field({ label, value, icon: Icon, action }: { label: string; value?: Re
   );
 }
 
-function LeadHeader({ lead: l, slaThresholds, onEdit }: { lead: any; slaThresholds: SlaThresholds; onEdit: () => void }) {
+function LeadHeader({
+  lead: l,
+  slaThresholds,
+  followUpConfig,
+  onEdit,
+}: {
+  lead: any;
+  slaThresholds: SlaThresholds;
+  followUpConfig: FollowUpSlaConfig;
+  onEdit: () => void;
+}) {
   const { t } = useLocale();
   const archive = useArchiveLead();
   const sync = useSyncErp(l.id);
@@ -196,6 +227,19 @@ function LeadHeader({ lead: l, slaThresholds, onEdit }: { lead: any; slaThreshol
               createdAt={l.createdAt}
               firstResponseAt={l.sla?.firstResponseAt ?? null}
               thresholds={slaThresholds}
+            />
+          )}
+          {l.followUp && (
+            <FollowUpBadge
+              leadStatus={l.status}
+              firstResponseAt={l.sla?.firstResponseAt ?? null}
+              task={
+                l.followUp.taskId
+                  ? { id: l.followUp.taskId, title: l.followUp.taskTitle, dueAt: l.followUp.dueAt, createdAt: l.followUp.scheduledAt }
+                  : null
+              }
+              lastCompletedAt={l.followUp.completedAt ?? null}
+              config={followUpConfig}
             />
           )}
         </div>
@@ -417,20 +461,8 @@ function RightPanel({ lead: l }: { lead: any }) {
   const users = useUsers();
   const tasks = useLeadTasks(l.id);
   const openTasks = (tasks.data?.rows ?? []).filter((x: any) => x.status !== "DONE" && x.status !== "CANCELLED");
-  const overdueAction = l.nextActionAt && new Date(l.nextActionAt).getTime() < Date.now();
   return (
     <div className="space-y-3">
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-sm">{t("common.next_action")}</CardTitle></CardHeader>
-        <CardContent className="pt-0 space-y-1.5 text-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">{l.nextActionLabel || "—"}</span>
-            {l.nextActionAt && <span className={cn("text-xs font-medium", overdueAction ? "text-red-600" : "text-foreground")}>{formatDay(l.nextActionAt)} · {timeAgo(l.nextActionAt)}</span>}
-          </div>
-          {l.lastContactAt && <div className="text-xs text-muted-foreground">{t("common.last_activity")}: {timeAgo(l.lastContactAt)}</div>}
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <CardTitle className="text-sm">{t("lead.open_tasks")} ({openTasks.length})</CardTitle>
@@ -590,13 +622,33 @@ function ActivityTab({ leadId }: { leadId: string }) {
   const { t } = useLocale();
   const rows = useLeadActivities(leadId);
   const log = useLogActivity(leadId);
+  const scheduleFollowUp = useScheduleFollowUp(leadId);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("NOTE");
+  const [thenFollowUp, setThenFollowUp] = useState("");
   if (rows.isLoading) return <Skeleton className="h-40 w-full" />;
   const r = rows.data?.rows ?? [];
+  const isQualifying = ["CALL", "MESSAGE", "EMAIL", "MEETING"].includes(type);
+
+  // After logging a qualifying contact, optionally schedule the next follow-up
+  // (Section: never forced — the select defaults to "None").
   const submit = async () => {
     if (!title.trim()) return;
-    try { await log.mutateAsync({ type, title }); setTitle(""); toast.success("Activity logged"); } catch (e) { toast.error((e as Error).message); }
+    try {
+      await log.mutateAsync({ type, title });
+      setTitle("");
+      if (isQualifying && thenFollowUp) {
+        const dueAt = followUpQuickDate(thenFollowUp, DEFAULT_FOLLOWUP_SLA_CONFIG);
+        await scheduleFollowUp
+          .mutateAsync({ id: leadId, dueAt: dueAt.toISOString() })
+          .then(() => toast.success(t("toast.followup_scheduled")))
+          .catch(() => {
+            // An open follow-up may already exist — the contact itself succeeded.
+          });
+        setThenFollowUp("");
+      }
+      toast.success("Activity logged");
+    } catch (e) { toast.error((e as Error).message); }
   };
   return (
     <Card>
@@ -608,6 +660,20 @@ function ActivityTab({ leadId }: { leadId: string }) {
             <SelectContent>{[["CALL", "📞 Call"], ["MESSAGE", "💬 Message"], ["EMAIL", "✉️ Email"], ["MEETING", "📅 Meeting"], ["FOLLOW_UP", "🔔 Follow-up"], ["NOTE", "📝 Note"]].map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
           </Select>
           <Input className="flex-1 min-w-[160px] h-8" placeholder="What happened?" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) submit(); }} />
+          {isQualifying && (
+            <Select value={thenFollowUp || "__none"} onValueChange={(v) => setThenFollowUp(v === "__none" ? "" : v)}>
+              <SelectTrigger className="w-44 h-8 text-xs" aria-label={t("followup.then_follow_up")}>
+                <SelectValue placeholder={t("followup.then_follow_up")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">{t("followup.none")}</SelectItem>
+                <SelectItem value="standard">{t("followup.quick.standard")} · +{DEFAULT_FOLLOWUP_SLA_CONFIG.defaultFollowUpHours}h</SelectItem>
+                <SelectItem value="tomorrow">{t("followup.quick.tomorrow")}</SelectItem>
+                <SelectItem value="3days">{t("followup.quick.3days")}</SelectItem>
+                <SelectItem value="1week">{t("followup.quick.1week")}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Button size="sm" className="h-8" onClick={submit} disabled={log.isPending || !title.trim()}>{t("common.create")}</Button>
         </div>
         <ActivityTimeline entries={r} />

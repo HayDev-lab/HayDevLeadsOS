@@ -748,3 +748,67 @@ Verification: TS 0 errors in src/, ESLint clean, production build PASS, 28/28 un
 
 Stage Summary:
 - FIRST RESPONSE SLA fully connected to real leads: Settings → thresholds → engine → Lead List/Detail/Kanban/Dashboard/Export. No hardcoded thresholds in UI. VERIFIED_COMPLETE.
+
+---
+Task ID: followup-1
+Agent: main
+Task: FOLLOW-UP SLA (second independent SLA layer) — inspection + definition
+
+Work Log (INSPECT):
+- Schema: Task{leadId?, dueAt?, status TODO/IN_PROGRESS/DONE/CANCELLED, completedAt?, NO type column}; Activity has FOLLOW_UP type (amber Bell in timeline); Lead has legacy nextActionAt/nextActionLabel (auto-suggested by suggestNextAction on stage change/activity — the "blind scheduling" anti-pattern); Setting org-scoped key/value (existing key "sla_thresholds").
+- First-response SLA (VERIFIED_COMPLETE, do not touch): lib/sla.ts pure engine; sla-service.ts (thresholds loader + 15s cache, firstResponseMap groupBy, attachSlaToLeads, slaFilterWhere, sortLeadIdsBySlaPriority 2-phase, countSlaBreached); APIs: leads (?sla=, sort=sla:priority), lead detail, kanban, dashboard slaBreached, export; UI: SlaBadge/SlaDetail, leads-view column+filter+sort, settings SlaConfigTab with validation+shared preview; 28 tests in tests/sla.test.ts.
+- Tasks API: POST /api/v1/tasks + /api/v1/leads/[id]/tasks (no type), PATCH /api/v1/tasks/[id] (status DONE sets completedAt). TaskCreate schema has no type. Kanban LeadCard shows compact SlaBadge. Dashboard has 9 KPI tiles incl. legacy overdueFollowups (nextActionAt < now — old field-based concept) + overdueTasks list. Leads list has legacy "⏱ Overdue" button (nextActionAt < now) + "Next action" column (nextActionAt).
+- Activity POST: updates lastContactAt, auto-suggests nextActionAt if none (legacy). i18n flat keys hy/ru/en. Seed: 30 leads, tasks "Follow up with X" for HIGH/URGENT (untyped), SLA demo coverage.
+
+Stage Summary (DEFINE — approved design):
+- SOURCE OF TRUTH: OPTION A task-based. Add Task.type column ("TASK" | "FOLLOW_UP", default "TASK") — minimal non-destructive schema change (db push, safe). Deadline = task.dueAt. Completion = task status DONE + completedAt (Section 10 source of truth). Cycles = one task per follow-up; completed tasks stay as history; new schedule = new task = new cycle.
+- nextFollowUpTask = earliest open (TODO/IN_PROGRESS) FOLLOW_UP task by dueAt asc (nulls last); at most ONE open follow-up per lead enforced by service.
+- STATES: NOT_REQUIRED | SCHEDULED | DUE_SOON | OVERDUE | COMPLETED. NOT_REQUIRED = (no qualifying first response) OR (status WON/LOST/ARCHIVED) OR (no follow-up task at all). SCHEDULED = open task, dueAt null or > now+warningBeforeHours. DUE_SOON = dueAt in (now, now+warningBeforeHours]. OVERDUE = dueAt <= now. COMPLETED = no open task + a DONE task exists (cycle closed).
+- ENGINE: src/lib/sla-followup.ts (pure, imports shared primitives from lib/sla.ts — zero refactor of first-response file). SLA_KIND extended with FOLLOW_UP (additive). computeFollowUpSla({leadStatus, firstResponseAt, task, lastCompleted}, config, now).
+- CONFIG: Setting key "followup_sla" = {warningBeforeHours: 4, defaultFollowUpHours: 24, autoCreateAfterFirstResponse: false}. Validation: both > 0, warning < default. Server 400 + client inline errors + disabled save. autoCreate default OFF (Section 15) — when ON, first qualifying activity creates follow-up at +defaultFollowUpHours.
+- SERVER: src/lib/leados/followup-sla-service.ts — getFollowUpConfig (cache+invalidate), getFollowUpTaskMap (2 queries per batch: open FU tasks + latest DONE FU task), attachFollowUpToLeads, followUpFilterWhere (SCHEDULED/DUE_SOON/TODAY/OVERDUE/COMPLETED/NONE — includes active-status + has-response conditions for exact engine parity), counts for dashboard, scheduleFollowUp/completeFollowUp/rescheduleFollowUp/cancelFollowUpsForFinalStage.
+- WON/LOST: changeStage cancels open FU tasks (status CANCELLED, rows kept) + timeline activity; engine returns NOT_REQUIRED for final/archived leads defensively. Reopened lead: old cycles stay closed, new schedule allowed.
+- SORT: first-response sla:priority stays DEFAULT. New option sort=followup:urgency (OVERDUE most-overdue-first → DUE_SOON earliest → SCHEDULED earliest → COMPLETED → NOT_REQUIRED).
+- NEW API: POST /api/v1/leads/[id]/followup {dueAt, note?} schedule; PATCH {action: complete|reschedule|cancel, dueAt?, taskId?, note?}.
+- TIMELINE: FOLLOW_UP activities with metadata.action SCHEDULED/COMPLETED/RESCHEDULED/CANCELLED + LEAD_EVENT.FOLLOW_UP_* published (webhook-ready).
+- LEAD LIST: replace "Next action" column with "Follow-up" (FollowUpBadge + date); replace legacy "⏱ Overdue" button with Follow-up filter select (All/Scheduled/Due today/Due soon/Overdue/No follow-up); add followup:urgency sort option.
+- LEAD DETAIL: compact FollowUpBadge in header next to SlaDetail; right panel "Next follow-up" card with Complete/Reschedule/Schedule actions + quick options Tomorrow/+3d/+7d/Custom; ActivityTab quick-log gains optional "then follow up in" select (None/Standard/Tomorrow/+3d/+7d).
+- KANBAN: compact FollowUpBadge on cards when DUE_SOON/OVERDUE.
+- DASHBOARD: legacy overdueFollowups tile rewired to real engine count (click → ?followUp=OVERDUE); new "Today" work queue card (overdue follow-ups, follow-ups due today, meetings today, tasks due today) with clicks.
+- SETTINGS: SLA tab gets a second card "Follow-up SLA" (own key, own validation, shared FollowUpBadge preview, invalidates follow-up surfaces).
+- DEMO: seed Leads A(scheduled tomorrow)/B(due in 2h)/C(overdue 5h)/D(completed cycle)/E(no follow-up) + followup_sla Setting + type on existing FU tasks.
+- I18N: followup.* keys in hy/ru/en. Timezone: TODAY boundaries computed in org timezone (Asia/Yerevan default), storage UTC, display local.
+- TESTS: tests/followup-sla.test.ts (states, multiple cycles, final stages, filter datasets, reschedule, completion, config validation) + 28 first-response tests must stay green.
+
+---
+Task ID: followup-2
+Agent: main
+Task: FOLLOW-UP SLA — implementation, connection, QA and final verification
+
+Work Log:
+- MODEL: Task.type column ("TASK" | "FOLLOW_UP", default TASK) + @@index([organizationId,type,status]) via db push (non-destructive). TASK_TYPE + LEAD_EVENT.FOLLOW_UP_* + INTEGRATION_EVENTS.followup.* constants.
+- ENGINE (src/lib/sla-followup.ts, PURE — zero changes to lib/sla.ts beyond additive SLA_KIND.FOLLOW_UP): FOLLOWUP_SLA_STATUS (NOT_REQUIRED|SCHEDULED|DUE_SOON|OVERDUE|COMPLETED), FollowUpSlaConfig {warningBeforeHours, defaultFollowUpHours, autoCreateAfterFirstResponse}, DEFAULT_FOLLOWUP_SLA_CONFIG (4/24/OFF — single fallback), validateFollowUpConfig/parseFollowUpConfig (backfills legacy rows), computeFollowUpSla (gating: unresponded + WON/LOST/ARCHIVED → NOT_REQUIRED even with open tasks; dueAt null → SCHEDULED; clamped >= 0), compareLeadsByFollowUpUrgency, followUpQuickDate (standard/tomorrow/+3d/+1w).
+- SERVER (src/lib/leados/followup-sla-service.ts): getFollowUpConfig (Setting "followup_sla", 15s cache + invalidation), getFollowUpTaskMap (2 queries per batch: open FU by dueAt asc + latest DONE), attachFollowUpToLeads, followUpFilterWhere (exact engine parity incl. HAS_RESPONSE + ACTIVE_LEAD conditions; NONE variant), followUpTodayFilterWhere (org-timezone day boundaries), countFollowUpsOverdue/DueToday (KPI click == filter count), sortLeadIdsByFollowUpUrgency (2-phase), scheduleFollowUp/completeFollowUp/rescheduleFollowUp/cancelFollowUp/cancelFollowUpsForFinalStage (task status DONE+completedAt = source of truth; FOLLOW_UP timeline activities with metadata.action + previousDueAt trace; LEAD_EVENT publishing).
+- APIs: leads ?followUp=SCHEDULED|DUE_SOON|TODAY|OVERDUE|COMPLETED|NONE + sort=followup:urgency + rows[].followUp + followUpConfig; lead detail + followUpConfig; kanban cards; NEW /api/v1/leads/[id]/followup POST schedule (dup → 400) + PATCH complete|reschedule|cancel; settings POST validates followup_sla (warning<default, >0 → 400); activities POST auto-create policy (default OFF, first qualifying response only, no dup); changeStage → cancels open FU on won/lost; tasks APIs accept type; export ?followUp= filter + followUpStatus/DueAt/OverdueMinutes/CompletedAt columns; dashboard metrics.followUpsDueToday/tasksDueToday/meetingsToday + overdueFollowups rewired to engine.
+- UI: sla/followup-badge.tsx (shared badge + popover, dueDayLabel "Today · HH:MM"/"Tomorrow", shared 60s tick), sla/followup-detail.tsx (right-panel card + schedule/reschedule dialog: quick presets + custom datetime + note, Complete/Reschedule/Cancel), leads-view Follow-up column (replaced legacy Next action), Follow-up filter select (replaced legacy ⏱ overdue button), followup:urgency sort option, lead-detail header FollowUpBadge + ActivityTab "then follow-up" select (Section 11, optional), kanban compact onlyUrgent indicator, dashboard Today work-queue card + rewired overdue tile → ?followUp=OVERDUE, settings Follow-up SLA card (warning/default/auto-create switch + shared-badge preview + inline errors + disabled save).
+- i18n: 50 followup.* keys × hy/ru/en. Seed: followup_sla Setting row, FU demo coverage Marina +26h SCHEDULED / Elena +2h DUE_SOON / Dmitry -5h OVERDUE / Vardan COMPLETED cycle / no-follow-up leads; generic HIGH/URGENT FU tasks typed FOLLOW_UP (open stages only).
+- Tests: tests/followup-sla.test.ts — 31 tests (states, boundaries, gating, cycles, config validation, quick options, sort E,B,C,A,D,F, completion/reschedule semantics, filter dataset B+E, first-response non-regression). 59/59 total PASS (28 old + 31 new).
+
+QA & REPAIR LOOPS:
+- LOOP 1 (semantics): two SLA layers coexist — test "responded lead carries BOTH layers (SLA RESPONDED + FU OVERDUE)" PASS; UI shows separate SLA column + Follow-up column; settings has two separate cards.
+- LOOP 2 (overdue): Lead List shows Overdue · 5h; Dashboard overdue tile = 3 = filter count (KPI click == filter verified); UI filter select → exactly 3 rows (Sergey/Gagik/Dmitry).
+- LOOP 3 (complete): Complete in Lead Detail → COMPLETED without refresh (react-query invalidation); dashboard KPI 3→2 live.
+- LOOP 4 (reschedule): Overdue → Tomorrow → SCHEDULED; reschedule → +1 week; timeline retains RESCHEDULED event with previousDueAt.
+- LOOP 5 (final stage): Karine → Won → engine NOT_REQUIRED, open FU tasks CANCELLED (rows kept, 0 open).
+- LOOP 6 (multiple cycles): complete → schedule new → independent cycle; earliest-open-task-wins test.
+- LOOP 7 (performance @500 leads): followup:urgency 54ms, followUp=OVERDUE 75ms, combined 85ms, kanban 151ms, dashboard 27ms. No N+1 by construction (2 task queries + 1 groupBy per batch, 1 config read with cache). Synthetic data cleaned.
+- LOOP 8 (mobile 390×844): leads/detail/schedule dialog/Complete/custom datetime picker (native)/timeline verified. Fixed: none needed beyond dialog (submit blocked empty date correctly).
+- LOOP 9 (UX): "Today · My work queue" card answers "what do I do today" (overdue FU / due today FU / meetings / tasks, each clickable).
+- REPAIRS: (1) dev server had stale Prisma client after db push → restart fixed PrismaClientValidationError; (2) followup-badge HMR "Bell is not defined" + "humanizeDuration doesn't exist" — stale dev cache artifacts (file + served chunk correct, fresh browser session = 0 page errors); (3) export ignored followUp param → added filter + 4 columns; (4) Accidentally-removed Unassigned button restored; (5) ESLint react-hooks/preserve-manual-memoization → dropped useMemo for direct compute (cheap).
+- Settings critical test: warning 4→0.5h flips Elena DUE_SOON→SCHEDULED→DUE_SOON (recompute + cache invalidation). Server 400s verified (0/24, 30/24).
+- E2E demo experience (spec §42): open Lead C → Overdue 5h → Complete → cycle closed → Schedule Tomorrow → SCHEDULED → Reschedule → timeline event. All in browser.
+
+Verification: TS PASS, ESLint PASS (0 warnings), production build PASS, 59/59 unit tests, 24 QA screenshots in download/followup-qa/, page errors 0 / console errors 0 in fresh session.
+
+Stage Summary:
+- FOLLOW-UP SLA delivered as an independent second SLA layer: Task-based source of truth (Task.type=FOLLOW_UP, dueAt deadline, DONE=completion), own Setting key with validation, own engine (sla-followup.ts) separate from the untouched first-response engine, repeating cycles, Schedule/Complete/Reschedule/Cancel flows, Lead List/Detail/Kanban/Dashboard/Export surfaces, server-side filters incl. org-timezone TODAY, RU/HY/EN. First-response SLA regression green (28/28). VERIFIED_COMPLETE.

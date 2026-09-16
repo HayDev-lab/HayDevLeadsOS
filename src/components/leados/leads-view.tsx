@@ -16,9 +16,11 @@ import { DuplicatesScanner } from "./duplicates-scanner";
 import { ImportDialog } from "./import-dialog";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, timeAgo } from "./primitives";
 import { SlaBadge } from "./sla/sla-badge";
+import { FollowUpBadge } from "./sla/followup-badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DEFAULT_SLA_THRESHOLDS, SLA_STATUS, type SlaThresholds } from "@/lib/sla";
+import { DEFAULT_FOLLOWUP_SLA_CONFIG, FOLLOWUP_SLA_STATUS, type FollowUpSlaConfig } from "@/lib/sla-followup";
 
 const SLA_SORT_DEFAULT = "sla:priority";
 
@@ -33,6 +35,9 @@ export function LeadsView() {
   const [overdue, setOverdue] = useState(route.params.overdue === "1");
   const [unassigned, setUnassigned] = useState(false);
   const [slaFilter, setSlaFilter] = useState(route.params.sla === "BREACH" ? "BREACH" : "");
+  const [followUpFilter, setFollowUpFilter] = useState(
+    route.params.followUp ? String(route.params.followUp).toUpperCase() : ""
+  );
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState(SLA_SORT_DEFAULT);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -50,7 +55,7 @@ export function LeadsView() {
   const archive = useArchiveLead();
   const bulk = useBulkLeads();
 
-  // pick initial overdue from route
+  // pick initial overdue from route (legacy param — kept for saved filters)
   const query: LeadsQuery = useMemo(() => ({
     q: q || undefined,
     sourceId: sourceId || undefined,
@@ -61,19 +66,21 @@ export function LeadsView() {
     unassigned: unassigned || undefined,
     archived: showArchived || undefined,
     sla: slaFilter || undefined,
+    followUp: followUpFilter || undefined,
     page,
     limit,
     sort,
-  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, showArchived, slaFilter, page, sort]);
+  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, showArchived, slaFilter, followUpFilter, page, sort]);
 
   const leads = useLeads(query);
   const slaConfig: SlaThresholds = leads.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS;
+  const followUpConfig: FollowUpSlaConfig = leads.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG;
 
   const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
 
   const togglePriority = (p: string) => setPriority((cur) => cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]);
-  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setSlaFilter(""); setPage(1); };
-  const hasFilters = q || sourceId || ownerId || stageId || priority.length || overdue || unassigned || slaFilter;
+  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setSlaFilter(""); setFollowUpFilter(""); setPage(1); };
+  const hasFilters = q || sourceId || ownerId || stageId || priority.length || overdue || unassigned || slaFilter || followUpFilter;
 
   const toggleSelect = (id: string) => setSelected((cur) => {
     const n = new Set(cur);
@@ -123,6 +130,7 @@ export function LeadsView() {
     if (priority.length) params.set("priority", priority.join(","));
     if (overdue) params.set("overdue", "1");
     if (slaFilter) params.set("sla", slaFilter);
+    if (followUpFilter) params.set("followUp", followUpFilter);
     window.open(`/api/v1/export?${params.toString()}`, "_blank");
   };
 
@@ -188,19 +196,36 @@ export function LeadsView() {
               <SelectItem value={SLA_STATUS.RESPONDED}>{t("sla.responded")}</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={followUpFilter || "__all"} onValueChange={(v) => { setFollowUpFilter(v === "__all" ? "" : v); setPage(1); }}>
+            <SelectTrigger
+              className={cn("w-40 h-9 text-xs", followUpFilter && followUpFilter === FOLLOWUP_SLA_STATUS.OVERDUE && "border-red-300 dark:border-red-800 font-medium")}
+              aria-label={t("followup.filter.label")}
+            >
+              <SelectValue placeholder={t("followup.filter.label")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">{t("followup.filter.all")}</SelectItem>
+              <SelectItem value={FOLLOWUP_SLA_STATUS.OVERDUE}>{t("followup.overdue")}</SelectItem>
+              <SelectItem value="TODAY">{t("followup.filter.today")}</SelectItem>
+              <SelectItem value={FOLLOWUP_SLA_STATUS.DUE_SOON}>{t("followup.due_soon")}</SelectItem>
+              <SelectItem value={FOLLOWUP_SLA_STATUS.SCHEDULED}>{t("followup.scheduled")}</SelectItem>
+              <SelectItem value={FOLLOWUP_SLA_STATUS.COMPLETED}>{t("followup.completed")}</SelectItem>
+              <SelectItem value="NONE">{t("followup.filter.none")}</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
             <SelectTrigger className="w-40 h-9 text-xs" aria-label="Sort">
               <SelectValue placeholder={t("sla.sort.priority")} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={SLA_SORT_DEFAULT}>{t("sla.sort.priority")}</SelectItem>
+              <SelectItem value="followup:urgency">{t("followup.sort.urgency")}</SelectItem>
               <SelectItem value="createdAt:desc">{t("common.sort.newest")}</SelectItem>
               <SelectItem value="createdAt:asc">{t("common.sort.oldest")}</SelectItem>
               <SelectItem value="leadScore:desc">{t("common.sort.score")}</SelectItem>
               <SelectItem value="estimatedValue:desc">{t("common.sort.value")}</SelectItem>
             </SelectContent>
           </Select>
-          <button onClick={() => { setOverdue((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", overdue ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-300" : "bg-background hover:bg-accent")}>⏱ {t("leads.filter.overdue")}</button>
           <button onClick={() => { setUnassigned((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", unassigned ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300" : "bg-background hover:bg-accent")}>👤 {t("leads.filter.unassigned")}</button>
           <button onClick={() => { setShowArchived((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", showArchived ? "bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300" : "bg-background hover:bg-accent")}>📦 Archived</button>
           {hasFilters && <Button variant="ghost" size="sm" onClick={reset}><X className="h-3.5 w-3.5 mr-1" />{t("common.clear")}</Button>}
@@ -319,7 +344,7 @@ export function LeadsView() {
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.score")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.priority")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.owner")}</th>
-                <th className="text-left font-medium px-3 py-2.5">{t("leads.col.next_action")}</th>
+                <th className="text-left font-medium px-3 py-2.5">{t("followup.label")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.created")}</th>
                 {showArchived && <th className="text-left font-medium px-3 py-2.5">Actions</th>}
               </tr>
@@ -353,12 +378,22 @@ export function LeadsView() {
                     </td>
                     <td className="px-3 py-2.5"><PriorityBadge priority={l.priority} /></td>
                     <td className="px-3 py-2.5">{l.owner ? <OwnerChip name={l.owner.name} avatarColor={l.owner.avatarColor} /> : <span className="text-xs text-muted-foreground italic">{t("common.unassigned")}</span>}</td>
-                    <td className="px-3 py-2.5 text-xs">
-                      {l.nextActionAt ? (
-                        <span className={cn(overdueAction && "text-red-600 font-medium")}>
-                          {l.nextActionLabel || t("common.next_action")}: {timeAgo(l.nextActionAt)}
-                        </span>
-                      ) : <span className="text-muted-foreground">—</span>}
+                    <td className="px-3 py-2.5">
+                      {l.followUp ? (
+                        <FollowUpBadge
+                          leadStatus={l.status}
+                          firstResponseAt={l.sla?.firstResponseAt ?? null}
+                          task={
+                            l.followUp.taskId
+                              ? { id: l.followUp.taskId, title: l.followUp.taskTitle, dueAt: l.followUp.dueAt, createdAt: l.followUp.scheduledAt }
+                              : null
+                          }
+                          lastCompletedAt={l.followUp.completedAt ?? null}
+                          config={followUpConfig}
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{timeAgo(l.createdAt)}</td>
                     {showArchived && (

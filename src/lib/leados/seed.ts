@@ -56,6 +56,10 @@ interface SeedLead {
   firstNoteAfterMinutes?: number;
   lastContactHoursAgo?: number | null;
   nextActionHoursFromNow?: number | null; // negative = overdue
+  /** Follow-up SLA demo: create an OPEN follow-up task at this offset (hours from now; negative = overdue). */
+  followUpHoursFromNow?: number;
+  /** Follow-up SLA demo: also create a COMPLETED follow-up task in the past (closed cycle). */
+  followUpCompletedHoursAgo?: number;
   meetingRequested?: boolean;
   budgetFlag?: boolean;
 }
@@ -66,12 +70,12 @@ const LEADS: SeedLead[] = [
   { first: "Anna", last: "Hakobyan", company: "Yerevan Dental Clinic", phone: "+37455112233", email: "anna@ydc.am", sourceType: "instagram", stageIndex: 0, priority: PRIORITY.URGENT, ownerIdx: null, summary: "Wants CRM for clinic + WhatsApp automation", requirements: "CRM + WhatsApp", createdAtDaysAgo: 1, createdAtMinutesAgo: 155, meetingRequested: true },
   { first: "Irina", last: "Safaryan", company: "BookWorld Store", phone: "+37499123411", email: "irina@bookworld.am", sourceType: "instagram", stageIndex: 0, priority: PRIORITY.MEDIUM, ownerIdx: 2, summary: "Inbound inquiry — still waiting for the first response", createdAtDaysAgo: 5, createdAtMinutesAgo: 480 },
   { first: "Sergey", last: "Ivanov", company: "MosRetail Group", phone: "+79261234567", email: "s.ivanov@mosretail.ru", sourceType: "google_ads", stageIndex: 1, priority: PRIORITY.HIGH, ownerIdx: 2, est: 1800000, summary: "Retail chain, 14 stores, needs POS+CRM sync", requirements: "Inventory + loyalty", createdAtDaysAgo: 3, lastContactHoursAgo: 30, firstResponseAfterMinutes: 130, nextActionHoursFromNow: -5, budgetFlag: true },
-  { first: "Marina", last: "Ovsepyan", company: "Arev Beauty Studio", phone: "+37493677881", email: "arev@beauty.am", sourceType: "instagram", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "Booking automation for beauty studio", createdAtDaysAgo: 4, lastContactHoursAgo: 20, firstResponseAfterMinutes: 25, nextActionHoursFromNow: 4 },
-  { first: "Vardan", last: "Sargsyan", company: "Vega Logistics", phone: "+37499887766", email: "vardan@vega.am", sourceType: "referral", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 2, est: 2400000, summary: "Qualified — fleet tracking + CRM integration", requirements: "GPS + dispatch automation", createdAtDaysAgo: 6, lastContactHoursAgo: 12, nextActionHoursFromNow: 36, meetingRequested: true, budgetFlag: true, audit: { acquisition: 58, sales: 45, operations: 72, data: 51, automation: 64, aiReadiness: 70 } },
-  { first: "Elena", last: "Poghosyan", company: "Flora Pharmacy Chain", phone: "+37477123400", email: "elena@flora.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 3, est: 3200000, summary: "Audit completed, high automation potential", requirements: "Inventory automation + AI demand forecast", createdAtDaysAgo: 7, lastContactHoursAgo: 16, firstResponseAfterMinutes: 45, responseType: "EMAIL", nextActionHoursFromNow: 20, meetingRequested: true, budgetFlag: true, audit: { acquisition: 62, sales: 50, operations: 80, data: 55, automation: 78, aiReadiness: 82 } },
+  { first: "Marina", last: "Ovsepyan", company: "Arev Beauty Studio", phone: "+37493677881", email: "arev@beauty.am", sourceType: "instagram", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "Booking automation for beauty studio", createdAtDaysAgo: 4, lastContactHoursAgo: 20, firstResponseAfterMinutes: 25, nextActionHoursFromNow: 4, followUpHoursFromNow: 26 },
+  { first: "Vardan", last: "Sargsyan", company: "Vega Logistics", phone: "+37499887766", email: "vardan@vega.am", sourceType: "referral", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 2, est: 2400000, summary: "Qualified — fleet tracking + CRM integration", requirements: "GPS + dispatch automation", createdAtDaysAgo: 6, lastContactHoursAgo: 12, nextActionHoursFromNow: 36, followUpCompletedHoursAgo: 30, meetingRequested: true, budgetFlag: true, audit: { acquisition: 58, sales: 45, operations: 72, data: 51, automation: 64, aiReadiness: 70 } },
+  { first: "Elena", last: "Poghosyan", company: "Flora Pharmacy Chain", phone: "+37477123400", email: "elena@flora.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 3, est: 3200000, summary: "Audit completed, high automation potential", requirements: "Inventory automation + AI demand forecast", createdAtDaysAgo: 7, lastContactHoursAgo: 16, firstResponseAfterMinutes: 45, responseType: "EMAIL", nextActionHoursFromNow: 20, followUpHoursFromNow: 2, meetingRequested: true, budgetFlag: true, audit: { acquisition: 62, sales: 50, operations: 80, data: 55, automation: 78, aiReadiness: 82 } },
   { first: "Hovhannes", last: "Ghazaryan", company: "Gyumri Tech Hub", phone: "+37493334455", email: "hoghannes@gytech.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 1200000, summary: "Meeting scheduled for coworking CRM", createdAtDaysAgo: 9, lastContactHoursAgo: 50, nextActionHoursFromNow: 48 },
   { first: "Karine", last: "Asatryan", company: "Sweet Bakery", phone: "+37498101010", email: "karine@sweetbakery.am", sourceType: "facebook", stageIndex: 3, priority: PRIORITY.LOW, ownerIdx: 3, summary: "Order automation for bakery", createdAtDaysAgo: 10, lastContactHoursAgo: 6 },
-  { first: "Dmitry", last: "Smirnov", company: "AquaService", phone: "+79031122334", email: "d.smirnov@aquaservice.ru", sourceType: "meta_ads", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 2, est: 950000, summary: "Proposal sent — water delivery automation", requirements: "Routing + customer app", createdAtDaysAgo: 12, lastContactHoursAgo: 72, nextActionHoursFromNow: -24, budgetFlag: true },
+  { first: "Dmitry", last: "Smirnov", company: "AquaService", phone: "+79031122334", email: "d.smirnov@aquaservice.ru", sourceType: "meta_ads", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 2, est: 950000, summary: "Proposal sent — water delivery automation", requirements: "Routing + customer app", createdAtDaysAgo: 12, lastContactHoursAgo: 72, nextActionHoursFromNow: -24, followUpHoursFromNow: -5, budgetFlag: true },
   { first: "Lusine", last: "Minasyan", company: "Elite Real Estate", phone: "+37495556677", email: "lusine@elite.am", sourceType: "website", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 3, est: 4500000, summary: "Proposal — CRM + agent portal", createdAtDaysAgo: 14, lastContactHoursAgo: 60 },
   { first: "Arman", last: "Gevorgyan", company: "AutoPro Service", phone: "+37492221100", email: "arman@autopro.am", sourceType: "referral", stageIndex: 5, priority: PRIORITY.URGENT, ownerIdx: 2, est: 2800000, summary: "Negotiating — service center management", createdAtDaysAgo: 18, lastContactHoursAgo: 30, nextActionHoursFromNow: 12, budgetFlag: true },
   { first: "Sona", last: "Zakaryan", company: "Kidlandia Kindergarten", phone: "+37493445566", email: "sona@kidlandia.am", sourceType: "instagram", stageIndex: 5, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 700000, summary: "Negotiation — parent communication portal", createdAtDaysAgo: 20, lastContactHoursAgo: 24 },
@@ -181,6 +185,15 @@ export async function seed(): Promise<{ orgId: string }> {
       organizationId: orgId,
       key: "sla_thresholds",
       value: { target: 1, warning: 4, breach: 24 } as Prisma.InputJsonValue,
+    },
+  });
+
+  // Follow-up SLA config — independent thresholds for the second SLA layer.
+  await db.setting.create({
+    data: {
+      organizationId: orgId,
+      key: "followup_sla",
+      value: { warningBeforeHours: 4, defaultFollowUpHours: 24, autoCreateAfterFirstResponse: false } as Prisma.InputJsonValue,
     },
   });
 
@@ -393,18 +406,99 @@ export async function seed(): Promise<{ orgId: string }> {
       });
     }
 
-    // tasks (a few overdue, a few upcoming)
-    if (l.priority === "HIGH" || l.priority === "URGENT") {
+    // tasks (a few overdue, a few upcoming). Explicit follow-up demo leads
+    // (followUpHoursFromNow / followUpCompletedHoursAgo) are excluded — their
+    // state comes from the dedicated block below (one deterministic open task).
+    if (
+      (l.priority === "HIGH" || l.priority === "URGENT") &&
+      l.followUpHoursFromNow == null &&
+      l.followUpCompletedHoursAgo == null &&
+      stage.type === "open"
+    ) {
+        await db.task.create({
+          data: {
+            organizationId: orgId,
+            leadId: lead.id,
+            assignedTo: owner?.id ?? null,
+            title: `Follow up with ${l.company}`,
+            status: "TODO",
+            priority: l.priority,
+            dueAt: new Date(Date.now() + (l.nextActionHoursFromNow ?? 48) * 3600000),
+            type: "FOLLOW_UP",
+            createdAt: created,
+          },
+        });
+        await db.activity.create({
+          data: {
+            organizationId: orgId,
+            leadId: lead.id,
+            userId: owner?.id ?? null,
+            type: "FOLLOW_UP",
+            title: "Follow-up scheduled",
+            description: `Due ${new Date(Date.now() + (l.nextActionHoursFromNow ?? 48) * 3600000).toISOString()}`,
+            metadata: { action: "SCHEDULED" } as Prisma.InputJsonValue,
+            createdAt: created,
+          },
+        });
+    }
+
+    // Follow-up SLA demo coverage — open task at an explicit offset (negative = overdue).
+    if (l.followUpHoursFromNow != null) {
+      const dueAt = new Date(Date.now() + l.followUpHoursFromNow * 3600000);
       await db.task.create({
         data: {
           organizationId: orgId,
           leadId: lead.id,
           assignedTo: owner?.id ?? null,
-          title: `Follow up with ${l.company}`,
+          title: "Follow up",
           status: "TODO",
-          priority: l.priority,
-          dueAt: new Date(Date.now() + (l.nextActionHoursFromNow ?? 48) * 3600000),
-          createdAt: created,
+          priority: "MEDIUM",
+          dueAt,
+          type: "FOLLOW_UP",
+          createdAt: new Date(Date.now() - 6 * 3600000),
+        },
+      });
+      await db.activity.create({
+        data: {
+          organizationId: orgId,
+          leadId: lead.id,
+          userId: owner?.id ?? null,
+          type: "FOLLOW_UP",
+          title: "Follow-up scheduled",
+          description: `Due ${dueAt.toISOString()}`,
+          metadata: { action: "SCHEDULED" } as Prisma.InputJsonValue,
+          createdAt: new Date(Date.now() - 6 * 3600000),
+        },
+      });
+    }
+
+    // Follow-up SLA demo — a COMPLETED cycle in the past (closed, nothing new scheduled).
+    if (l.followUpCompletedHoursAgo != null) {
+      const completedAt = new Date(Date.now() - l.followUpCompletedHoursAgo * 3600000);
+      await db.task.create({
+        data: {
+          organizationId: orgId,
+          leadId: lead.id,
+          assignedTo: owner?.id ?? null,
+          title: "Follow up",
+          status: "DONE",
+          priority: "MEDIUM",
+          dueAt: new Date(completedAt.getTime() - 12 * 3600000),
+          completedAt,
+          type: "FOLLOW_UP",
+          createdAt: new Date(completedAt.getTime() - 36 * 3600000),
+        },
+      });
+      await db.activity.create({
+        data: {
+          organizationId: orgId,
+          leadId: lead.id,
+          userId: owner?.id ?? null,
+          type: "FOLLOW_UP",
+          title: "Follow-up completed",
+          description: "Completed after call",
+          metadata: { action: "COMPLETED" } as Prisma.InputJsonValue,
+          createdAt: completedAt,
         },
       });
     }

@@ -4,7 +4,9 @@ import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
 import { DEFAULT_SCORING_RULES } from "@/lib/leados/constants";
 import { SLA_SETTING_KEY, invalidateSlaThresholdsCache } from "@/lib/leados/sla-service";
+import { FOLLOWUP_SETTING_KEY, invalidateFollowUpConfigCache } from "@/lib/leados/followup-sla-service";
 import { validateSlaThresholds } from "@/lib/sla";
+import { validateFollowUpConfig } from "@/lib/sla-followup";
 
 export async function GET() {
   try {
@@ -65,6 +67,14 @@ export async function POST(req: Request) {
         await upsertSetting(session.orgId, SLA_SETTING_KEY, v.thresholds);
         invalidateSlaThresholdsCache(session.orgId);
         return ok({ ok: true, value: v.thresholds });
+      }
+      if (body.key === FOLLOWUP_SETTING_KEY) {
+        // SERVER-SIDE VALIDATION — warning < default, both > 0, finite.
+        const v = validateFollowUpConfig(body.value);
+        if (!v.ok) return badRequest(v.errors.join(" "), v.errors);
+        await upsertSetting(session.orgId, FOLLOWUP_SETTING_KEY, v.config);
+        invalidateFollowUpConfigCache(session.orgId);
+        return ok({ ok: true, value: v.config });
       }
       await upsertSetting(session.orgId, body.key, body.value);
       return ok({ ok: true });

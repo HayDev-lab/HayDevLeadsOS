@@ -49,7 +49,7 @@ export function useDashboard() {
     queryKey: ["dashboard"],
     queryFn: () =>
       api.get<{
-        metrics: { newLeads: number; unassigned: number; overdueFollowups: number; qualified: number; meetings: number; proposals: number; won: number; lost: number; totalActive: number; slaBreached: number };
+        metrics: { newLeads: number; unassigned: number; overdueFollowups: number; qualified: number; meetings: number; proposals: number; won: number; lost: number; totalActive: number; slaBreached: number; followUpsDueToday: number; tasksDueToday: number; meetingsToday: number };
         bySource: { source: string; type: string; count: number }[];
         byStage: { stage: string; type: string; count: number; color: string | null }[];
         recent: any[];
@@ -83,6 +83,7 @@ export interface LeadsQuery {
   unassigned?: boolean;
   archived?: boolean;
   sla?: string;
+  followUp?: string;
   page?: number;
   limit?: number;
   sort?: string;
@@ -98,7 +99,7 @@ export function useLeads(q: LeadsQuery) {
   }
   return useQuery({
     queryKey: ["leads", p.toString()],
-    queryFn: () => api.get<{ rows: any[]; total: number; page: number; limit: number; pages: number; slaConfig?: { target: number; warning: number; breach: number } }>(`/leads?${p.toString()}`),
+    queryFn: () => api.get<{ rows: any[]; total: number; page: number; limit: number; pages: number; slaConfig?: { target: number; warning: number; breach: number }; followUpConfig?: { warningBeforeHours: number; defaultFollowUpHours: number; autoCreateAfterFirstResponse: boolean } }>(`/leads?${p.toString()}`),
     placeholderData: (prev) => prev,
   });
 }
@@ -106,7 +107,7 @@ export function useLeads(q: LeadsQuery) {
 export function useLead(id: string | null) {
   return useQuery({
     queryKey: ["lead", id],
-    queryFn: () => api.get<{ lead: any; slaConfig?: { target: number; warning: number; breach: number } }>(`/leads/${id}`),
+    queryFn: () => api.get<{ lead: any; slaConfig?: { target: number; warning: number; breach: number }; followUpConfig?: { warningBeforeHours: number; defaultFollowUpHours: number; autoCreateAfterFirstResponse: boolean } }>(`/leads/${id}`),
     enabled: !!id,
   });
 }
@@ -149,7 +150,7 @@ export function useLeadDuplicate(id: string) {
 export function useKanban(limit = 50) {
   return useQuery({
     queryKey: ["kanban", limit],
-    queryFn: () => api.get<{ pipeline: { id: string; name: string } | null; columns: any[]; totals: { leads: number; estValue: number }; slaConfig?: { target: number; warning: number; breach: number } }>(`/pipeline/kanban?limit=${limit}`),
+    queryFn: () => api.get<{ pipeline: { id: string; name: string } | null; columns: any[]; totals: { leads: number; estValue: number }; slaConfig?: { target: number; warning: number; breach: number }; followUpConfig?: { warningBeforeHours: number; defaultFollowUpHours: number; autoCreateAfterFirstResponse: boolean } }>(`/pipeline/kanban?limit=${limit}`),
     refetchInterval: 30_000,
   });
 }
@@ -571,8 +572,11 @@ export function useCreateTask(id?: string) {
       if (id) {
         qc.invalidateQueries({ queryKey: ["lead-tasks", id] });
         qc.invalidateQueries({ queryKey: ["lead-events", id] });
+        qc.invalidateQueries({ queryKey: ["lead-activities", id] });
       }
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["lost-detector"] });
     },
@@ -583,7 +587,13 @@ export function useUpdateTask() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: any }) => api.patch<{ task: any }>(`/tasks/${id}`, body),
     onSuccess: () => {
+      // Task status changes (e.g. completing a follow-up) must refresh every
+      // follow-up SLA surface, not just the tasks list.
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["lead-tasks"] });
+      qc.invalidateQueries({ queryKey: ["lead"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
@@ -594,8 +604,62 @@ export function useDeleteTask() {
     mutationFn: (id: string) => api.del<{ ok: boolean }>(`/tasks/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["lead-tasks"] });
+      qc.invalidateQueries({ queryKey: ["lead"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
+  });
+}
+
+// Follow-up SLA operations — schedule / complete / reschedule / cancel.
+// Every action refreshes the lead itself, all lead lists, kanban, dashboard
+// KPIs, the timeline and the tasks list, so statuses recompute without a
+// manual reload.
+function invalidateFollowUpSurfaces(qc: ReturnType<typeof useQueryClient>, leadId?: string) {
+  if (leadId) {
+    qc.invalidateQueries({ queryKey: ["lead", leadId] });
+    qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
+    qc.invalidateQueries({ queryKey: ["lead-tasks", leadId] });
+    qc.invalidateQueries({ queryKey: ["lead-events", leadId] });
+  } else {
+    qc.invalidateQueries({ queryKey: ["lead"] });
+    qc.invalidateQueries({ queryKey: ["lead-activities"] });
+    qc.invalidateQueries({ queryKey: ["lead-tasks"] });
+    qc.invalidateQueries({ queryKey: ["lead-events"] });
+  }
+  qc.invalidateQueries({ queryKey: ["leads"] });
+  qc.invalidateQueries({ queryKey: ["kanban"] });
+  qc.invalidateQueries({ queryKey: ["dashboard"] });
+  qc.invalidateQueries({ queryKey: ["tasks"] });
+  qc.invalidateQueries({ queryKey: ["lost-detector"] });
+}
+
+export function useScheduleFollowUp(leadId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dueAt, note }: { id: string; dueAt: string; note?: string }) =>
+      api.post<{ task: any }>(`/leads/${id}/followup`, { dueAt, note }),
+    onSuccess: () => invalidateFollowUpSurfaces(qc, leadId),
+  });
+}
+
+export function useFollowUpAction(leadId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      action,
+      dueAt,
+      note,
+    }: {
+      id: string;
+      action: "complete" | "reschedule" | "cancel";
+      dueAt?: string;
+      note?: string;
+    }) => api.patch<{ task: any }>(`/leads/${id}/followup`, { action, dueAt, note }),
+    onSuccess: () => invalidateFollowUpSurfaces(qc, leadId),
   });
 }
 export function useAddNote(id: string) {

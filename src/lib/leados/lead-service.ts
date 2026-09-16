@@ -17,6 +17,7 @@ import { suggestNextAction } from "./followup";
 import { detectDuplicates, type DuplicateCheckResult } from "./duplicate";
 import { publishEvent } from "./events";
 import { recordAttribution } from "./attribution";
+import { cancelFollowUpsForFinalStage } from "./followup-sla-service";
 import type { LeadCreateT, LeadUpdateT } from "@/lib/schemas/lead";
 
 export interface CreateLeadInput extends LeadCreateT {
@@ -334,6 +335,10 @@ export async function changeStage(
       data: { nextActionAt: s.nextActionAt, nextActionLabel: s.label, lastContactAt: new Date() },
     });
   } else {
+    // FINAL STAGE POLICY (Won/Lost): cancel open follow-up tasks — rows kept
+    // for history; the engine also defensively ignores leftovers, so a Won/
+    // Lost lead can NEVER show a false overdue follow-up.
+    await cancelFollowUpsForFinalStage(orgId, leadId, userId);
     await db.lead.update({
       where: { id: leadId },
       data: { nextActionAt: null, nextActionLabel: null, lastContactAt: new Date() },

@@ -16,7 +16,7 @@ export async function GET() {
   try {
     const session = await getSession();
     const [metrics, bySource, byStage, recent, overdueTasks, activity, attention, urgentUnassigned] = await Promise.all([
-      getDashboardMetrics(session.orgId),
+      getDashboardMetrics(session.orgId, session.organization.timezone),
       getLeadsBySource(session.orgId),
       getConversionByStage(session.orgId),
       getRecentLeads(session.orgId, 8),

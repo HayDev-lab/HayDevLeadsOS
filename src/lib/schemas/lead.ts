@@ -84,6 +84,7 @@ export const TaskCreate = z.object({
   assignedTo: z.string().optional(),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
   dueAt: z.string().optional(),
+  type: z.enum(["TASK", "FOLLOW_UP"]).optional(),
 });
 export const NoteCreate = z.object({
   content: z.string().min(1).max(4000),

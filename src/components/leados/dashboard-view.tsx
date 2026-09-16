@@ -25,11 +25,11 @@ export function DashboardView() {
   const m = dash.data?.metrics;
   const currency = session.data?.session?.organization?.currency ?? "AMD";
 
-  const metricCards = [
+  const metricCards: { key: string; value: number; icon: typeof Sparkles; label: string; color: string; critical?: boolean; view: string; params?: Record<string, string> }[] = [
     { key: "new", value: m?.newLeads ?? 0, icon: Sparkles, label: t("metric.new_leads"), color: "text-sky-600 bg-sky-50 dark:bg-sky-950/40", view: "leads" },
     { key: "slaBreached", value: m?.slaBreached ?? 0, icon: Hourglass, label: t("sla.breached_leads"), color: "text-red-600 bg-red-50 dark:bg-red-950/40", critical: true, view: "leads", params: { sla: "BREACH" } },
+    { key: "overdue", value: m?.overdueFollowups ?? 0, icon: Timer, label: t("followup.queue.overdue"), color: "text-red-600 bg-red-50 dark:bg-red-950/40", critical: true, view: "leads", params: { followUp: "OVERDUE" } },
     { key: "unassigned", value: m?.unassigned ?? 0, icon: Inbox, label: t("metric.unassigned"), color: "text-amber-600 bg-amber-50 dark:bg-amber-950/40", view: "leads" },
-    { key: "overdue", value: m?.overdueFollowups ?? 0, icon: Timer, label: t("metric.overdue_followups"), color: "text-red-600 bg-red-50 dark:bg-red-950/40", critical: true, view: "leads" },
     { key: "qualified", value: m?.qualified ?? 0, icon: CheckCircle2, label: t("metric.qualified"), color: "text-violet-600 bg-violet-50 dark:bg-violet-950/40", view: "pipeline" },
     { key: "meetings", value: m?.meetings ?? 0, icon: CalendarClock, label: t("metric.meetings"), color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40", view: "pipeline" },
     { key: "proposals", value: m?.proposals ?? 0, icon: ClipboardList, label: t("metric.proposals"), color: "text-amber-600 bg-amber-50 dark:bg-amber-950/40", view: "pipeline" },
@@ -77,7 +77,7 @@ export function DashboardView() {
                 <span className="font-semibold">{lost.data?.leadsNeedingAttention} {t("lost.needs_attention")}</span>
                 <span className="text-muted-foreground ml-2">— {t("lost.detector.title")}</span>
               </div>
-              <Button variant="outline" size="sm" onClick={() => navigate("leads", { overdue: "1" })}>
+              <Button variant="outline" size="sm" onClick={() => navigate("leads")}>
                 {t("common.actions")} <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
               </Button>
             </CardContent>
@@ -110,6 +110,34 @@ export function DashboardView() {
           </motion.button>
         ))}
       </div>
+
+      {/* TODAY — my work queue (Section 28: more useful than another KPI tile) */}
+      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
+        <CardContent className="py-3.5">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <Zap className="h-3.5 w-3.5 text-primary" />
+              {t("followup.queue.title")}
+            </p>
+            <button onClick={() => navigate("leads", { followUp: "OVERDUE" })} className="flex items-baseline gap-1.5 text-sm hover:scale-[1.02] transition origin-left">
+              <span className={cn("text-xl font-bold tabular-nums", (m?.overdueFollowups ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>{m?.overdueFollowups ?? 0}</span>
+              <span className="text-[11px] text-muted-foreground">{t("followup.queue.overdue")}</span>
+            </button>
+            <button onClick={() => navigate("leads", { followUp: "TODAY" })} className="flex items-baseline gap-1.5 text-sm hover:scale-[1.02] transition origin-left">
+              <span className={cn("text-xl font-bold tabular-nums", (m?.followUpsDueToday ?? 0) > 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>{m?.followUpsDueToday ?? 0}</span>
+              <span className="text-[11px] text-muted-foreground">{t("followup.queue.due_today")}</span>
+            </button>
+            <div className="flex items-baseline gap-1.5 text-sm">
+              <span className={cn("text-xl font-bold tabular-nums", (m?.meetingsToday ?? 0) > 0 ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground")}>{m?.meetingsToday ?? 0}</span>
+              <span className="text-[11px] text-muted-foreground">{t("followup.queue.meetings")}</span>
+            </div>
+            <button onClick={() => navigate("tasks")} className="flex items-baseline gap-1.5 text-sm hover:scale-[1.02] transition origin-left">
+              <span className={cn("text-xl font-bold tabular-nums", (m?.tasksDueToday ?? 0) > 0 ? "text-foreground" : "text-muted-foreground")}>{m?.tasksDueToday ?? 0}</span>
+              <span className="text-[11px] text-muted-foreground">{t("followup.queue.tasks")}</span>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
