@@ -19,6 +19,7 @@ import { Brain, Check, Plus, RefreshCw, Save, Sparkles, Webhook, Trash2, Setting
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { LeadAvatar, formatDate, timeAgo } from "./primitives";
+import { SlaConfigTab } from "./sla-config-tab";
 
 export function SettingsView() {
   const { t } = useLocale();
@@ -43,6 +44,7 @@ export function SettingsView() {
           <TabsTrigger value="tags">{t("settings.tags")}</TabsTrigger>
           <TabsTrigger value="custom">{t("settings.custom_fields")}</TabsTrigger>
           <TabsTrigger value="scoring">{t("settings.scoring")}</TabsTrigger>
+          <TabsTrigger value="sla">SLA</TabsTrigger>
           <TabsTrigger value="rules">Assignment Rules</TabsTrigger>
           <TabsTrigger value="audit">Audit Ingest</TabsTrigger>
           <TabsTrigger value="erp">ERP / Events</TabsTrigger>
@@ -54,6 +56,7 @@ export function SettingsView() {
         <TabsContent value="tags" className="mt-4"><TagsTab /></TabsContent>
         <TabsContent value="custom" className="mt-4"><CustomFieldsTab /></TabsContent>
         <TabsContent value="scoring" className="mt-4"><ScoringTab /></TabsContent>
+        <TabsContent value="sla" className="mt-4"><SlaConfigTab /></TabsContent>
         <TabsContent value="rules" className="mt-4"><AssignmentRulesTab /></TabsContent>
         <TabsContent value="audit" className="mt-4"><AuditIngestTab /></TabsContent>
         <TabsContent value="erp" className="mt-4"><ErpTab /></TabsContent>

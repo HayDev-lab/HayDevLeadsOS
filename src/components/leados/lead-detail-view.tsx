@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SCORE_THRESHOLDS } from "@/lib/leados/constants";
 import { CustomFieldsPanel } from "./custom-fields-panel";
+import { ActivityTimeline } from "./activity-timeline";
 
 export function LeadDetailView({ leadId }: { leadId: string | null }) {
   const { t } = useLocale();
@@ -582,7 +583,6 @@ function ActivityTab({ leadId }: { leadId: string }) {
   const log = useLogActivity(leadId);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("NOTE");
-  const [open, setOpen] = useState(false);
   if (rows.isLoading) return <Skeleton className="h-40 w-full" />;
   const r = rows.data?.rows ?? [];
   const submit = async () => {
@@ -592,29 +592,16 @@ function ActivityTab({ leadId }: { leadId: string }) {
   return (
     <Card>
       <CardContent className="p-3">
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+        {/* quick-log bar */}
+        <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b">
           <Select value={type} onValueChange={setType}>
-            <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>{[["CALL", "Call"], ["MESSAGE", "Message"], ["EMAIL", "Email"], ["MEETING", "Meeting"], ["FOLLOW_UP", "Follow-up"], ["NOTE", "Note"]].map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
+            <SelectTrigger className="w-32 h-8"><SelectValue /></SelectTrigger>
+            <SelectContent>{[["CALL", "📞 Call"], ["MESSAGE", "💬 Message"], ["EMAIL", "✉️ Email"], ["MEETING", "📅 Meeting"], ["FOLLOW_UP", "🔔 Follow-up"], ["NOTE", "📝 Note"]].map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
           </Select>
-          <Input className="flex-1 min-w-[160px]" placeholder="Activity title…" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <Button size="sm" onClick={submit} disabled={log.isPending || !title.trim()}>{t("common.create")}</Button>
+          <Input className="flex-1 min-w-[160px] h-8" placeholder="What happened?" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && title.trim()) submit(); }} />
+          <Button size="sm" className="h-8" onClick={submit} disabled={log.isPending || !title.trim()}>{t("common.create")}</Button>
         </div>
-        <div className="relative pl-5 max-h-72 overflow-y-auto">
-          <div className="absolute left-2 top-1 bottom-1 w-px bg-border" />
-          {r.length === 0 && <p className="text-xs text-muted-foreground">No activity yet.</p>}
-          {r.map((a: any) => (
-            <div key={a.id} className="relative pb-3 last:pb-0">
-              <span className="absolute -left-[11px] top-1.5 h-2.5 w-2.5 rounded-full bg-background border-2 border-primary/60" />
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium">{a.user?.name ?? "System"}</span>
-                <span className="text-[10px] px-1 py-px rounded bg-muted">{a.type}</span>
-                <span className="text-[11px] text-muted-foreground ml-auto">{timeAgo(a.createdAt)}</span>
-              </div>
-              <p className="text-xs">{a.title}{a.description ? ` — ${a.description}` : ""}</p>
-            </div>
-          ))}
-        </div>
+        <ActivityTimeline entries={r} />
       </CardContent>
     </Card>
   );

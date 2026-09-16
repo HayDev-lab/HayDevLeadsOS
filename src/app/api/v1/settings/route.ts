@@ -52,7 +52,18 @@ export async function POST(req: Request) {
   try {
     const session = await getSession();
     if (!canMutate(session.role)) return badRequest("Viewers cannot init settings");
-    // ensure scoring rules exist (seed fallback)
+    const body = (await parseJson(req)) as { key?: string; value?: unknown } | null;
+    // if body has key + value, upsert a Setting row
+    if (body?.key && body?.value !== undefined) {
+      const existing = await db.setting.findUnique({ where: { organizationId_key: { organizationId: session.orgId, key: body.key } } });
+      if (existing) {
+        await db.setting.update({ where: { id: existing.id }, data: { value: body.value as never } });
+      } else {
+        await db.setting.create({ data: { organizationId: session.orgId, key: body.key, value: body.value as never } });
+      }
+      return ok({ ok: true });
+    }
+    // default: ensure scoring rules exist (seed fallback)
     const existing = await db.scoringConfig.count({ where: { organizationId: session.orgId } });
     if (!existing) {
       for (const r of DEFAULT_SCORING_RULES) {

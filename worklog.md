@@ -645,3 +645,56 @@ Next-phase priorities:
 3. Notification channel adapters (email/Telegram/WhatsApp delivery).
 4. SLA configuration in Settings (currently hardcoded thresholds).
 5. Lead activity timeline with visual timeline component (not just list).
+
+---
+Task ID: 13
+Agent: main (cron round 10)
+Task: QA + add Visual activity timeline, SLA configuration in Settings, styling polish.
+
+QA Assessment:
+- Dev server stable (HTTP 200). All 8 nav views verified without console errors.
+- No bugs found — proceeded to new features.
+
+Work completed this round:
+1. Visual Activity Timeline Component (NEW):
+   - activity-timeline.tsx: ActivityTimeline component with vertical timeline
+   - Type-specific icons + colors: CALL (sky/Phone), MESSAGE (violet/MessageSquare), EMAIL (indigo/Mail), MEETING (purple/Calendar), FOLLOW_UP (amber/Bell), NOTE (slate/StickyNote), STAGE_CHANGE (blue/ArrowLeftRight), ASSIGNMENT (emerald/UserPlus), AUDIT_IMPORT (teal/FileText), SYSTEM_EVENT (slate/Zap)
+   - Gradient vertical line (from-border via-border to-transparent)
+   - Each entry: circular icon node (8x8, colored bg), user name, type badge, timestamp (revealed on hover), title, description
+   - Empty state: icon + "No activity yet" + hint
+   - Replaced ActivityTab's simple list with ActivityTimeline
+   - Quick-log bar improved: emoji-prefixed dropdown labels (📞 Call, 💬 Message, ✉️ Email, etc.), Enter key to submit
+
+2. SLA Configuration in Settings (NEW):
+   - sla-config-tab.tsx: SlaConfigTab component
+   - 3 configurable thresholds: Target (green, default 1h), Warning (amber, 4h), Breach (red, 24h)
+   - Color-coded labels with indicator dots
+   - Live preview showing badge colors at each threshold range
+   - Saved as Setting row (key: "sla_thresholds", value: JSON) via /api/v1/settings POST
+   - Settings API extended: POST now supports key/value upsert for arbitrary settings
+   - Settings → "SLA" tab added
+
+3. Styling Polish:
+   - Timeline: gradient vertical line, hover reveals timestamp, icon nodes with colored backgrounds
+   - SLA config: color-coded threshold inputs with descriptions, live preview badges
+   - Activity quick-log: emoji icons in dropdown, border-bottom separator, Enter-to-submit
+   - Empty states: centered with icon + message + hint
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: activity timeline (icons, badges, timestamps visible), SLA config tab (3 thresholds with preview), dark mode, mobile 390×844
+- Activity timeline verified: shows "Aram Grigoryan / STAGE CHANGE / 2h ago / Stage changed to Qualified"
+
+Unresolved issues / risks:
+- Dev server stable throughout this round (no restart needed).
+- SLA thresholds are stored in DB but ResponseSlaBadge still uses hardcoded values — next step: wire badge to config.
+- Webhook background delivery worker still not implemented.
+- Real auth (NextAuth) still deferred.
+
+Next-phase priorities:
+1. Wire ResponseSlaBadge to use configured SLA thresholds from Settings (currently hardcoded).
+2. Background webhook delivery worker (cron-like polling).
+3. Real auth (NextAuth) for production.
+4. Notification channel adapters (email/Telegram/WhatsApp delivery).
+5. Enhanced command palette with quick actions (create lead, navigate, search).
