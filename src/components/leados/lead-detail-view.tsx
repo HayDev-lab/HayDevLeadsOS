@@ -17,6 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPill, SourceBadge, TagChip, formatDate, formatDay, formatMoney, timeAgo } from "./primitives";
+import { SlaDetail } from "./sla/sla-detail";
+import { DEFAULT_SLA_THRESHOLDS, type SlaThresholds } from "@/lib/sla";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SCORE_THRESHOLDS } from "@/lib/leados/constants";
@@ -60,7 +62,7 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
       </Button>
 
       {/* header */}
-      <LeadHeader lead={l} onEdit={() => setEditOpen(true)} />
+      <LeadHeader lead={l} slaThresholds={lead.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS} onEdit={() => setEditOpen(true)} />
       <EditLeadDialog lead={l} open={editOpen} onOpenChange={setEditOpen} />
 
       {/* duplicate warning */}
@@ -158,7 +160,7 @@ function Field({ label, value, icon: Icon, action }: { label: string; value?: Re
   );
 }
 
-function LeadHeader({ lead: l, onEdit }: { lead: any; onEdit: () => void }) {
+function LeadHeader({ lead: l, slaThresholds, onEdit }: { lead: any; slaThresholds: SlaThresholds; onEdit: () => void }) {
   const { t } = useLocale();
   const archive = useArchiveLead();
   const sync = useSyncErp(l.id);
@@ -189,6 +191,13 @@ function LeadHeader({ lead: l, onEdit }: { lead: any; onEdit: () => void }) {
               {l.owner && <OwnerChip name={l.owner.name} avatarColor={l.owner.avatarColor} />}
             </div>
           </div>
+          {l.createdAt && (
+            <SlaDetail
+              createdAt={l.createdAt}
+              firstResponseAt={l.sla?.firstResponseAt ?? null}
+              thresholds={slaThresholds}
+            />
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-4">
           <Button size="sm" variant="default" onClick={() => quickLog("CALL", "Call logged")} disabled={logActivity.isPending}><Phone className="h-3.5 w-3.5 mr-1.5" />{t("lead.call")}</Button>

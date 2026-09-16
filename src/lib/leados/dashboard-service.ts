@@ -3,6 +3,7 @@
 
 import { db } from "@/lib/db";
 import { PRIORITY } from "./constants";
+import { countSlaBreached } from "./sla-service";
 
 export interface DashboardMetrics {
   newLeads: number;
@@ -14,13 +15,14 @@ export interface DashboardMetrics {
   won: number;
   lost: number;
   totalActive: number;
+  slaBreached: number;
 }
 
 export async function getDashboardMetrics(orgId: string): Promise<DashboardMetrics> {
   const now = new Date();
   const where = { organizationId: orgId };
 
-  const [newLeads, unassigned, overdue, qualified, meetings, proposals, won, lost, totalActive] = await Promise.all([
+  const [newLeads, unassigned, overdue, qualified, meetings, proposals, won, lost, totalActive, slaBreached] = await Promise.all([
     db.lead.count({ where: { ...where, status: "NEW" } }),
     db.lead.count({ where: { ...where, ownerId: null, status: { notIn: ["WON", "LOST", "ARCHIVED"] } } }),
     db.lead.count({ where: { ...where, nextActionAt: { lt: now }, status: { notIn: ["WON", "LOST", "ARCHIVED"] } } }),
@@ -30,6 +32,7 @@ export async function getDashboardMetrics(orgId: string): Promise<DashboardMetri
     db.lead.count({ where: { ...where, status: "WON" } }),
     db.lead.count({ where: { ...where, status: "LOST" } }),
     db.lead.count({ where: { ...where, status: { notIn: ["ARCHIVED"] } } }),
+    countSlaBreached(orgId),
   ]);
 
   return {
@@ -42,6 +45,7 @@ export async function getDashboardMetrics(orgId: string): Promise<DashboardMetri
     won,
     lost,
     totalActive,
+    slaBreached,
   };
 }
 

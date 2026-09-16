@@ -49,7 +49,7 @@ export function useDashboard() {
     queryKey: ["dashboard"],
     queryFn: () =>
       api.get<{
-        metrics: { newLeads: number; unassigned: number; overdueFollowups: number; qualified: number; meetings: number; proposals: number; won: number; lost: number; totalActive: number };
+        metrics: { newLeads: number; unassigned: number; overdueFollowups: number; qualified: number; meetings: number; proposals: number; won: number; lost: number; totalActive: number; slaBreached: number };
         bySource: { source: string; type: string; count: number }[];
         byStage: { stage: string; type: string; count: number; color: string | null }[];
         recent: any[];
@@ -82,6 +82,7 @@ export interface LeadsQuery {
   overdue?: boolean;
   unassigned?: boolean;
   archived?: boolean;
+  sla?: string;
   page?: number;
   limit?: number;
   sort?: string;
@@ -97,7 +98,7 @@ export function useLeads(q: LeadsQuery) {
   }
   return useQuery({
     queryKey: ["leads", p.toString()],
-    queryFn: () => api.get<{ rows: any[]; total: number; page: number; limit: number; pages: number }>(`/leads?${p.toString()}`),
+    queryFn: () => api.get<{ rows: any[]; total: number; page: number; limit: number; pages: number; slaConfig?: { target: number; warning: number; breach: number } }>(`/leads?${p.toString()}`),
     placeholderData: (prev) => prev,
   });
 }
@@ -105,7 +106,7 @@ export function useLeads(q: LeadsQuery) {
 export function useLead(id: string | null) {
   return useQuery({
     queryKey: ["lead", id],
-    queryFn: () => api.get<{ lead: any }>(`/leads/${id}`),
+    queryFn: () => api.get<{ lead: any; slaConfig?: { target: number; warning: number; breach: number } }>(`/leads/${id}`),
     enabled: !!id,
   });
 }
@@ -148,7 +149,7 @@ export function useLeadDuplicate(id: string) {
 export function useKanban(limit = 50) {
   return useQuery({
     queryKey: ["kanban", limit],
-    queryFn: () => api.get<{ pipeline: { id: string; name: string } | null; columns: any[]; totals: { leads: number; estValue: number } }>(`/pipeline/kanban?limit=${limit}`),
+    queryFn: () => api.get<{ pipeline: { id: string; name: string } | null; columns: any[]; totals: { leads: number; estValue: number }; slaConfig?: { target: number; warning: number; breach: number } }>(`/pipeline/kanban?limit=${limit}`),
     refetchInterval: 30_000,
   });
 }
@@ -554,6 +555,11 @@ export function useLogActivity(id: string) {
       qc.invalidateQueries({ queryKey: ["lead", id] });
       qc.invalidateQueries({ queryKey: ["lead-events", id] });
       qc.invalidateQueries({ queryKey: ["lost-detector"] });
+      // Qualifying activities (CALL/MESSAGE/EMAIL/MEETING) flip first-response
+      // SLA to RESPONDED — refresh every SLA surface without a manual reload.
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 }

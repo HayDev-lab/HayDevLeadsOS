@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
 import { ok, serverError } from "@/lib/leados/api";
+import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds } from "@/lib/leados/sla-service";
 
 // Returns the default pipeline grouped by stage with lead cards for the Kanban.
 export async function GET(req: Request) {
@@ -27,6 +28,11 @@ export async function GET(req: Request) {
       take: limit * stages.length,
     });
 
+    // SLA for kanban cards — single engine, one grouped query, one settings read.
+    const slaThresholds = await getSlaThresholds(session.orgId);
+    const firstResponseMap = await getFirstResponseMap(session.orgId, leads.map((l) => l.id));
+    const withSla = attachSlaToLeads(leads, slaThresholds, firstResponseMap);
+
     const columns = stages.map((s) => ({
       id: s.id,
       pipelineId: s.pipelineId,
@@ -36,7 +42,7 @@ export async function GET(req: Request) {
       color: s.color,
       isWon: s.isWon,
       isLost: s.isLost,
-      leads: leads.filter((l) => l.stageId === s.id),
+      leads: withSla.filter((l) => l.stageId === s.id),
     }));
 
     const estValue = leads.reduce((acc, l) => acc + (l.estimatedValue ?? 0), 0);
@@ -44,6 +50,7 @@ export async function GET(req: Request) {
       pipeline: { id: pipeline.id, name: pipeline.name },
       columns,
       totals: { leads: leads.length, estValue },
+      slaConfig: slaThresholds,
     });
   } catch (e) {
     return serverError("kanban-failed", e);

@@ -4,6 +4,7 @@ import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { LeadUpdate } from "@/lib/schemas/lead";
 import { updateLead, archiveLead } from "@/lib/leados/lead-service";
+import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds } from "@/lib/leados/sla-service";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -25,7 +26,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       },
     });
     if (!lead || lead.organizationId !== session.orgId) return notFound("lead");
-    return ok({ lead });
+    // SLA (single engine, one grouped activity query, settings read once)
+    const slaThresholds = await getSlaThresholds(session.orgId);
+    const firstResponseMap = await getFirstResponseMap(session.orgId, [lead.id]);
+    const [withSla] = attachSlaToLeads([lead], slaThresholds, firstResponseMap);
+    return ok({ lead: withSla, slaConfig: slaThresholds });
   } catch (e) {
     return serverError("lead-get-failed", e);
   }

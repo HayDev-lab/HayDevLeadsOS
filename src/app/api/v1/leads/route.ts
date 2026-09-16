@@ -6,6 +6,8 @@ import { LeadCreate } from "@/lib/schemas/lead";
 import { createLead } from "@/lib/leados/lead-service";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 import { PRIORITY } from "@/lib/leados/constants";
+import { SLA_STATUS, type SlaStatus } from "@/lib/sla";
+import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds, slaFilterWhere, sortLeadIdsBySlaPriority } from "@/lib/leados/sla-service";
 
 export async function GET(req: Request) {
   try {
@@ -26,6 +28,7 @@ export async function GET(req: Request) {
     const includeArchived = qBool(p.get("archived"));
     const dateFrom = qStr(p.get("dateFrom"));
     const dateTo = qStr(p.get("dateTo"));
+    const slaStatus = qStr(p.get("sla"));
     const sort = qStr(p.get("sort")) ?? "createdAt:desc";
 
     const where: Record<string, unknown> = { organizationId: session.orgId };
@@ -46,6 +49,17 @@ export async function GET(req: Request) {
     if (tags?.length) {
       where.leadTags = { some: { tag: { name: { in: tags } } } };
     }
+
+    // SLA thresholds are resolved ONCE per request (never per lead).
+    const slaThresholds = await getSlaThresholds(session.orgId);
+
+    // Server-side SLA filter — works on the FULL dataset (with pagination/counts).
+    if (slaStatus) {
+      const upper = slaStatus.toUpperCase();
+      if (!(upper in SLA_STATUS)) return badRequest(`Unknown SLA filter: ${slaStatus}`);
+      const frag = slaFilterWhere(upper as SlaStatus, slaThresholds);
+      where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
+    }
     if (q) {
       const nPhone = normalizePhone(q);
       const nEmail = normalizeEmail(q);
@@ -62,27 +76,54 @@ export async function GET(req: Request) {
 
     const [sortField, sortDirRaw] = sort.split(":");
     const sortDir = sortDirRaw === "asc" ? "asc" : "desc";
+    const isSlaSort = sortField === "sla" || sort === "sla:priority";
     const allowed = ["createdAt", "updatedAt", "leadScore", "priority", "estimatedValue", "nextActionAt", "lastContactAt"];
     const orderBy: Record<string, "asc" | "desc"> = {};
-    orderBy[allowed.includes(sortField) ? sortField : "createdAt"] = sortDir;
+    if (!isSlaSort) orderBy[allowed.includes(sortField) ? sortField : "createdAt"] = sortDir;
 
-    const [total, rows] = await Promise.all([
-      db.lead.count({ where }),
-      db.lead.findMany({
-        where,
-        include: {
-          source: true,
-          stage: true,
-          owner: { select: { id: true, name: true, avatarColor: true } },
-          leadTags: { include: { tag: true } },
-        },
-        orderBy,
-        skip,
-        take: limit,
-      }),
-    ]);
+    const include = {
+      source: true,
+      stage: true,
+      owner: { select: { id: true, name: true, avatarColor: true } },
+      leadTags: { include: { tag: true } },
+    };
 
-    return ok({ rows, total, page, limit, pages: Math.max(1, Math.ceil(total / limit)) });
+    let rows;
+    let total: number;
+    let firstResponseMap = new Map<string, Date>();
+
+    if (isSlaSort) {
+      // Default SLA priority order (BREACH → WARNING → TARGET → RESPONDED).
+      // Two-phase: rank ALL filtered leads cheaply, hydrate only the page.
+      const ranked = await sortLeadIdsBySlaPriority(session.orgId, where, slaThresholds, page, limit);
+      total = ranked.total;
+      firstResponseMap = ranked.firstResponseMap;
+      if (ranked.ids.length) {
+        const hydrated = await db.lead.findMany({ where: { ...where, id: { in: ranked.ids } }, include });
+        const byId = new Map(hydrated.map((r) => [r.id, r]));
+        rows = ranked.ids.map((id) => byId.get(id)).filter(Boolean) as typeof hydrated;
+      } else {
+        rows = [];
+      }
+    } else {
+      [total, rows] = await Promise.all([
+        db.lead.count({ where }),
+        db.lead.findMany({ where, include, orderBy, skip, take: limit }),
+      ]);
+      firstResponseMap = await getFirstResponseMap(session.orgId, rows.map((r) => r.id));
+    }
+
+    // Attach SLA to every row (computed by the single engine, N+1-safe).
+    const withSla = attachSlaToLeads(rows, slaThresholds, firstResponseMap);
+
+    return ok({
+      rows: withSla,
+      total,
+      page,
+      limit,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      slaConfig: slaThresholds,
+    });
   } catch (e) {
     return serverError("leads-list-failed", e);
   }

@@ -698,3 +698,53 @@ Next-phase priorities:
 3. Real auth (NextAuth) for production.
 4. Notification channel adapters (email/Telegram/WhatsApp delivery).
 5. Enhanced command palette with quick actions (create lead, navigate, search).
+
+---
+Task ID: sla-1
+Agent: main
+Task: Connect FIRST RESPONSE SLA to real leads (inspect phase)
+
+Work Log:
+- Moved cloned repo HayDevLeadsOS/* into /home/z/my-project root (env expects project at root; .env DATABASE_URL points to db/custom.db). Preserved GitHub remote.
+- bun install, prisma generate + db push OK. Dev server running on :3000.
+- INSPECTED: prisma schema (Lead.createdAt idx, Activity idx [leadId,createdAt], Setting org-scoped unique key, no persisted firstResponseAt), constants.ts (ACTIVITY_TYPE, FOLLOWUP), lead-service.ts, leads route (pagination limit<=200, filters, sort allowed list, default createdAt:desc), settings route (POST upsert Setting, NO validation), sla-config-tab.tsx (key "sla_thresholds", format {target,warning,breach} hours, no validation, non-shared preview, dead PATCH org call), response-sla-badge.tsx (HARDCODED 1/4/24h, uses lastContactAt — wrong semantics), leads-view.tsx (SLA badge inside Score column, no sort selector), lead-detail-view.tsx (no SLA), kanban route (no SLA), dashboard-service (no SLA KPI), seed.ts (activities at created+1h for leads with lastContactHoursAgo), use-api.ts (useLogActivity does NOT invalidate leads list), i18n hy/ru/en flat keys.
+
+Stage Summary:
+- DEFINED SLA SEMANTICS: FIRST RESPONSE SLA. Qualifying activities = CALL, MESSAGE, EMAIL, MEETING (NOTE does NOT close SLA). States: RESPONDED | TARGET (elapsed<=target) | WARNING (target<elapsed<breach, visual escalation at warning) | BREACH (elapsed>=breach). Matches existing Settings 4-band preview.
+- Thresholds: Setting key "sla_thresholds" {target,warning,breach} hours, org-scoped. ONE fallback DEFAULT in lib/sla.ts.
+- Architecture: lib/sla.ts PURE engine (client+server+tests); lib/leados/sla-service.ts server-only (loader, grouped activity query, prisma filters, batch attach, breach count). No schema change (dynamic computation, volumes small). SLA sort = 2-phase (light id fetch + grouped activities + JS rank sort + page hydrate). sla filter = server-side prisma where (none-qualifying + createdAt cutoffs).
+- UI: sla/sla-badge.tsx (shared, client engine + shared 60s tick + popover details), sla/sla-detail.tsx (lead detail header card), replace response-sla-badge.tsx, leads-view SLA column + SLA filter select + sort select (default SLA Priority), settings validation + shared preview, dashboard slaBreached KPI, useLogActivity invalidates leads/kanban/dashboard.
+
+---
+Task ID: sla-2
+Agent: main
+Task: FIRST RESPONSE SLA — implementation, connection, QA and final verification.
+
+Work Log:
+- IMPLEMENTED lib/sla.ts (PURE engine, single source of truth): SLA_KIND.FIRST_RESPONSE, SlaStatus (TARGET|WARNING|BREACH|RESPONDED), SlaThresholds, SlaResult, DEFAULT_SLA_THRESHOLDS (the ONLY fallback), QUALIFYING_ACTIVITY_TYPES (CALL/MESSAGE/EMAIL/MEETING — NOTE/system events excluded), validateSlaThresholds, parseSlaThresholds, computeFirstResponseSla, compareLeadsBySlaPriority, humanizeDuration.
+- IMPLEMENTED lib/leados/sla-service.ts (server): getSlaThresholds (1 query + 15s cache + invalidation), getFirstResponseMap (ONE groupBy), attachSlaToLeads, slaFilterWhere (Prisma where fragments for all 4 states), countSlaBreached, sortLeadIdsBySlaPriority (2-phase: light id fetch + groupBy + JS rank + page hydrate).
+- CONNECTED Settings API: POST validates sla_thresholds (target<warning<breach, >0, finite) → HTTP 400 with readable errors; GET now returns settings rows (old tab never loaded saved values — fixed).
+- CONNECTED Leads API: rows[].sla + response.slaConfig, ?sla=BREACH|WARNING|TARGET|RESPONDED server-side filter (works with pagination+counts), sort=sla:priority default-priority order.
+- CONNECTED Lead Detail API (lead.sla + slaConfig), Kanban API (cards sla + slaConfig), Dashboard (metrics.slaBreached — real count), Export API (sla filter + slaStatus/slaElapsed/slaFirstResponse CSV columns).
+- UI: components/leados/sla/sla-badge.tsx (shared badge: text+color, click-popover details with Created/Target/Warning/Breach/Elapsed/Breach-in|Breached-by/First-response — touch/keyboard friendly, not hover-only), sla/sla-detail.tsx (compact header card with countdown + thresholds + lead age), use-sla-tick.ts (ONE shared 60s timer via useSyncExternalStore — no per-row timers). DELETED response-sla-badge.tsx (hardcoded 1/4/24, wrong lastContactAt semantics).
+- Leads view: dedicated SLA column (old badge was inside Score column), SLA filter select (All/Target/Warning/Breached/Responded), Sort select with SLA Priority DEFAULT (user override preserved — explicit choice wins), breached rows tinted, slaConfig threaded from API.
+- SlaConfigTab rebuilt: shared SlaBadge PREVIEW (same component as production — cannot diverge), client validation with inline errors + disabled Save, single POST save, invalidates settings/leads/lead/kanban/dashboard so badges recompute immediately.
+- useLogActivity now invalidates leads/kanban/dashboard → qualifying activity flips RESPONDED without manual refresh. useLeads supports sla param; useLead/useKanban/useDashboard types extended.
+- i18n: sla.* + common.sort.* keys in hy/ru/en.
+- Seed: createdAtMinutesAgo/firstResponseAfterMinutes/responseType/firstNoteAfterMinutes fields; SLA demo coverage — Tigran TARGET(35m), Anna WARNING(2.5h), Irina escalated WARNING(8h), Robert BREACH(48h, has NOTE which must NOT close SLA), responded leads with varied first-response times (25m/45m/55m/130m, EMAIL/MEETING types). Seeds sla_thresholds Setting row.
+- tests/sla.test.ts (bun test): 28 tests / 71 assertions — states, qualifying types, settings validation (all invalid cases from requirements), thresholds-drive-states, sort order (D,B,C,A,E dataset), humanization, edge cases (future timestamps, merge artifacts, missing settings).
+
+QA & REPAIR LOOPS:
+- LOOP 1 (semantics): verified end-to-end — NOTE on breached Robert did NOT close SLA; MESSAGE → RESPONDED with responseMinutes=2904 (=full age). First-response elapsed freezes after response.
+- LOOP 2 (settings): invalid values → 400 (all 4 cases); change 1/4/24→0.5/2/8 → Tigran TARGET→WARNING, Irina WARNING→BREACH, restore → back. Dashboard KPI consistent with filter count (133=133 at 500-lead scale).
+- LOOP 3 (sort): Lyudmila (most breached) first in list; API sort verified on 5-lead dataset (D,B,C,A,E order).
+- LOOP 4 (filter): server-side on full dataset; UI select test: Tigran/Marina/Irina absent with Breached selected; search+filter combo works; KPI card → #/leads?sla=BREACH with filter pre-applied.
+- LOOP 5 (response): MESSAGE on breached lead → RESPONDED instantly (list invalidated).
+- LOOP 6 (performance): N+1 impossible by construction (1 settings read + 1 groupBy). Scale test 500 leads: sla:priority 20ms flat, breach filter 24ms, kanban 16ms, dashboard 66ms. Synthetic leads cleaned up after test.
+- LOOP 7 (UI): strengthened breached row tint; badges verified readable in light+dark; KPI labels truncate by design.
+- LOOP 8 (mobile 390x844): leads list, lead detail (SLA card wraps correctly, red readable), settings validation readable. No critical defects.
+
+Verification: TS 0 errors in src/, ESLint clean, production build PASS, 28/28 unit tests, browser QA (13 screenshots in download/sla-qa/), no console errors.
+
+Stage Summary:
+- FIRST RESPONSE SLA fully connected to real leads: Settings → thresholds → engine → Lead List/Detail/Kanban/Dashboard/Export. No hardcoded thresholds in UI. VERIFIED_COMPLETE.

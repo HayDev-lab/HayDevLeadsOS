@@ -5,7 +5,7 @@ import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Activity, AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, ClipboardList, Inbox, Layers, Plus, Sparkles, Timer, Trophy, XCircle, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, ClipboardList, Hourglass, Inbox, Layers, Plus, Sparkles, Timer, Trophy, XCircle, Zap } from "lucide-react";
 import { MiniBar, OwnerChip, ScoreBadge, SourceBadge, StageBadge, timeAgo, EmptyState, formatMoney } from "./primitives";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { LeadFormDialog } from "./lead-form-dialog";
@@ -27,6 +27,7 @@ export function DashboardView() {
 
   const metricCards = [
     { key: "new", value: m?.newLeads ?? 0, icon: Sparkles, label: t("metric.new_leads"), color: "text-sky-600 bg-sky-50 dark:bg-sky-950/40", view: "leads" },
+    { key: "slaBreached", value: m?.slaBreached ?? 0, icon: Hourglass, label: t("sla.breached_leads"), color: "text-red-600 bg-red-50 dark:bg-red-950/40", critical: true, view: "leads", params: { sla: "BREACH" } },
     { key: "unassigned", value: m?.unassigned ?? 0, icon: Inbox, label: t("metric.unassigned"), color: "text-amber-600 bg-amber-50 dark:bg-amber-950/40", view: "leads" },
     { key: "overdue", value: m?.overdueFollowups ?? 0, icon: Timer, label: t("metric.overdue_followups"), color: "text-red-600 bg-red-50 dark:bg-red-950/40", critical: true, view: "leads" },
     { key: "qualified", value: m?.qualified ?? 0, icon: CheckCircle2, label: t("metric.qualified"), color: "text-violet-600 bg-violet-50 dark:bg-violet-950/40", view: "pipeline" },
@@ -85,14 +86,14 @@ export function DashboardView() {
       )}
 
       {/* metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
         {metricCards.map((c, i) => (
           <motion.button
             key={c.key}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.03, duration: 0.22 }}
-            onClick={() => navigate(c.view)}
+            onClick={() => navigate(c.view, c.params)}
             className={cn(
               "text-left rounded-xl border bg-card p-3 transition hover:shadow-sm hover:border-primary/30 leados-lift",
               c.critical && c.value > 0 && "border-red-300/60 dark:border-red-900"

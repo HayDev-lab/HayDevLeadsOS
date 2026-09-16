@@ -4,6 +4,8 @@ import { getSession } from "@/lib/leados/context";
 import { serverError } from "@/lib/leados/api";
 import { toCsv } from "@/lib/leados/attribution";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
+import { SLA_STATUS, computeFirstResponseSla, type SlaStatus } from "@/lib/sla";
+import { getFirstResponseMap, getSlaThresholds, slaFilterWhere } from "@/lib/leados/sla-service";
 
 export async function GET(req: Request) {
   try {
@@ -19,6 +21,16 @@ export async function GET(req: Request) {
     if (ownerId) where.ownerId = ownerId;
     if (stageId) where.stageId = stageId;
     if (priority.length) where.priority = { in: priority };
+    // Server-side SLA filter (same engine as the lead list).
+    const slaStatus = p.get("sla");
+    const slaThresholds = await getSlaThresholds(session.orgId);
+    if (slaStatus) {
+      const upper = slaStatus.toUpperCase();
+      if (upper in SLA_STATUS) {
+        const frag = slaFilterWhere(upper as SlaStatus, slaThresholds);
+        where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
+      }
+    }
     if (q) {
       const nPhone = normalizePhone(q);
       const nEmail = normalizeEmail(q);
@@ -38,7 +50,15 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "desc" },
       take: 2000,
     });
+    // First-response SLA per exported row (one grouped query — no N+1).
+    const firstResponseMap = await getFirstResponseMap(session.orgId, rows.map((r) => r.id));
+    const now = new Date();
     const exportRows = rows.map((l) => {
+      const sla = computeFirstResponseSla(
+        { createdAt: l.createdAt, firstResponseAt: firstResponseMap.get(l.id) ?? null },
+        slaThresholds,
+        now
+      );
       const base: Record<string, unknown> = {
         firstName: l.firstName ?? "",
         lastName: l.lastName ?? "",
@@ -60,6 +80,9 @@ export async function GET(req: Request) {
       utmSource: l.attributions[0]?.utmSource ?? "",
       utmCampaign: l.attributions[0]?.utmCampaign ?? "",
       createdAt: new Date(l.createdAt).toISOString(),
+      slaStatus: sla.status,
+      slaElapsedMinutes: sla.isResponded ? "" : sla.elapsedMinutes,
+      slaFirstResponseMinutes: sla.responseMinutes ?? "",
       };
       // append custom field values as columns
       for (const cv of l.customValues) {

@@ -15,9 +15,12 @@ import { LeadFormDialog } from "./lead-form-dialog";
 import { DuplicatesScanner } from "./duplicates-scanner";
 import { ImportDialog } from "./import-dialog";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, timeAgo } from "./primitives";
-import { ResponseSlaBadge } from "./response-sla-badge";
+import { SlaBadge } from "./sla/sla-badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { DEFAULT_SLA_THRESHOLDS, SLA_STATUS, type SlaThresholds } from "@/lib/sla";
+
+const SLA_SORT_DEFAULT = "sla:priority";
 
 export function LeadsView() {
   const { t } = useLocale();
@@ -29,8 +32,9 @@ export function LeadsView() {
   const [priority, setPriority] = useState<string[]>([]);
   const [overdue, setOverdue] = useState(route.params.overdue === "1");
   const [unassigned, setUnassigned] = useState(false);
+  const [slaFilter, setSlaFilter] = useState(route.params.sla === "BREACH" ? "BREACH" : "");
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState("createdAt:desc");
+  const [sort, setSort] = useState(SLA_SORT_DEFAULT);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -56,18 +60,20 @@ export function LeadsView() {
     overdue: overdue || undefined,
     unassigned: unassigned || undefined,
     archived: showArchived || undefined,
+    sla: slaFilter || undefined,
     page,
     limit,
     sort,
-  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, showArchived, page, sort]);
+  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, showArchived, slaFilter, page, sort]);
 
   const leads = useLeads(query);
+  const slaConfig: SlaThresholds = leads.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS;
 
   const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
 
   const togglePriority = (p: string) => setPriority((cur) => cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]);
-  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setPage(1); };
-  const hasFilters = q || sourceId || ownerId || stageId || priority.length || overdue || unassigned;
+  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setSlaFilter(""); setPage(1); };
+  const hasFilters = q || sourceId || ownerId || stageId || priority.length || overdue || unassigned || slaFilter;
 
   const toggleSelect = (id: string) => setSelected((cur) => {
     const n = new Set(cur);
@@ -116,6 +122,7 @@ export function LeadsView() {
     if (stageId) params.set("stageId", stageId);
     if (priority.length) params.set("priority", priority.join(","));
     if (overdue) params.set("overdue", "1");
+    if (slaFilter) params.set("sla", slaFilter);
     window.open(`/api/v1/export?${params.toString()}`, "_blank");
   };
 
@@ -169,6 +176,30 @@ export function LeadsView() {
               <button key={p} onClick={() => { togglePriority(p); setPage(1); }} className={cn("h-9 px-2 rounded-md text-xs font-medium border transition", priority.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-accent")}>{p[0]}{p.slice(1).toLowerCase()}</button>
             ))}
           </div>
+          <Select value={slaFilter} onValueChange={(v) => { setSlaFilter(v === "__all" ? "" : v); setPage(1); }}>
+            <SelectTrigger className={cn("w-40 h-9 text-xs", slaFilter && "border-red-300 dark:border-red-800 font-medium")} aria-label={t("leads.filter.sla")}>
+              <SelectValue placeholder={t("leads.filter.sla")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">{t("sla.filter.all")}</SelectItem>
+              <SelectItem value={SLA_STATUS.BREACH}>{t("sla.breach")}</SelectItem>
+              <SelectItem value={SLA_STATUS.WARNING}>{t("sla.warning")}</SelectItem>
+              <SelectItem value={SLA_STATUS.TARGET}>{t("sla.target")}</SelectItem>
+              <SelectItem value={SLA_STATUS.RESPONDED}>{t("sla.responded")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
+            <SelectTrigger className="w-40 h-9 text-xs" aria-label="Sort">
+              <SelectValue placeholder={t("sla.sort.priority")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SLA_SORT_DEFAULT}>{t("sla.sort.priority")}</SelectItem>
+              <SelectItem value="createdAt:desc">{t("common.sort.newest")}</SelectItem>
+              <SelectItem value="createdAt:asc">{t("common.sort.oldest")}</SelectItem>
+              <SelectItem value="leadScore:desc">{t("common.sort.score")}</SelectItem>
+              <SelectItem value="estimatedValue:desc">{t("common.sort.value")}</SelectItem>
+            </SelectContent>
+          </Select>
           <button onClick={() => { setOverdue((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", overdue ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-300" : "bg-background hover:bg-accent")}>⏱ {t("leads.filter.overdue")}</button>
           <button onClick={() => { setUnassigned((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", unassigned ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300" : "bg-background hover:bg-accent")}>👤 {t("leads.filter.unassigned")}</button>
           <button onClick={() => { setShowArchived((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", showArchived ? "bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300" : "bg-background hover:bg-accent")}>📦 Archived</button>
@@ -284,6 +315,7 @@ export function LeadsView() {
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.company")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.source")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.stage")}</th>
+                <th className="text-left font-medium px-3 py-2.5">{t("leads.col.sla")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.score")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.priority")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.owner")}</th>
@@ -294,12 +326,12 @@ export function LeadsView() {
             </thead>
             <tbody>
               {leads.isLoading && Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b last:border-0"><td colSpan={10} className="px-3"><Skeleton className="h-9 w-full my-1" /></td></tr>
+                <tr key={i} className="border-b last:border-0"><td colSpan={11} className="px-3"><Skeleton className="h-9 w-full my-1" /></td></tr>
               ))}
               {(leads.data?.rows ?? []).map((l: any) => {
                 const overdueAction = l.nextActionAt && new Date(l.nextActionAt).getTime() < Date.now();
                 return (
-                  <tr key={l.id} className={cn("border-b last:border-0 hover:bg-accent/50 transition cursor-pointer", selected.has(l.id) && "bg-primary/5")} onClick={() => navigate("lead", { id: l.id })}>
+                  <tr key={l.id} className={cn("border-b last:border-0 hover:bg-accent/50 transition cursor-pointer", selected.has(l.id) && "bg-primary/5", l.sla?.isBreached && "bg-red-50/70 dark:bg-red-950/30 hover:bg-red-50 dark:hover:bg-red-950/50")} onClick={() => navigate("lead", { id: l.id })}>
                     <td className="px-3 py-2.5" onClick={(e) => { e.stopPropagation(); toggleSelect(l.id); }}><input type="checkbox" checked={selected.has(l.id)} readOnly className="accent-primary" /></td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2.5">
@@ -314,10 +346,10 @@ export function LeadsView() {
                     <td className="px-3 py-2.5"><SourceBadge name={l.source?.name} type={l.source?.type} /></td>
                     <td className="px-3 py-2.5"><StageBadge name={l.stage?.name} color={l.stage?.color} type={l.stage?.type} /></td>
                     <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
-                        <ScoreBadge score={l.leadScore} category={l.scoreCategory} />
-                        <ResponseSlaBadge createdAt={l.createdAt} lastContactAt={l.lastContactAt} status={l.status} />
-                      </div>
+                      <SlaBadge createdAt={l.createdAt} firstResponseAt={l.sla?.firstResponseAt ?? null} thresholds={slaConfig} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <ScoreBadge score={l.leadScore} category={l.scoreCategory} />
                     </td>
                     <td className="px-3 py-2.5"><PriorityBadge priority={l.priority} /></td>
                     <td className="px-3 py-2.5">{l.owner ? <OwnerChip name={l.owner.name} avatarColor={l.owner.avatarColor} /> : <span className="text-xs text-muted-foreground italic">{t("common.unassigned")}</span>}</td>
@@ -344,7 +376,7 @@ export function LeadsView() {
                 );
               })}
               {!leads.isLoading && (leads.data?.rows ?? []).length === 0 && (
-                <tr><td colSpan={showArchived ? 11 : 10} className="px-6 py-12 text-center text-sm text-muted-foreground">{hasFilters ? "No leads match your filters." : "No leads yet. Create one or import a CSV."}</td></tr>
+                <tr><td colSpan={showArchived ? 12 : 11} className="px-6 py-12 text-center text-sm text-muted-foreground">{hasFilters ? "No leads match your filters." : "No leads yet. Create one or import a CSV."}</td></tr>
               )}
             </tbody>
           </table>

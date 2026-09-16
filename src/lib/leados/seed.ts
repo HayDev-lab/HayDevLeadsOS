@@ -46,6 +46,14 @@ interface SeedLead {
   audit?: { acquisition: number; sales: number; operations: number; data: number; automation: number; aiReadiness: number };
   tags?: string[];
   createdAtDaysAgo: number;
+  /** Precise creation offset in minutes (overrides createdAtDaysAgo) — used for SLA demo states. */
+  createdAtMinutesAgo?: number;
+  /** Minutes after creation when the first QUALIFYING response happened (demo). */
+  firstResponseAfterMinutes?: number;
+  /** Type of the seeded first qualifying activity (default CALL/MESSAGE by source). */
+  responseType?: "CALL" | "MESSAGE" | "EMAIL" | "MEETING";
+  /** NOTE activity offset — proves notes never close the first-response SLA. */
+  firstNoteAfterMinutes?: number;
   lastContactHoursAgo?: number | null;
   nextActionHoursFromNow?: number | null; // negative = overdue
   meetingRequested?: boolean;
@@ -53,12 +61,14 @@ interface SeedLead {
 }
 
 const LEADS: SeedLead[] = [
-  { first: "Tigran", last: "Petrosyan", company: "Astghik Construction LLC", phone: "+37494123456", email: "tigran@astghik.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, est: 0, summary: "Interested in ERP for construction company", requirements: "CRM + project accounting", createdAtDaysAgo: 0, meetingRequested: true },
-  { first: "Anna", last: "Hakobyan", company: "Yerevan Dental Clinic", phone: "+37455112233", email: "anna@ydc.am", sourceType: "instagram", stageIndex: 0, priority: PRIORITY.URGENT, ownerIdx: null, summary: "Wants CRM for clinic + WhatsApp automation", createdAtDaysAgo: 1, meetingRequested: true },
-  { first: "Sergey", last: "Ivanov", company: "MosRetail Group", phone: "+79261234567", email: "s.ivanov@mosretail.ru", sourceType: "google_ads", stageIndex: 1, priority: PRIORITY.HIGH, ownerIdx: 2, est: 1800000, summary: "Retail chain, 14 stores, needs POS+CRM sync", requirements: "Inventory + loyalty", createdAtDaysAgo: 3, lastContactHoursAgo: 30, nextActionHoursFromNow: -5, budgetFlag: true },
-  { first: "Marina", last: "Ovsepyan", company: "Arev Beauty Studio", phone: "+37493677881", email: "arev@beauty.am", sourceType: "instagram", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "Booking automation for beauty studio", createdAtDaysAgo: 4, lastContactHoursAgo: 20, nextActionHoursFromNow: 4 },
+  // SLA demo coverage (defaults 1/4/24h): TARGET · WARNING · escalated WARNING · BREACH · RESPONDED
+  { first: "Tigran", last: "Petrosyan", company: "Astghik Construction LLC", phone: "+37494123456", email: "tigran@astghik.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, est: 0, summary: "Interested in ERP for construction company", requirements: "CRM + project accounting", createdAtDaysAgo: 0, createdAtMinutesAgo: 35, meetingRequested: true },
+  { first: "Anna", last: "Hakobyan", company: "Yerevan Dental Clinic", phone: "+37455112233", email: "anna@ydc.am", sourceType: "instagram", stageIndex: 0, priority: PRIORITY.URGENT, ownerIdx: null, summary: "Wants CRM for clinic + WhatsApp automation", requirements: "CRM + WhatsApp", createdAtDaysAgo: 1, createdAtMinutesAgo: 155, meetingRequested: true },
+  { first: "Irina", last: "Safaryan", company: "BookWorld Store", phone: "+37499123411", email: "irina@bookworld.am", sourceType: "instagram", stageIndex: 0, priority: PRIORITY.MEDIUM, ownerIdx: 2, summary: "Inbound inquiry — still waiting for the first response", createdAtDaysAgo: 5, createdAtMinutesAgo: 480 },
+  { first: "Sergey", last: "Ivanov", company: "MosRetail Group", phone: "+79261234567", email: "s.ivanov@mosretail.ru", sourceType: "google_ads", stageIndex: 1, priority: PRIORITY.HIGH, ownerIdx: 2, est: 1800000, summary: "Retail chain, 14 stores, needs POS+CRM sync", requirements: "Inventory + loyalty", createdAtDaysAgo: 3, lastContactHoursAgo: 30, firstResponseAfterMinutes: 130, nextActionHoursFromNow: -5, budgetFlag: true },
+  { first: "Marina", last: "Ovsepyan", company: "Arev Beauty Studio", phone: "+37493677881", email: "arev@beauty.am", sourceType: "instagram", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "Booking automation for beauty studio", createdAtDaysAgo: 4, lastContactHoursAgo: 20, firstResponseAfterMinutes: 25, nextActionHoursFromNow: 4 },
   { first: "Vardan", last: "Sargsyan", company: "Vega Logistics", phone: "+37499887766", email: "vardan@vega.am", sourceType: "referral", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 2, est: 2400000, summary: "Qualified — fleet tracking + CRM integration", requirements: "GPS + dispatch automation", createdAtDaysAgo: 6, lastContactHoursAgo: 12, nextActionHoursFromNow: 36, meetingRequested: true, budgetFlag: true, audit: { acquisition: 58, sales: 45, operations: 72, data: 51, automation: 64, aiReadiness: 70 } },
-  { first: "Elena", last: "Poghosyan", company: "Flora Pharmacy Chain", phone: "+37477123400", email: "elena@flora.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 3, est: 3200000, summary: "Audit completed, high automation potential", requirements: "Inventory automation + AI demand forecast", createdAtDaysAgo: 7, lastContactHoursAgo: 16, nextActionHoursFromNow: 20, meetingRequested: true, budgetFlag: true, audit: { acquisition: 62, sales: 50, operations: 80, data: 55, automation: 78, aiReadiness: 82 } },
+  { first: "Elena", last: "Poghosyan", company: "Flora Pharmacy Chain", phone: "+37477123400", email: "elena@flora.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 3, est: 3200000, summary: "Audit completed, high automation potential", requirements: "Inventory automation + AI demand forecast", createdAtDaysAgo: 7, lastContactHoursAgo: 16, firstResponseAfterMinutes: 45, responseType: "EMAIL", nextActionHoursFromNow: 20, meetingRequested: true, budgetFlag: true, audit: { acquisition: 62, sales: 50, operations: 80, data: 55, automation: 78, aiReadiness: 82 } },
   { first: "Hovhannes", last: "Ghazaryan", company: "Gyumri Tech Hub", phone: "+37493334455", email: "hoghannes@gytech.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 1200000, summary: "Meeting scheduled for coworking CRM", createdAtDaysAgo: 9, lastContactHoursAgo: 50, nextActionHoursFromNow: 48 },
   { first: "Karine", last: "Asatryan", company: "Sweet Bakery", phone: "+37498101010", email: "karine@sweetbakery.am", sourceType: "facebook", stageIndex: 3, priority: PRIORITY.LOW, ownerIdx: 3, summary: "Order automation for bakery", createdAtDaysAgo: 10, lastContactHoursAgo: 6 },
   { first: "Dmitry", last: "Smirnov", company: "AquaService", phone: "+79031122334", email: "d.smirnov@aquaservice.ru", sourceType: "meta_ads", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 2, est: 950000, summary: "Proposal sent — water delivery automation", requirements: "Routing + customer app", createdAtDaysAgo: 12, lastContactHoursAgo: 72, nextActionHoursFromNow: -24, budgetFlag: true },
@@ -70,8 +80,7 @@ const LEADS: SeedLead[] = [
   { first: "Pavel", last: "Morozov", company: "QuickFix Services", phone: "+79161239876", email: "p.morozov@quickfix.ru", sourceType: "google_ads", stageIndex: 7, priority: PRIORITY.LOW, ownerIdx: 2, summary: "LOST — chose competitor on price", createdAtDaysAgo: 40, lastContactHoursAgo: 200 },
   { first: "Anahit", last: "Hovhannisyan", company: "Sunset Restaurant Group", phone: "+37496554433", email: "anahit@sunset.am", sourceType: "website", stageIndex: 7, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "LOST — timing not right, revisit Q3", createdAtDaysAgo: 45, lastContactHoursAgo: 500 },
   // extra "needs attention" leads
-  { first: "Robert", last: "Mkrtchyan", company: "ExpressDelivery AM", phone: "+37493776655", email: "robert@express.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, summary: "New lead — delivery automation, no contact yet", createdAtDaysAgo: 2, meetingRequested: true },
-  { first: "Irina", last: "Safaryan", company: "BookWorld Store", phone: "+37499123411", email: "irina@bookworld.am", sourceType: "instagram", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 2, summary: "Contacted but no follow-up scheduled", createdAtDaysAgo: 5, lastContactHoursAgo: 60 },
+  { first: "Robert", last: "Mkrtchyan", company: "ExpressDelivery AM", phone: "+37493776655", email: "robert@express.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, summary: "New lead — delivery automation, no contact yet", createdAtDaysAgo: 2, meetingRequested: true, firstNoteAfterMinutes: 90 },
   { first: "Gagik", last: "Kirakosyan", company: "Mountain Foods", phone: "+37477998800", email: "gagik@mountainfoods.am", sourceType: "referral", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 3, est: 2100000, summary: "Proposal sent 4 days ago, no follow-up", createdAtDaysAgo: 11, lastContactHoursAgo: 96, nextActionHoursFromNow: -72 },
   { first: "Nina", last: "Babayan", company: "PetVet Clinic", phone: "+37493223344", email: "nina@petvet.am", sourceType: "business_audit", stageIndex: 3, priority: PRIORITY.MEDIUM, ownerIdx: 2, summary: "Meeting done, no next action set", createdAtDaysAgo: 13, lastContactHoursAgo: 80, audit: { acquisition: 55, sales: 35, operations: 60, data: 40, automation: 50, aiReadiness: 60 } },
   // a few more for volume
@@ -82,7 +91,7 @@ const LEADS: SeedLead[] = [
   { first: "Vladimir", last: "Petrov", company: "TechNova Solutions", phone: "+79037778899", email: "v.petrov@technova.ru", sourceType: "referral", stageIndex: 5, priority: PRIORITY.HIGH, ownerIdx: 2, est: 5200000, summary: "Negotiation — full ERP migration", requirements: "Data migration + custom modules", createdAtDaysAgo: 22, lastContactHoursAgo: 36, nextActionHoursFromNow: 24, budgetFlag: true, meetingRequested: true },
   { first: "Margarita", last: "Sahakyan", company: "Little Stars School", phone: "+37491234504", email: "margo@littlestars.am", sourceType: "instagram", stageIndex: 4, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 540000, summary: "Proposal — parent & grade portal", createdAtDaysAgo: 15, lastContactHoursAgo: 70 },
   { first: "Boris", last: "Lebedev", company: "CleanPro Services", phone: "+79269990011", email: "b.lebedev@cleanpro.ru", sourceType: "meta_ads", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 780000, summary: "Qualified — cleaning service automation", createdAtDaysAgo: 6, lastContactHoursAgo: 14 },
-  { first: "Arev", last: "Nersisyan", company: "Dilijan Resort", phone: "+37491234505", email: "arev@dilijanresort.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.HIGH, ownerIdx: 3, est: 1900000, summary: "Meeting — booking + CRM", createdAtDaysAgo: 11, lastContactHoursAgo: 44 },
+  { first: "Arev", last: "Nersisyan", company: "Dilijan Resort", phone: "+37491234505", email: "arev@dilijanresort.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.HIGH, ownerIdx: 3, est: 1900000, summary: "Meeting — booking + CRM", createdAtDaysAgo: 11, lastContactHoursAgo: 44, firstResponseAfterMinutes: 55, responseType: "MEETING" },
   { first: "Yuri", last: "Barseghyan", company: "Garda Security", phone: "+37491234506", email: "yuri@gardasec.am", sourceType: "phone", stageIndex: 5, priority: PRIORITY.URGENT, ownerIdx: 2, est: 3100000, summary: "Negotiation — guard scheduling + reporting", createdAtDaysAgo: 16, lastContactHoursAgo: 28, nextActionHoursFromNow: 6, budgetFlag: true },
   { first: "Olga", last: "Karapetyan", company: "Kamaris Winery", phone: "+37491234507", email: "olga@kamaris.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 880000, summary: "Qualified — wine club + e-commerce", createdAtDaysAgo: 8, lastContactHoursAgo: 20, audit: { acquisition: 48, sales: 52, operations: 58, data: 50, automation: 55, aiReadiness: 48 } },
 ];
@@ -166,6 +175,15 @@ export async function seed(): Promise<{ orgId: string }> {
   }
   const tagByName = new Map((await db.tag.findMany({ where: { organizationId: orgId } })).map((t) => [t.name, t.id]));
 
+  // SLA thresholds — the single Setting the first-response SLA engine reads.
+  await db.setting.create({
+    data: {
+      organizationId: orgId,
+      key: "sla_thresholds",
+      value: { target: 1, warning: 4, breach: 24 } as Prisma.InputJsonValue,
+    },
+  });
+
   // lost reasons
   for (let i = 0; i < DEFAULT_LOST_REASONS.length; i++) {
     await db.lostReason.create({
@@ -208,7 +226,13 @@ export async function seed(): Promise<{ orgId: string }> {
   let leadCounter = 0;
   for (const l of LEADS) {
     leadCounter++;
-    const created = new Date(Date.now() - l.createdAtDaysAgo * 86400000 - leadCounter * 60000);
+    // Precise minute-level offsets keep SLA demo states stable (TARGET/WARNING/…).
+    const created = new Date(
+      Date.now() -
+        (l.createdAtMinutesAgo != null
+          ? l.createdAtMinutesAgo * 60_000
+          : l.createdAtDaysAgo * 86_400_000 + leadCounter * 60_000)
+    );
     const stage = stages[l.stageIndex];
     const owner = l.ownerIdx != null ? users[l.ownerIdx] : null;
     const nPhone = normalizePhone(l.phone);
@@ -323,15 +347,36 @@ export async function seed(): Promise<{ orgId: string }> {
 
     // activities timeline
     if (l.lastContactHoursAgo != null) {
+      // First QUALIFYING activity — closes the first-response SLA.
+      const responseMinutes = l.firstResponseAfterMinutes ?? 60;
+      const responseType = l.responseType ?? (l.sourceType === "phone" ? "CALL" : "MESSAGE");
       await db.activity.create({
         data: {
           organizationId: orgId,
           leadId: lead.id,
           userId: owner?.id ?? null,
-          type: l.sourceType === "phone" ? "CALL" : "MESSAGE",
-          title: l.sourceType === "phone" ? "Inbound call" : "Initial message",
-          description: `Contact via ${l.sourceType}`,
-          createdAt: new Date(created.getTime() + 3600000),
+          type: responseType,
+          title:
+            responseType === "CALL" ? "Inbound call" :
+            responseType === "EMAIL" ? "Replied by email" :
+            responseType === "MEETING" ? "Intro meeting held" : "Initial message",
+          description: `First response via ${l.sourceType}`,
+          createdAt: new Date(created.getTime() + responseMinutes * 60_000),
+        },
+      });
+    }
+    // NOTE activities must NOT close the first-response SLA — seed a NOTE on
+    // an unresponded lead to prove system/notes never mark it RESPONDED.
+    if (l.firstNoteAfterMinutes != null) {
+      await db.activity.create({
+        data: {
+          organizationId: orgId,
+          leadId: lead.id,
+          userId: owner?.id ?? null,
+          type: "NOTE",
+          title: "Internal note",
+          description: "Checked requirements — still need to reach out",
+          createdAt: new Date(created.getTime() + l.firstNoteAfterMinutes * 60_000),
         },
       });
     }
