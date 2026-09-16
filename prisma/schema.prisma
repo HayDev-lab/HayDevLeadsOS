@@ -1,0 +1,587 @@
+// HAYDEV LEADOS — Prisma schema
+// Multi-tenant lead management layer of the HayDev ecosystem.
+// SQLite datasource. Enums are modeled as String (SQLite has no native enum).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// TENANCY
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  locale    String   @default("hy") // hy | ru | en
+  timezone  String   @default("Asia/Yerevan")
+  currency  String   @default("AMD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users                User[]
+  leads                Lead[]
+  pipelines            Pipeline[]
+  leadSources          LeadSource[]
+  tags                 Tag[]
+  lostReasons          LostReason[]
+  businessAudits       BusinessAudit[]
+  integrationSyncs     IntegrationSync[]
+  integrationEvents    IntegrationEvent[]
+  incomingMessages     IncomingMessage[]
+  webhookLogs           WebhookLog[]
+  notifications         Notification[]
+  customFields         CustomField[]
+  scoringConfigs       ScoringConfig[]
+  settings             Setting[]
+  activities           Activity[]
+  tasks                Task[]
+  notes                Note[]
+  leadEvents           LeadEvent[]
+  lostLeadFlags        LostLeadFlag[]
+}
+
+
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  email          String
+  role           String       @default("MANAGER") // UserRole
+  status         String       @default("ACTIVE") // UserStatus
+  title          String?
+  phone          String?
+  avatarColor    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownedLeads         Lead[]             @relation("OwnedLeads")
+  assignedTasks      Task[]             @relation("AssignedTasks")
+  activities         Activity[]
+  notes              Note[]
+  events             LeadEvent[]
+  notifications      Notification[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// SOURCES, PIPELINE, TAGS
+// ---------------------------------------------------------------------------
+
+model LeadSource {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  type           String       @default("manual") // website | business_audit | instagram | facebook | whatsapp | telegram | google_ads | meta_ads | referral | manual | api | email | phone | other
+  position       Int          @default(0)
+  isSystem       Boolean      @default(false)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads        Lead[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Pipeline {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stages       PipelineStage[]
+  leads       Lead[]
+
+  @@index([organizationId])
+}
+
+model PipelineStage {
+  id          String   @id @default(cuid())
+  pipelineId  String
+  name        String
+  position    Int
+  type        String   @default("open") // open | won | lost
+  color       String?
+  isWon       Boolean  @default(false)
+  isLost      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  leads    Lead[]
+
+  @@index([pipelineId])
+}
+
+model Tag {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  color          String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadTags      LeadTag[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// LEAD (core)
+// ---------------------------------------------------------------------------
+
+
+
+
+
+model Lead {
+  id              String   @id @default(cuid())
+  organizationId  String
+  externalId      String?
+  sourceId        String?
+  sourceDetail    String?  // e.g. landing page name, campaign, form id
+  firstName       String?
+  lastName        String?
+  company         String?
+  position        String?  // job title
+  phone           String?
+  normalizedPhone String?
+  email           String?
+  normalizedEmail String?
+  preferredChannel String? // PreferredChannel
+  locale          String?
+  status          String   @default("NEW") // LeadStatus
+  pipelineId      String?
+  stageId         String?
+  ownerId         String?
+  priority        String   @default("MEDIUM") // Priority
+  leadScore       Int      @default(0)
+  scoreCategory   String   @default("LOW") // ScoreCategory
+  estimatedValue  Int?
+  currency        String?
+  summary         String?
+  requirements    String?
+  lostReason      String?
+  lostNotes       String?
+  lastContactAt   DateTime?
+  nextActionAt    DateTime?
+  nextActionLabel String?
+  archivedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source          LeadSource?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  pipeline        Pipeline?        @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
+  stage           PipelineStage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  owner           User?            @relation("OwnedLeads", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  activities      Activity[]
+  tasks           Task[]
+  notes           Note[]
+  events          LeadEvent[]
+  scoreComponents LeadScoreComponent[]
+  leadTags        LeadTag[]
+  audits          BusinessAudit[]
+  customValues    CustomFieldValue[]
+  flags           LostLeadFlag[]
+  attributions    SourceAttribution[]
+  incomingMessages IncomingMessage[]
+  integrationSyncs IntegrationSync[]
+  notifications   Notification[]
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, ownerId])
+  @@index([organizationId, stageId])
+  @@index([organizationId, status])
+  @@index([organizationId, sourceId])
+  @@index([organizationId, nextActionAt])
+  @@index([normalizedPhone])
+  @@index([normalizedEmail])
+}
+
+model LeadTag {
+  id        String @id @default(cuid())
+  leadId    String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, tagId])
+  @@index([tagId])
+}
+
+model LeadScoreComponent {
+  id        String   @id @default(cuid())
+  leadId    String
+  reason    String   // human readable reason
+  key       String   // machine key: audit_completed, budget_indicated, ...
+  delta     Int      // signed points
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+}
+
+model LostLeadFlag {
+  id             String    @id @default(cuid())
+  organizationId String
+  leadId         String
+  reason         String    // no_contact | overdue_followup | no_activity | proposal_no_followup | meeting_no_next | unassigned
+  message        String
+  severity       String    @default("warning") // info | warning | critical
+  detectedAt     DateTime  @default(now())
+  resolvedAt     DateTime?
+
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, resolvedAt])
+  @@index([leadId])
+  @@index([reason])
+}
+
+// ---------------------------------------------------------------------------
+// ACTIVITIES, TASKS, NOTES, EVENTS (timeline + audit)
+// ---------------------------------------------------------------------------
+
+
+model Activity {
+  id          String   @id @default(cuid())
+  organizationId String
+  leadId      String
+  userId      String?
+  type        String   // ActivityType
+  title       String
+  description String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@index([organizationId])
+}
+
+
+model Task {
+  id             String    @id @default(cuid())
+  organizationId String
+  leadId         String?
+  assignedTo     String?
+  title          String
+  description    String?
+  dueAt          DateTime?
+  status         String    @default("TODO") // TaskStatus
+  priority       String    @default("MEDIUM") // Priority
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  assignee     User?         @relation("AssignedTasks", fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, assignedTo])
+  @@index([organizationId, dueAt])
+  @@index([leadId])
+}
+
+model Note {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String
+  userId         String?
+  content        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+}
+
+
+model LeadEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String
+  userId         String?
+  type           String   // LeadEventType
+  payload        Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, createdAt])
+  @@index([organizationId, type])
+}
+
+// ---------------------------------------------------------------------------
+// BUSINESS AUDIT INTEGRATION
+// ---------------------------------------------------------------------------
+
+model BusinessAudit {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String?
+  externalId     String?
+  companyName    String?
+  contactName    String?
+  contactEmail   String?
+  contactPhone   String?
+  locale         String?
+  acquisition    Int      @default(0)
+  sales          Int      @default(0)
+  operations     Int      @default(0)
+  data           Int      @default(0)
+  automation     Int      @default(0)
+  aiReadiness    Int      @default(0)
+  automationMap  Json?
+  priorityAutomations Json?
+  recommendations Json?
+  reportSummary  String?
+  payload        Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([leadId])
+}
+
+// ---------------------------------------------------------------------------
+// INTEGRATION LAYER (ERP/CRM + Events for Automation Engine)
+// ---------------------------------------------------------------------------
+
+
+model IntegrationSync {
+  id             String    @id @default(cuid())
+  organizationId String
+  leadId         String?
+  provider       String    @default("HAYDEV_ERP") // HAYDEV_ERP | HAYDEV_CRM | ...
+  externalRefId  String?
+  entity         String    @default("lead") // lead | customer | deal | project
+  direction      String    @default("outbound") // outbound | inbound
+  status         String    @default("PENDING") // SyncStatus
+  payload        Json?
+  response       Json?
+  error          String?
+  attempts       Int       @default(0)
+  lastSyncAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([leadId])
+}
+
+model IntegrationEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String?
+  event          String   // lead.created | lead.assigned | lead.stage_changed | ...
+  payload        Json?
+  published      Boolean  @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, published])
+  @@index([event])
+}
+
+model WebhookLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  source         String
+  endpoint       String?
+  status         String   @default("OK") // OK | FAILED
+  payload        Json?
+  response       Json?
+  error          String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// INBOX ABSTRACTION (channel-agnostic incoming messages)
+// ---------------------------------------------------------------------------
+
+model IncomingMessage {
+  id                String   @id @default(cuid())
+  organizationId    String
+  source            String   // instagram | facebook | whatsapp | telegram | email | website | api
+  externalMessageId String?
+  leadId            String?
+  conversationId    String?
+  direction         String   @default("inbound") // inbound | outbound
+  content           String
+  channel           String?  // dm | comment | form | email | ...
+  fromHandle        String?
+  metadata          Json?
+  timestamp         DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, source])
+  @@index([leadId])
+  @@index([conversationId])
+}
+
+// ---------------------------------------------------------------------------
+// SOURCE ATTRIBUTION
+// ---------------------------------------------------------------------------
+
+model SourceAttribution {
+  id          String   @id @default(cuid())
+  leadId      String
+  source      String?
+  campaign    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  landingPage String?
+  referrer    String?
+  createdAt   DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([utmSource])
+}
+
+// ---------------------------------------------------------------------------
+// NOTIFICATIONS, LOST REASONS, CUSTOM FIELDS, SCORING CONFIG, SETTINGS
+// ---------------------------------------------------------------------------
+
+model LostReason {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  position       Int      @default(0)
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Notification {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  leadId         String?
+  type           String
+  title          String
+  message        String
+  read           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, userId, read])
+}
+
+model CustomField {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  key            String
+  type           String   @default("text") // text | number | select | multiselect | date | bool
+  options        Json?
+  position       Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  values       CustomFieldValue[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model CustomFieldValue {
+  id          String    @id @default(cuid())
+  leadId      String
+  fieldId     String
+  valueText   String?
+  valueNumber  Float?
+  valueBool   Boolean?
+  valueDate   DateTime?
+
+  lead  Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  field CustomField  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, fieldId])
+  @@index([fieldId])
+}
+
+model ScoringConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String   // audit_completed | budget_indicated | urgency_high | ...
+  label          String
+  points         Int      @default(0)
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+model Setting {
+  id             String   @id @default(cuid())
+  organizationId String
+  key            String
+  value          Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, key])
+}

@@ -1,0 +1,594 @@
+"use client";
+
+import { useState } from "react";
+import { useLead, useLeadActivities, useLeadNotes, useLeadEvents, useLeadDuplicate, useLeadTasks, useUsers, useUpdateLead, useAssignLead, useArchiveLead, useChangeStage, useLogActivity, useAddNote, useCreateTask, useSyncErp, useMergeLead, useRecalcScore, usePipeline } from "@/hooks/leados/use-api";
+import { useLocale } from "@/lib/leados/locale";
+import { useHashRoute } from "@/lib/leados/hash-route";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain } from "lucide-react";
+import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPill, SourceBadge, TagChip, formatDate, formatDay, formatMoney, timeAgo } from "./primitives";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { SCORE_THRESHOLDS } from "@/lib/leados/constants";
+
+export function LeadDetailView({ leadId }: { leadId: string | null }) {
+  const { t } = useLocale();
+  const [, navigate] = useHashRoute();
+  const lead = useLead(leadId);
+  const [tab, setTab] = useState("activity");
+  const [editOpen, setEditOpen] = useState(false);
+
+  if (!leadId) {
+    return <div className="p-6 text-sm text-muted-foreground">No lead selected.</div>;
+  }
+  if (lead.isLoading) {
+    return (
+      <div className="px-4 md:px-6 py-5 space-y-4">
+        <Skeleton className="h-9 w-32" />
+        <Skeleton className="h-24 w-full" />
+        <div className="grid lg:grid-cols-3 gap-4"><Skeleton className="h-64 lg:col-span-2" /><Skeleton className="h-64" /></div>
+      </div>
+    );
+  }
+  if (lead.isError || !lead.data) {
+    return (
+      <div className="p-6 space-y-3">
+        <Button variant="ghost" size="sm" onClick={() => navigate("leads")}><ArrowLeft className="h-4 w-4 mr-1.5" />{t("nav.leads")}</Button>
+        <p className="text-sm text-muted-foreground">Lead not found or you don't have access.</p>
+      </div>
+    );
+  }
+
+  const l = lead.data.lead;
+
+  return (
+    <div className="px-4 md:px-6 py-5 space-y-4">
+      <Button variant="ghost" size="sm" onClick={() => navigate("leads")} className="text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4 mr-1.5" />{t("nav.leads")}
+      </Button>
+
+      {/* header */}
+      <LeadHeader lead={l} onEdit={() => setEditOpen(true)} />
+      <EditLeadDialog lead={l} open={editOpen} onOpenChange={setEditOpen} />
+
+      {/* duplicate warning */}
+      <DuplicateBanner leadId={l.id} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* main */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* contact + summary */}
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">{t("lead.contact_info")}</CardTitle></CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <Field label={t("common.phone")} value={l.phone} icon={Phone} action={l.phone ? `tel:${l.phone}` : null} />
+                <Field label={t("common.email")} value={l.email} icon={Send} action={l.email ? `mailto:${l.email}` : null} />
+                <Field label={t("common.company")} value={l.company} />
+                <Field label={t("common.source")} value={<SourceBadge name={l.source?.name} type={l.source?.type} />} />
+              </div>
+              {l.summary && <div className="pt-2 border-t"><p className="text-xs text-muted-foreground mb-1">{t("common.summary")}</p><p className="text-sm">{l.summary}</p></div>}
+              {l.requirements && <div className="pt-2 border-t"><p className="text-xs text-muted-foreground mb-1">{t("lead.requirements")}</p><p className="text-sm whitespace-pre-wrap">{l.requirements}</p></div>}
+              {l.leadTags?.length > 0 && (
+                <div className="pt-2 border-t">
+                  <p className="text-xs text-muted-foreground mb-1.5">{t("common.tags")}</p>
+                  <div className="flex flex-wrap gap-1">{l.leadTags.map((lt: any) => <TagChip key={lt.tag.id} name={lt.tag.name} color={lt.tag.color} />)}</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* business audit */}
+          {l.audits?.length > 0 && (
+            <Card className="border-violet-200 dark:border-violet-900">
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Brain className="h-4 w-4 text-violet-500" />{t("lead.business_audit")}</CardTitle></CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                <AuditScores audit={l.audits[0]} />
+                {l.audits[0].reportSummary && <p className="text-xs text-muted-foreground">{l.audits[0].reportSummary}</p>}
+                {l.audits[0].priorityAutomations && (
+                  <div>
+                    <p className="text-xs font-medium mb-1">Priority automations</p>
+                    <ul className="text-xs space-y-0.5">{(l.audits[0].priorityAutomations as unknown as string[]).map((a, i) => <li key={i} className="flex items-center gap-1.5"><ChevronRight className="h-3 w-3 text-muted-foreground" />{a}</li>)}</ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* AI summary placeholder (deterministic, feature-flagged) */}
+          <Card className="border-dashed">
+            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Sparkles className="h-4 w-4 text-muted-foreground" />{t("lead.ai_summary")}</CardTitle></CardHeader>
+            <CardContent className="pt-0">
+              <AiSummary lead={l} />
+            </CardContent>
+          </Card>
+
+          {/* tabs: activity / tasks / notes / events */}
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList>
+              <TabsTrigger value="activity">{t("common.activity")}</TabsTrigger>
+              <TabsTrigger value="notes">{t("common.notes")}</TabsTrigger>
+              <TabsTrigger value="tasks">{t("common.tasks")}</TabsTrigger>
+              <TabsTrigger value="events">Events</TabsTrigger>
+            </TabsList>
+            <TabsContent value="activity" className="mt-3"><ActivityTab leadId={l.id} /></TabsContent>
+            <TabsContent value="notes" className="mt-3"><NotesTab leadId={l.id} /></TabsContent>
+            <TabsContent value="tasks" className="mt-3"><TasksTab leadId={l.id} /></TabsContent>
+            <TabsContent value="events" className="mt-3"><EventsTab leadId={l.id} /></TabsContent>
+          </Tabs>
+        </div>
+
+        {/* right panel */}
+        <div className="space-y-4">
+          <RightPanel lead={l} />
+          <StageChanger lead={l} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, value, icon: Icon, action }: { label: string; value?: React.ReactNode; icon?: typeof Phone; action?: string | null }) {
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-1.5 text-sm">
+        {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+        {value ? <span className="truncate">{value}</span> : <span className="text-muted-foreground">—</span>}
+        {action && (
+          <a href={action} className="ml-auto text-[11px] text-primary hover:underline shrink-0">{action.startsWith("tel") ? "Call" : "Send"}</a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LeadHeader({ lead: l, onEdit }: { lead: any; onEdit: () => void }) {
+  const { t } = useLocale();
+  const archive = useArchiveLead();
+  const sync = useSyncErp(l.id);
+  const recalc = useRecalcScore(l.id);
+  const [, navigate] = useHashRoute();
+  const logActivity = useLogActivity(l.id);
+
+  const quickLog = async (type: string, title: string) => {
+    try { await logActivity.mutateAsync({ type, title }); toast.success(title); } catch (e) { toast.error((e as Error).message); }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-start gap-4">
+          <LeadAvatar first={l.firstName} last={l.lastName} color={l.owner?.avatarColor} size={48} />
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold tracking-tight">{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</h1>
+              <StatusPill status={l.status} />
+              <StageBadge name={l.stage?.name} color={l.stage?.color} type={l.stage?.type} />
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-0.5">
+              <span className="font-medium text-foreground">{l.company || "—"}</span>
+              <SourceBadge name={l.source?.name} type={l.source?.type} />
+              <PriorityBadge priority={l.priority} />
+              <ScoreBadge score={l.leadScore} category={l.scoreCategory} size="md" />
+              {l.owner && <OwnerChip name={l.owner.name} avatarColor={l.owner.avatarColor} />}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          <Button size="sm" variant="default" onClick={() => quickLog("CALL", "Call logged")} disabled={logActivity.isPending}><Phone className="h-3.5 w-3.5 mr-1.5" />{t("lead.call")}</Button>
+          <Button size="sm" variant="outline" onClick={() => quickLog("MESSAGE", "Message sent")} disabled={logActivity.isPending}><MessageSquare className="h-3.5 w-3.5 mr-1.5" />{t("lead.message")}</Button>
+          <Button size="sm" variant="outline" onClick={() => quickLog("EMAIL", "Email sent")} disabled={logActivity.isPending}><Send className="h-3.5 w-3.5 mr-1.5" />Email</Button>
+          <Button size="sm" variant="outline" onClick={onEdit}><StickyNote className="h-3.5 w-3.5 mr-1.5" />{t("common.edit")}</Button>
+          <Button size="sm" variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}><RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", sync.isPending && "animate-spin")} />{l.integrationSyncs?.some((s: any) => s.status === "SYNCED") ? t("lead.synced_erp") : t("lead.sync_erp")}</Button>
+          <Button size="sm" variant="outline" onClick={() => recalc.mutate()} disabled={recalc.isPending}><Zap className="h-3.5 w-3.5 mr-1.5" />{t("common.score")}</Button>
+          <Button size="sm" variant="outline" disabled title={t("lead.create_quote.disabled")}><FileText className="h-3.5 w-3.5 mr-1.5" />{t("lead.create_quote")}</Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild><Button size="sm" variant="outline"><Archive className="h-3.5 w-3.5 mr-1.5" />{t("common.archive")}</Button></AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader><AlertDialogTitle>{t("common.archive")}?</AlertDialogTitle><AlertDialogDescription>This will soft-archive the lead. History is preserved.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                <AlertDialogAction onClick={async () => { await archive.mutateAsync(l.id); toast.success(t("toast.lead_archived")); navigate("leads"); }}>{t("common.archive")}</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AuditScores({ audit }: { audit: any }) {
+  const { t } = useLocale();
+  const scores = [
+    { key: "acquisition", label: t("lead.audit.acquisition"), v: audit.acquisition, color: "#0ea5e9" },
+    { key: "sales", label: t("lead.audit.sales"), v: audit.sales, color: "#8b5cf6" },
+    { key: "operations", label: t("lead.audit.operations"), v: audit.operations, color: "#16a34a" },
+    { key: "data", label: t("lead.audit.data"), v: audit.data, color: "#f59e0b" },
+    { key: "automation", label: t("lead.audit.automation"), v: audit.automation, color: "#ec4899" },
+    { key: "aiReadiness", label: t("lead.audit.ai_readiness"), v: audit.aiReadiness, color: "#14b8a6" },
+  ];
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+      {scores.map((s) => (
+        <div key={s.key} className="rounded-lg border bg-card p-2">
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground"><span>{s.label}</span><span className="font-semibold tabular-nums" style={{ color: s.color }}>{s.v}</span></div>
+          <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full" style={{ width: `${s.v}%`, backgroundColor: s.color }} /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AiSummary({ lead: l }: { lead: any }) {
+  // Deterministic summary — NOT fake AI. Built from lead data.
+  const parts: string[] = [];
+  if (l.company) parts.push(`manages ${l.company}.`);
+  if (l.source?.name) parts.push(`Inquiry came via ${l.source.name}.`);
+  if (l.audits?.length) {
+    const a = l.audits[0];
+    if (a.automation >= 60) parts.push(`Business Audit shows high automation potential (${a.automation}/100).`);
+    if (a.aiReadiness >= 70) parts.push(`AI readiness is ${a.aiReadiness}/100.`);
+  } else {
+    parts.push("No Business Audit completed yet.");
+  }
+  if (l.owner) parts.push(`Owner: ${l.owner.name}.`);
+  if (l.nextActionAt) parts.push(`Next action scheduled.`);
+  return (
+    <div className="space-y-2">
+      <p className="text-sm leading-relaxed">{parts.join(" ")}</p>
+      <p className="text-[11px] text-muted-foreground flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Deterministic summary. AI provider is pluggable — no fake AI claims.</p>
+    </div>
+  );
+}
+
+function DuplicateBanner({ leadId }: { leadId: string }) {
+  const { t } = useLocale();
+  const dup = useLeadDuplicate(leadId);
+  const merge = useMergeLead(leadId);
+  const [, navigate] = useHashRoute();
+  if (!dup.data?.hasDuplicates) return null;
+  return (
+    <Card className="border-amber-300/60 bg-amber-50/50 dark:bg-amber-950/30">
+      <CardContent className="py-3 flex items-center gap-3">
+        <GitMerge className="h-4 w-4 text-amber-600" />
+        <div className="flex-1 text-sm">
+          <span className="font-semibold">{t("lead.duplicate_detected")}</span>
+          <span className="text-muted-foreground ml-2">{dup.data.matches.length} possible match(es)</span>
+        </div>
+        <div className="flex gap-2">
+          {dup.data.matches.slice(0, 1).map((m: any) => (
+            <div key={m.id} className="flex gap-1">
+              <Button size="sm" variant="outline" onClick={() => navigate("lead", { id: m.id })}><ExternalLink className="h-3.5 w-3.5 mr-1" />{t("lead.merge.open_existing")}</Button>
+              <Button size="sm" variant="default" onClick={async () => { await merge.mutateAsync(m.id); toast.success("Merged"); }}>
+                <GitMerge className="h-3.5 w-3.5 mr-1" />{t("lead.merge")} (this ← that)
+              </Button>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RightPanel({ lead: l }: { lead: any }) {
+  const { t } = useLocale();
+  const assign = useAssignLead(l.id);
+  const users = useUsers();
+  const tasks = useLeadTasks(l.id);
+  const openTasks = (tasks.data?.rows ?? []).filter((x: any) => x.status !== "DONE" && x.status !== "CANCELLED");
+  const overdueAction = l.nextActionAt && new Date(l.nextActionAt).getTime() < Date.now();
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">{t("common.next_action")}</CardTitle></CardHeader>
+        <CardContent className="pt-0 space-y-1.5 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">{l.nextActionLabel || "—"}</span>
+            {l.nextActionAt && <span className={cn("text-xs font-medium", overdueAction ? "text-red-600" : "text-foreground")}>{formatDay(l.nextActionAt)} · {timeAgo(l.nextActionAt)}</span>}
+          </div>
+          {l.lastContactAt && <div className="text-xs text-muted-foreground">{t("common.last_activity")}: {timeAgo(l.lastContactAt)}</div>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm">{t("lead.open_tasks")} ({openTasks.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0 space-y-1.5 max-h-48 overflow-y-auto">
+          {openTasks.length === 0 && <p className="text-xs text-muted-foreground">No open tasks.</p>}
+          {openTasks.map((task: any) => (
+            <div key={task.id} className="rounded border p-2 text-xs">
+              <div className="font-medium">{task.title}</div>
+              <div className="text-muted-foreground flex items-center gap-1 mt-0.5"><Clock className="h-3 w-3" />{task.dueAt ? formatDay(task.dueAt) : "—"}</div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">{t("common.owner")}</CardTitle></CardHeader>
+        <CardContent className="pt-0">
+          <Select value={l.ownerId ?? "__un"} onValueChange={(v) => { if (v === "__un") return; assign.mutate(v); }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__un">{t("common.unassigned")}</SelectItem>
+              {(users.data?.rows ?? []).map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">{t("lead.score_explanation")}</CardTitle></CardHeader>
+        <CardContent className="pt-0 space-y-1.5">
+          {(l.scoreComponents ?? []).length === 0 && <p className="text-xs text-muted-foreground">No score components yet. Run recalculation.</p>}
+          {(l.scoreComponents ?? []).map((c: any, i: number) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className={cn("font-semibold tabular-nums", c.delta > 0 ? "text-emerald-600" : "text-red-600")}>{c.delta > 0 ? "+" : ""}{c.delta}</span>
+              <span className="flex-1">{c.reason}</span>
+            </div>
+          ))}
+          <div className="pt-1.5 border-t flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">{t("lead.potential_value")}</span>
+            <span className="text-sm font-semibold">{formatMoney(l.estimatedValue)}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {l.integrationSyncs?.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">{t("erp.sync")}</CardTitle></CardHeader>
+          <CardContent className="pt-0 space-y-1.5 text-xs">
+            {l.integrationSyncs.map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between">
+                <span className="font-mono">{s.externalRefId ?? "—"}</span>
+                <span className={cn("px-1.5 py-0.5 rounded font-medium", s.status === "SYNCED" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" : "bg-red-100 text-red-700")}>{s.status}</span>
+              </div>
+            ))}
+            <p className="text-[10px] text-muted-foreground">Local-mock ERP adapter. Swap in a real provider later.</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function StageChanger({ lead: l }: { lead: any }) {
+  const { t } = useLocale();
+  const pipeline = usePipeline();
+  const change = useChangeStage(l.id);
+  const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-sm">{t("lead.change_stage")}</CardTitle></CardHeader>
+      <CardContent className="pt-0 grid grid-cols-2 gap-1.5">
+        {stages.map((s: any) => (
+          <button
+            key={s.id}
+            onClick={() => change.mutate(s.id)}
+            disabled={change.isPending || s.id === l.stageId}
+            className={cn("flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition", s.id === l.stageId ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent")}
+          >
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
+            {s.name}
+          </button>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EditLeadDialog({ lead: l, open, onOpenChange }: { lead: any; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useLocale();
+  const update = useUpdateLead(l.id);
+  const [firstName, setFirstName] = useState(l.firstName ?? "");
+  const [lastName, setLastName] = useState(l.lastName ?? "");
+  const [company, setCompany] = useState(l.company ?? "");
+  const [phone, setPhone] = useState(l.phone ?? "");
+  const [email, setEmail] = useState(l.email ?? "");
+  const [summary, setSummary] = useState(l.summary ?? "");
+  const [requirements, setRequirements] = useState(l.requirements ?? "");
+  const [estimatedValue, setEstimatedValue] = useState(l.estimatedValue?.toString() ?? "");
+  const [priority, setPriority] = useState(l.priority ?? "MEDIUM");
+  const [nextActionAt, setNextActionAt] = useState(l.nextActionAt ? new Date(l.nextActionAt).toISOString().slice(0, 16) : "");
+  const [nextActionLabel, setNextActionLabel] = useState(l.nextActionLabel ?? "");
+  const [lostReason, setLostReason] = useState(l.lostReason ?? "");
+  const [lostNotes, setLostNotes] = useState(l.lostNotes ?? "");
+
+  const save = async () => {
+    try {
+      await update.mutateAsync({
+        firstName, lastName, company, phone, email, summary, requirements,
+        priority,
+        estimatedValue: estimatedValue ? Number(estimatedValue) : null,
+        nextActionAt: nextActionAt ? new Date(nextActionAt).toISOString() : null,
+        nextActionLabel: nextActionLabel || null,
+        lostReason: lostReason || undefined,
+        lostNotes: lostNotes || undefined,
+      } as any);
+      toast.success(t("toast.lead_updated"));
+      onOpenChange(false);
+    } catch (e) { toast.error((e as Error).message); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>{t("common.edit")} · {[l.firstName, l.lastName].filter(Boolean).join(" ")}</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-2 gap-3 py-2">
+          <div className="space-y-1"><Label className="text-xs">First name</Label><Input value={firstName} onChange={(e) => setFirstName(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Last name</Label><Input value={lastName} onChange={(e) => setLastName(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Company</Label><Input value={company} onChange={(e) => setCompany(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Priority</Label>
+            <Select value={priority} onValueChange={setPriority}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["LOW", "MEDIUM", "HIGH", "URGENT"].map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select>
+          </div>
+          <div className="space-y-1"><Label className="text-xs">Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Email</Label><Input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Estimated value</Label><Input type="number" value={estimatedValue} onChange={(e) => setEstimatedValue(e.target.value)} /></div>
+          <div className="space-y-1"><Label className="text-xs">Next action date</Label><Input type="datetime-local" value={nextActionAt} onChange={(e) => setNextActionAt(e.target.value)} /></div>
+          <div className="col-span-2 space-y-1"><Label className="text-xs">Next action label</Label><Input value={nextActionLabel} onChange={(e) => setNextActionLabel(e.target.value)} /></div>
+          <div className="col-span-2 space-y-1"><Label className="text-xs">Summary</Label><Input value={summary} onChange={(e) => setSummary(e.target.value)} /></div>
+          <div className="col-span-2 space-y-1"><Label className="text-xs">Requirements</Label><Textarea rows={2} value={requirements} onChange={(e) => setRequirements(e.target.value)} /></div>
+          {l.status === "LOST" || l.stage?.type === "lost" ? (
+            <>
+              <div className="space-y-1"><Label className="text-xs">Lost reason</Label><Input value={lostReason} onChange={(e) => setLostReason(e.target.value)} placeholder="Price / Timing / Competitor…" /></div>
+              <div className="space-y-1"><Label className="text-xs">Lost notes</Label><Input value={lostNotes} onChange={(e) => setLostNotes(e.target.value)} /></div>
+            </>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
+          <Button onClick={save} disabled={update.isPending}>{t("common.save")}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ActivityTab({ leadId }: { leadId: string }) {
+  const { t } = useLocale();
+  const rows = useLeadActivities(leadId);
+  const log = useLogActivity(leadId);
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("NOTE");
+  const [open, setOpen] = useState(false);
+  if (rows.isLoading) return <Skeleton className="h-40 w-full" />;
+  const r = rows.data?.rows ?? [];
+  const submit = async () => {
+    if (!title.trim()) return;
+    try { await log.mutateAsync({ type, title }); setTitle(""); toast.success("Activity logged"); } catch (e) { toast.error((e as Error).message); }
+  };
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger className="w-32 h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>{[["CALL", "Call"], ["MESSAGE", "Message"], ["EMAIL", "Email"], ["MEETING", "Meeting"], ["FOLLOW_UP", "Follow-up"], ["NOTE", "Note"]].map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}</SelectContent>
+          </Select>
+          <Input className="flex-1 min-w-[160px]" placeholder="Activity title…" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Button size="sm" onClick={submit} disabled={log.isPending || !title.trim()}>{t("common.create")}</Button>
+        </div>
+        <div className="relative pl-5 max-h-72 overflow-y-auto">
+          <div className="absolute left-2 top-1 bottom-1 w-px bg-border" />
+          {r.length === 0 && <p className="text-xs text-muted-foreground">No activity yet.</p>}
+          {r.map((a: any) => (
+            <div key={a.id} className="relative pb-3 last:pb-0">
+              <span className="absolute -left-[11px] top-1.5 h-2.5 w-2.5 rounded-full bg-background border-2 border-primary/60" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium">{a.user?.name ?? "System"}</span>
+                <span className="text-[10px] px-1 py-px rounded bg-muted">{a.type}</span>
+                <span className="text-[11px] text-muted-foreground ml-auto">{timeAgo(a.createdAt)}</span>
+              </div>
+              <p className="text-xs">{a.title}{a.description ? ` — ${a.description}` : ""}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NotesTab({ leadId }: { leadId: string }) {
+  const { t } = useLocale();
+  const rows = useLeadNotes(leadId);
+  const add = useAddNote(leadId);
+  const [content, setContent] = useState("");
+  if (rows.isLoading) return <Skeleton className="h-40 w-full" />;
+  const r = rows.data?.rows ?? [];
+  const submit = async () => {
+    if (!content.trim()) return;
+    try { await add.mutateAsync(content); setContent(""); toast.success(t("toast.note_added")); } catch (e) { toast.error((e as Error).message); }
+  };
+  return (
+    <Card>
+      <CardContent className="p-3 space-y-3">
+        <div className="flex gap-2">
+          <Textarea rows={2} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Add a note…" />
+          <Button size="sm" onClick={submit} disabled={add.isPending || !content.trim()} className="self-end">{t("common.save")}</Button>
+        </div>
+        <div className="space-y-2 max-h-72 overflow-y-auto">
+          {r.length === 0 && <p className="text-xs text-muted-foreground">No notes.</p>}
+          {r.map((n: any) => (
+            <div key={n.id} className="rounded-lg border p-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium flex items-center gap-1.5"><LeadAvatar first={n.user?.name} size={18} />{n.user?.name ?? "System"}</span>
+                <span className="text-[11px] text-muted-foreground">{formatDate(n.createdAt)}</span>
+              </div>
+              <p className="text-sm whitespace-pre-wrap">{n.content}</p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TasksTab({ leadId }: { leadId: string }) {
+  const { t } = useLocale();
+  const rows = useLeadTasks(leadId);
+  const create = useCreateTask(leadId);
+  const [title, setTitle] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  if (rows.isLoading) return <Skeleton className="h-40 w-full" />;
+  const r = rows.data?.rows ?? [];
+  const submit = async () => {
+    if (!title.trim()) return;
+    try { await create.mutateAsync({ title, dueAt: dueAt ? new Date(dueAt).toISOString() : undefined } as any); setTitle(""); setDueAt(""); toast.success(t("toast.task_created")); } catch (e) { toast.error((e as Error).message); }
+  };
+  return (
+    <Card>
+      <CardContent className="p-3 space-y-3">
+        <div className="flex flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[160px] space-y-1"><Label className="text-xs">Task</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="New task…" /></div>
+          <div className="space-y-1"><Label className="text-xs">Due</Label><Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} /></div>
+          <Button size="sm" onClick={submit} disabled={create.isPending || !title.trim()}>{t("common.create")}</Button>
+        </div>
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          {r.length === 0 && <p className="text-xs text-muted-foreground">{t("tasks.empty")}</p>}
+          {r.map((task: any) => (
+            <div key={task.id} className="flex items-center gap-2 rounded-lg border p-2">
+              {task.status === "DONE" ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Clock className="h-4 w-4 text-muted-foreground" />}
+              <span className={cn("text-sm flex-1", task.status === "DONE" && "line-through text-muted-foreground")}>{task.title}</span>
+              <PriorityBadge priority={task.priority} />
+              {task.dueAt && <span className="text-xs text-muted-foreground">{formatDay(task.dueAt)}</span>}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function EventsTab({ leadId }: { leadId: string }) {
+  const rows = useLeadEvents(leadId);
+  if (rows.isLoading) return <Skeleton className="h-40 w-full" />;
+  const r = rows.data?.rows ?? [];
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <div className="space-y-1 max-h-72 overflow-y-auto">
+          {r.length === 0 && <p className="text-xs text-muted-foreground">No events.</p>}
+          {r.map((e: any) => (
+            <div key={e.id} className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs">
+              <span className="font-mono px-1.5 py-0.5 rounded bg-muted text-[10px]">{e.type}</span>
+              <span className="text-muted-foreground">{e.user?.name ?? "system"}</span>
+              <span className="ml-auto text-muted-foreground">{formatDate(e.createdAt)}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
