@@ -327,6 +327,64 @@ export function useDeleteStage() {
     },
   });
 }
+export function useSavedFiltersApi() {
+  return useQuery({
+    queryKey: ["saved-filters-api"],
+    queryFn: () => api.get<{ rows: any[] }>("/saved-filters"),
+  });
+}
+export function useCreateSavedFilterApi() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; query: Record<string, unknown>; isShared?: boolean }) =>
+      api.post<{ filter: any }>("/saved-filters", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-filters-api"] }),
+  });
+}
+export function useDeleteSavedFilterApi() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/saved-filters/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["saved-filters-api"] }),
+  });
+}
+export function useAssignmentRules() {
+  return useQuery({
+    queryKey: ["assignment-rules"],
+    queryFn: () => api.get<{ rows: any[] }>("/assignment-rules"),
+  });
+}
+export function useCreateAssignmentRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; sourceId?: string | null; sourceType?: string | null; priority?: string | null; assigneeId: string; enabled?: boolean }) =>
+      api.post<{ rule: any }>("/assignment-rules", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assignment-rules"] }),
+  });
+}
+export function useUpdateAssignmentRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) => api.patch<{ rule: any }>(`/assignment-rules/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assignment-rules"] }),
+  });
+}
+export function useDeleteAssignmentRule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/assignment-rules/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assignment-rules"] }),
+  });
+}
+export function useWebhookEvents(event?: string, limit?: number) {
+  const p = new URLSearchParams();
+  if (event) p.set("event", event);
+  if (limit) p.set("limit", String(limit));
+  return useQuery({
+    queryKey: ["webhook-events", p.toString()],
+    queryFn: () => api.get<{ rows: any[]; byEvent: Record<string, number>; total: number }>(`/webhooks/events?${p.toString()}`),
+  });
+}
 
 // ---------- mutations ----------
 

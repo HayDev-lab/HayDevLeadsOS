@@ -4,7 +4,7 @@ import { useState } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField, useCreateStage, useUpdateStage, useDeleteStage } from "@/hooks/leados/use-api";
+import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField, useCreateStage, useUpdateStage, useDeleteStage, useAssignmentRules, useCreateAssignmentRule, useUpdateAssignmentRule, useDeleteAssignmentRule, useWebhookEvents } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export function SettingsView() {
           <TabsTrigger value="tags">{t("settings.tags")}</TabsTrigger>
           <TabsTrigger value="custom">{t("settings.custom_fields")}</TabsTrigger>
           <TabsTrigger value="scoring">{t("settings.scoring")}</TabsTrigger>
+          <TabsTrigger value="rules">Assignment Rules</TabsTrigger>
           <TabsTrigger value="audit">Audit Ingest</TabsTrigger>
           <TabsTrigger value="erp">ERP / Events</TabsTrigger>
         </TabsList>
@@ -53,6 +54,7 @@ export function SettingsView() {
         <TabsContent value="tags" className="mt-4"><TagsTab /></TabsContent>
         <TabsContent value="custom" className="mt-4"><CustomFieldsTab /></TabsContent>
         <TabsContent value="scoring" className="mt-4"><ScoringTab /></TabsContent>
+        <TabsContent value="rules" className="mt-4"><AssignmentRulesTab /></TabsContent>
         <TabsContent value="audit" className="mt-4"><AuditIngestTab /></TabsContent>
         <TabsContent value="erp" className="mt-4"><ErpTab /></TabsContent>
       </Tabs>
@@ -369,6 +371,7 @@ function ErpTab() {
           <p>Provider: <code className="font-mono">HAYDEV_ERP</code> (local-mock). Sync status is tracked per lead. Swap in a real provider by implementing the <code>ErpAdapter</code> interface — no fake production claims.</p>
         </CardContent>
       </Card>
+      <WebhookEventsTab />
     </div>
   );
 }
@@ -467,5 +470,141 @@ function CustomFieldsTab() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function AssignmentRulesTab() {
+  const { t } = useLocale();
+  const rules = useAssignmentRules();
+  const users = useUsers();
+  const sources = useSources();
+  const create = useCreateAssignmentRule();
+  const update = useUpdateAssignmentRule();
+  const del = useDeleteAssignmentRule();
+  const [newRule, setNewRule] = useState<{ name: string; sourceType: string; priority: string; assigneeId: string }>({ name: "", sourceType: "", priority: "", assigneeId: "" });
+
+  const addRule = async () => {
+    if (!newRule.name.trim() || !newRule.assigneeId) return;
+    try {
+      await create.mutateAsync({
+        name: newRule.name,
+        sourceType: newRule.sourceType || null,
+        priority: newRule.priority || null,
+        assigneeId: newRule.assigneeId,
+        enabled: true,
+      });
+      toast.success("Rule created");
+      setNewRule({ name: "", sourceType: "", priority: "", assigneeId: "" });
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  const toggleRule = async (id: string, enabled: boolean) => {
+    try { await update.mutateAsync({ id, body: { enabled } }); } catch (e) { toast.error((e as Error).message); }
+  };
+  const removeRule = async (id: string) => {
+    try { await del.mutateAsync(id); toast.success("Rule deleted"); } catch (e) { toast.error((e as Error).message); }
+  };
+
+  return (
+    <div className="space-y-3">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><Settings2 className="h-4 w-4" />Assignment Rules</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <p className="text-xs text-muted-foreground mb-3">When a new lead arrives without an explicit owner, LeadOS evaluates these rules in order. First match wins. This is deterministic routing — not AI.</p>
+          {(rules.data?.rows ?? []).length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">No rules yet. New leads stay unassigned until someone claims them.</div>
+          )}
+          <div className="space-y-1.5">
+            {(rules.data?.rows ?? []).map((r: any) => (
+              <div key={r.id} className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-2 transition", !r.enabled && "opacity-50")}>
+                <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-muted text-[10px] font-bold">{r.position + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{r.name}</div>
+                  <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-1.5">
+                    {r.sourceType && <Badge variant="outline" className="text-[9px] px-1 py-0">source: {r.sourceType}</Badge>}
+                    {r.priority && <Badge variant="outline" className="text-[9px] px-1 py-0">priority: {r.priority}</Badge>}
+                    <span className="flex items-center gap-1">→ <LeadAvatar first={r.assignee?.name} color={r.assignee?.avatarColor} size={16} /> {r.assignee?.name}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleRule(r.id, !r.enabled)}
+                  className={cn("relative h-5 w-9 rounded-full transition shrink-0", r.enabled ? "bg-primary" : "bg-muted")}
+                  title={r.enabled ? "Disable" : "Enable"}
+                >
+                  <span className={cn("absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform", r.enabled ? "translate-x-4" : "translate-x-0.5")} />
+                </button>
+                <button onClick={() => removeRule(r.id)} className="text-muted-foreground hover:text-red-500 text-xs px-1 shrink-0" title="Delete rule">✕</button>
+              </div>
+            ))}
+          </div>
+          {/* add new rule */}
+          <div className="mt-3 pt-3 border-t space-y-2">
+            <div className="text-xs font-medium text-muted-foreground">Add new rule</div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <Input value={newRule.name} onChange={(e) => setNewRule((s) => ({ ...s, name: e.target.value }))} placeholder="Rule name…" className="h-8 text-sm" />
+              <Select value={newRule.sourceType || "__any"} onValueChange={(v) => setNewRule((s) => ({ ...s, sourceType: v === "__any" ? "" : v }))}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Any source" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__any">Any source</SelectItem>
+                  {(sources.data?.rows ?? []).map((s: any) => <SelectItem key={s.id} value={s.type}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={newRule.priority || "__any"} onValueChange={(v) => setNewRule((s) => ({ ...s, priority: v === "__any" ? "" : v }))}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Any priority" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__any">Any priority</SelectItem>
+                  <SelectItem value="LOW">Low</SelectItem>
+                  <SelectItem value="MEDIUM">Medium</SelectItem>
+                  <SelectItem value="HIGH">High</SelectItem>
+                  <SelectItem value="URGENT">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={newRule.assigneeId} onValueChange={(v) => setNewRule((s) => ({ ...s, assigneeId: v }))}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Assignee…" /></SelectTrigger>
+                <SelectContent>
+                  {(users.data?.rows ?? []).map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button size="sm" onClick={addRule} disabled={!newRule.name.trim() || !newRule.assigneeId || create.isPending}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />{t("common.create")}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function WebhookEventsTab() {
+  const events = useWebhookEvents(undefined, 50);
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2"><Webhook className="h-4 w-4" />Outgoing Webhook Events</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <p className="text-xs text-muted-foreground mb-3">Events LeadOS publishes for external subscribers (Automation Engine, Owner AI, custom webhooks). In production, a background worker delivers these to registered URLs.</p>
+        {events.data?.byEvent && Object.keys(events.data.byEvent).length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {Object.entries(events.data.byEvent).map(([ev, count]) => (
+              <Badge key={ev} variant="outline" className="font-mono text-[10px]">{ev}: {count as number}</Badge>
+            ))}
+          </div>
+        )}
+        <div className="max-h-80 overflow-y-auto space-y-1">
+          {(events.data?.rows ?? []).map((e: any) => (
+            <div key={e.id} className="flex items-center gap-2 rounded border px-2 py-1.5 text-xs">
+              <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", e.published ? "bg-emerald-500" : "bg-muted-foreground")} />
+              <span className="font-mono text-[10px] px-1 py-0.5 rounded bg-muted">{e.event}</span>
+              {e.lead && <span className="text-muted-foreground truncate">{e.lead.company || [e.lead.firstName, e.lead.lastName].filter(Boolean).join(" ")}</span>}
+              <span className="ml-auto text-muted-foreground shrink-0">{new Date(e.createdAt).toLocaleString()}</span>
+            </div>
+          ))}
+          {(events.data?.rows ?? []).length === 0 && <div className="px-4 py-8 text-center text-sm text-muted-foreground">No events published yet.</div>}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -379,3 +379,58 @@ Next-phase priorities:
 3. Saved filters sync to backend (currently localStorage).
 4. Lead assignment round-robin / auto-assignment rules.
 5. Webhook outgoing events (for Automation Engine subscribers to consume).
+
+---
+Task ID: 8
+Agent: main (cron round 5)
+Task: QA + add Saved Filters backend sync, Assignment Rules (auto-assignment), Webhook Events viewer.
+
+QA Assessment:
+- Dev server stable (HTTP 200). All 8 nav views verified without console errors.
+- No bugs found — proceeded to new features.
+
+Work completed this round:
+1. Saved Filters Backend Sync (NEW):
+   - Prisma model: SavedFilter (organizationId, userId, name, query JSON, isShared, timestamps)
+   - API: /api/v1/saved-filters (GET list — own + shared, POST create), /saved-filters/[id] (PATCH, DELETE)
+   - Hooks: useSavedFiltersApi, useCreateSavedFilterApi, useDeleteSavedFilterApi
+   - use-saved-filters.ts rewritten as hybrid: backend-first with localStorage fallback; merges both sources, dedupes by name+query
+   - Filters sync across devices when authenticated; shared filters visible to whole org
+
+2. Lead Auto-Assignment Rules (NEW):
+   - Prisma model: AssignmentRule (organizationId, name, sourceId?, sourceType?, priority?, assigneeId, enabled, position)
+   - API: /api/v1/assignment-rules (GET, POST), /assignment-rules/[id] (PATCH, DELETE)
+   - Hooks: useAssignmentRules, useCreateAssignmentRule, useUpdateAssignmentRule, useDeleteAssignmentRule
+   - lead-service.ts: resolveAutoAssignee() — evaluates rules in position order, first match wins, deterministic (NOT AI)
+   - Settings → "Assignment Rules" tab: rule list with position badges, source/priority conditions, assignee avatar, enable/disable toggle, delete; add-rule form with source/priority/assignee dropdowns
+   - Verified end-to-end: created "Instagram leads" rule → new instagram lead auto-assigned to manager
+
+3. Webhook Outgoing Events Viewer (NEW):
+   - API: /api/v1/webhooks/events (GET — list IntegrationEvents with byEvent summary, filterable by event type)
+   - Hook: useWebhookEvents
+   - Settings → ERP/Events tab: WebhookEventsTab shows recent published events with event-type badges, lead context, published indicator, timestamp; summary counts by event type at top
+   - Documents the event architecture for future Automation Engine subscribers
+
+4. Styling Polish:
+   - Assignment rules: position number badges, toggle switches, condition badges, avatar inline
+   - Webhook events: published dot indicator, monospace event names, summary badges
+   - Saved filters: backend filters merge with local, shared filter indicator
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: assignment rules tab (rule visible, toggle, add form), webhook events tab (events list with summary), saved filters in leads (backend "Urgent leads" filter appears), dark mode, mobile 390×844
+- API checks: saved-filters (create+list works), assignment-rules (create works), webhooks/events (5 events: 4 lead.created + 1 audit.completed)
+- Auto-assign verified: instagram lead created without owner → automatically assigned to manager per rule
+
+Unresolved issues / risks:
+- Dev server crashed once mid-round (needed manual nohup restart). After restart, stable.
+- Webhook delivery to external URLs not implemented (events are published to DB; a background worker would poll + deliver in production).
+- Real auth (NextAuth) still deferred.
+
+Next-phase priorities:
+1. Webhook URL registration + background delivery worker.
+2. Real auth (NextAuth) for production.
+3. Notification channel adapters (email/Telegram/WhatsApp delivery).
+4. Assignment rule drag-reorder (currently position-based via create order).
+5. Lead assignment round-robin (distribute evenly among a group, not just first-match).

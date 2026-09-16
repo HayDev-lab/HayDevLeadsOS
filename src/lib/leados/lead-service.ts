@@ -116,6 +116,12 @@ export async function createLead(
   const nextActionAt = input.nextActionAt ? new Date(input.nextActionAt) : (stage ? suggestNextAction(stage.name, now).nextActionAt : null);
   const nextActionLabel = input.nextActionLabel ?? (stage ? suggestNextAction(stage.name, now).label : null);
 
+  // Auto-assignment: if no explicit owner, check assignment rules
+  let ownerId = input.ownerId ?? null;
+  if (!ownerId) {
+    ownerId = await resolveAutoAssignee(orgId, { sourceId, sourceType: input.sourceType, priority: input.priority ?? PRIORITY.MEDIUM });
+  }
+
   const lead = await db.lead.create({
     data: {
       organizationId: orgId,
@@ -135,7 +141,7 @@ export async function createLead(
       status: LEAD_STATUS.NEW,
       pipelineId: pipelineId,
       stageId: stageId,
-      ownerId: input.ownerId ?? null,
+      ownerId: ownerId,
       priority: input.priority ?? PRIORITY.MEDIUM,
       estimatedValue: input.estimatedValue ?? null,
       currency: input.currency ?? null,
@@ -488,4 +494,32 @@ export async function lastActivityAt(orgId: string, leadId: string): Promise<Dat
     select: { createdAt: true },
   });
   return last?.createdAt ?? null;
+}
+
+/**
+ * Resolve an assignee for a new lead using the org's assignment rules.
+ * Rules are evaluated in position order; first match wins.
+ * If no rule matches, returns null (lead stays unassigned).
+ * This is deterministic routing — NOT AI.
+ */
+export async function resolveAutoAssignee(
+  orgId: string,
+  ctx: { sourceId?: string | null; sourceType?: string | null; priority?: string }
+): Promise<string | null> {
+  const rules = await db.assignmentRule.findMany({
+    where: { organizationId: orgId, enabled: true },
+    orderBy: { position: "asc" },
+  });
+  for (const r of rules) {
+    let match = true;
+    if (r.sourceId && r.sourceId !== ctx.sourceId) match = false;
+    if (r.sourceType && r.sourceType !== ctx.sourceType) match = false;
+    if (r.priority && r.priority !== ctx.priority) match = false;
+    if (match) {
+      // verify assignee still active in org
+      const a = await db.user.findUnique({ where: { id: r.assigneeId }, select: { organizationId: true, status: true } });
+      if (a && a.organizationId === orgId && a.status === "ACTIVE") return r.assigneeId;
+    }
+  }
+  return null;
 }
