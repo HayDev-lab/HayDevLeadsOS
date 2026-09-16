@@ -4,7 +4,7 @@ import { useState } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField, useCreateStage, useUpdateStage, useDeleteStage, useAssignmentRules, useCreateAssignmentRule, useUpdateAssignmentRule, useDeleteAssignmentRule, useWebhookEvents } from "@/hooks/leados/use-api";
+import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField, useCreateStage, useUpdateStage, useDeleteStage, useAssignmentRules, useCreateAssignmentRule, useUpdateAssignmentRule, useDeleteAssignmentRule, useWebhookEvents, useWebhookEndpoints, useCreateWebhookEndpoint, useDeleteWebhookEndpoint, useTestWebhookEndpoint } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -372,6 +372,7 @@ function ErpTab() {
         </CardContent>
       </Card>
       <WebhookEventsTab />
+      <WebhookEndpointsTab />
     </div>
   );
 }
@@ -603,6 +604,81 @@ function WebhookEventsTab() {
             </div>
           ))}
           {(events.data?.rows ?? []).length === 0 && <div className="px-4 py-8 text-center text-sm text-muted-foreground">No events published yet.</div>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function WebhookEndpointsTab() {
+  const { t } = useLocale();
+  const endpoints = useWebhookEndpoints();
+  const create = useCreateWebhookEndpoint();
+  const del = useDeleteWebhookEndpoint();
+  const test = useTestWebhookEndpoint();
+  const [newEp, setNewEp] = useState<{ name: string; url: string; events: string }>({ name: "", url: "", events: "*" });
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  const addEndpoint = async () => {
+    if (!newEp.name.trim() || !newEp.url.trim()) return;
+    try {
+      await create.mutateAsync({ name: newEp.name, url: newEp.url, events: newEp.events || "*", enabled: true });
+      toast.success("Endpoint registered");
+      setNewEp({ name: "", url: "", events: "*" });
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  const removeEp = async (id: string) => {
+    try { await del.mutateAsync(id); toast.success("Endpoint deleted"); } catch (e) { toast.error((e as Error).message); }
+  };
+  const testEp = async (id: string) => {
+    setTestingId(id);
+    try {
+      const res = await test.mutateAsync(id);
+      if (res.ok) toast.success(`Test delivered (HTTP ${res.status ?? "?"})`);
+      else toast.error(`Test failed: ${res.error ?? "no response"}`);
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setTestingId(null); }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2"><Webhook className="h-4 w-4" />Webhook Endpoints</CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <p className="text-xs text-muted-foreground mb-3">Register external URLs to receive LeadOS events. Events are signed with HMAC-SHA256 (X-Leados-Signature header) when a secret is set. Use events="*" for all, or comma-separated like "lead.created,lead.won".</p>
+        {(endpoints.data?.rows ?? []).length === 0 && (
+          <div className="px-4 py-6 text-center text-sm text-muted-foreground">No endpoints registered. Add one below to start receiving events.</div>
+        )}
+        <div className="space-y-1.5 mb-3">
+          {(endpoints.data?.rows ?? []).map((ep: any) => (
+            <div key={ep.id} className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-2", !ep.enabled && "opacity-50")}>
+              <span className={cn("h-2 w-2 rounded-full shrink-0", ep.enabled ? (ep.lastStatus === "FAILED" ? "bg-red-500" : ep.lastStatus === "OK" ? "bg-emerald-500" : "bg-muted-foreground") : "bg-muted-foreground")} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">{ep.name}</div>
+                <div className="text-[11px] text-muted-foreground truncate font-mono">{ep.url}</div>
+              </div>
+              <Badge variant="outline" className="text-[9px] px-1 py-0 font-mono">{ep.events}</Badge>
+              {ep.failCount > 0 && <Badge variant="outline" className="text-[9px] px-1 py-0 text-red-600 border-red-300">{ep.failCount} fail</Badge>}
+              {ep.lastDeliveryAt && <span className="text-[10px] text-muted-foreground shrink-0">{new Date(ep.lastDeliveryAt).toLocaleDateString()}</span>}
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => testEp(ep.id)} disabled={testingId === ep.id}>
+                {testingId === ep.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
+              </Button>
+              <button onClick={() => removeEp(ep.id)} className="text-muted-foreground hover:text-red-500 text-xs px-1 shrink-0" title="Delete">✕</button>
+            </div>
+          ))}
+        </div>
+        {/* add new endpoint */}
+        <div className="pt-3 border-t space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">Register new endpoint</div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <Input value={newEp.name} onChange={(e) => setNewEp((s) => ({ ...s, name: e.target.value }))} placeholder="Name (e.g. Automation Engine)" className="h-8 text-sm" />
+            <Input value={newEp.url} onChange={(e) => setNewEp((s) => ({ ...s, url: e.target.value }))} placeholder="https://…" className="h-8 text-sm font-mono" />
+            <Input value={newEp.events} onChange={(e) => setNewEp((s) => ({ ...s, events: e.target.value }))} placeholder="* or lead.created,lead.won" className="h-8 text-sm font-mono" />
+          </div>
+          <Button size="sm" onClick={addEndpoint} disabled={!newEp.name.trim() || !newEp.url.trim() || create.isPending}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />{t("common.create")}
+          </Button>
         </div>
       </CardContent>
     </Card>

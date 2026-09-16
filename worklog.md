@@ -434,3 +434,51 @@ Next-phase priorities:
 3. Notification channel adapters (email/Telegram/WhatsApp delivery).
 4. Assignment rule drag-reorder (currently position-based via create order).
 5. Lead assignment round-robin (distribute evenly among a group, not just first-match).
+
+---
+Task ID: 9
+Agent: main (cron round 6)
+Task: QA + add Webhook URL registration + delivery, Lead restore from archive, archived leads view.
+
+QA Assessment:
+- Dev server stable (HTTP 200). All 8 nav views verified without console errors.
+- No bugs found — proceeded to new features.
+
+Work completed this round:
+1. Webhook URL Registration + Delivery (NEW):
+   - Prisma model: WebhookEndpoint (organizationId, name, url, secret, events, enabled, lastDeliveryAt, lastStatus, failCount)
+   - API: /api/v1/webhooks/endpoints (GET, POST), /endpoints/[id] (PATCH, DELETE), /endpoints/[id]/test (POST)
+   - lib/leados/webhook-delivery.ts: deliverPendingEvents() + testEndpoint() with HMAC-SHA256 signing (X-Leados-Signature header), 10s timeout, fail tracking
+   - Hooks: useWebhookEndpoints, useCreateWebhookEndpoint, useDeleteWebhookEndpoint, useTestWebhookEndpoint
+   - Settings → ERP/Events tab: WebhookEndpointsTab with endpoint list (status dot, fail count, last delivery), add-endpoint form (name/url/events), Test button per endpoint
+   - Verified: created "Test Hook" → httpbin.org/post, test delivery returned HTTP 200
+
+2. Lead Restore from Archive (NEW):
+   - lead-service.ts: restoreLead() — unarchives lead, restores status based on stage type (won/lost/open)
+   - API: /api/v1/leads/[id]/restore (POST)
+   - Hook: useRestoreLead
+   - Leads list: "📦 Archived" toggle filter shows archived leads with Restore button per row
+   - Verified: archive → status=ARCHIVED, restore → status=NEW (restored correctly)
+
+3. Styling Polish:
+   - Webhook endpoints: status dot (emerald=OK, red=FAILED, gray=none), fail count badge, monospace URL, event filter badge
+   - Archived leads: dedicated Actions column with Restore button, colSpan adjusts dynamically
+   - Archived toggle: distinct zinc styling to differentiate from active filters
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: webhook endpoints tab (endpoint visible, Test button works), archived leads (toggle + Restore buttons), dark mode, mobile 390×844
+- API checks: webhook endpoints (create+list+test all work, test delivery HTTP 200), lead restore (archive→ARCHIVED, restore→NEW)
+
+Unresolved issues / risks:
+- Dev server required restart mid-round (Prisma client cache needed refresh after schema change). After restart, stable.
+- Webhook delivery is on-demand (test endpoint); background worker for automatic delivery not implemented.
+- Real auth (NextAuth) still deferred.
+
+Next-phase priorities:
+1. Background webhook delivery worker (cron-like polling of undelivered events).
+2. Real auth (NextAuth) for production.
+3. Notification channel adapters (email/Telegram/WhatsApp delivery).
+4. Kanban quick-view hover card (preview lead without navigation).
+5. Lead merge UI improvements (field selection).

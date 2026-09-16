@@ -426,6 +426,32 @@ export async function archiveLead(orgId: string, leadId: string, userId: string 
   return updated;
 }
 
+export async function restoreLead(orgId: string, leadId: string, userId: string | null) {
+  const lead = await db.lead.findUnique({ where: { id: leadId }, include: { stage: true } });
+  if (!lead || lead.organizationId !== orgId) throw new Error("LEAD_NOT_FOUND");
+  const status =
+    lead.stage?.type === "won" ? LEAD_STATUS.WON :
+    lead.stage?.type === "lost" ? LEAD_STATUS.LOST :
+    lead.stage?.name === "New" ? LEAD_STATUS.NEW :
+    lead.stage?.name === "Contacted" ? LEAD_STATUS.CONTACTED :
+    lead.stage?.name === "Qualified" ? LEAD_STATUS.QUALIFIED :
+    LEAD_STATUS.OPEN;
+  const updated = await db.lead.update({
+    where: { id: leadId },
+    data: { status, archivedAt: null },
+  });
+  await db.activity.create({
+    data: {
+      organizationId: orgId,
+      leadId,
+      userId,
+      type: ACTIVITY_TYPE.SYSTEM_EVENT,
+      title: "Lead restored from archive",
+    },
+  });
+  return updated;
+}
+
 export async function mergeLeads(
   orgId: string,
   targetId: string,

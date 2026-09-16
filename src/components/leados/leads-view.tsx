@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useLeads, useSources, useUsers, usePipeline, useTags, useArchiveLead, useBulkLeads, type LeadsQuery } from "@/hooks/leados/use-api";
+import { useLeads, useSources, useUsers, usePipeline, useTags, useArchiveLead, useBulkLeads, useRestoreLead, type LeadsQuery } from "@/hooks/leados/use-api";
 import { useSavedFilters } from "@/hooks/leados/use-saved-filters";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
@@ -32,7 +32,9 @@ export function LeadsView() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const savedFilters = useSavedFilters();
+  const restore = useRestoreLead();
   const limit = 25;
 
   const sources = useSources();
@@ -51,10 +53,11 @@ export function LeadsView() {
     priority: priority.length ? priority : undefined,
     overdue: overdue || undefined,
     unassigned: unassigned || undefined,
+    archived: showArchived || undefined,
     page,
     limit,
     sort,
-  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, page, sort]);
+  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, showArchived, page, sort]);
 
   const leads = useLeads(query);
 
@@ -165,6 +168,7 @@ export function LeadsView() {
           </div>
           <button onClick={() => { setOverdue((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", overdue ? "bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-300" : "bg-background hover:bg-accent")}>⏱ {t("leads.filter.overdue")}</button>
           <button onClick={() => { setUnassigned((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", unassigned ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300" : "bg-background hover:bg-accent")}>👤 {t("leads.filter.unassigned")}</button>
+          <button onClick={() => { setShowArchived((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", showArchived ? "bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300" : "bg-background hover:bg-accent")}>📦 Archived</button>
           {hasFilters && <Button variant="ghost" size="sm" onClick={reset}><X className="h-3.5 w-3.5 mr-1" />{t("common.clear")}</Button>}
         </div>
         {/* saved filters bar */}
@@ -282,6 +286,7 @@ export function LeadsView() {
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.owner")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.next_action")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.created")}</th>
+                {showArchived && <th className="text-left font-medium px-3 py-2.5">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -316,11 +321,22 @@ export function LeadsView() {
                       ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-3 py-2.5 text-xs text-muted-foreground">{timeAgo(l.createdAt)}</td>
+                    {showArchived && (
+                      <td className="px-3 py-2.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={(e) => { e.stopPropagation(); restore.mutate(l.id, { onSuccess: () => toast.success("Lead restored") }); }}
+                          disabled={restore.isPending}
+                        >↩ Restore</Button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               {!leads.isLoading && (leads.data?.rows ?? []).length === 0 && (
-                <tr><td colSpan={10} className="px-6 py-12 text-center text-sm text-muted-foreground">{hasFilters ? "No leads match your filters." : "No leads yet. Create one or import a CSV."}</td></tr>
+                <tr><td colSpan={showArchived ? 11 : 10} className="px-6 py-12 text-center text-sm text-muted-foreground">{hasFilters ? "No leads match your filters." : "No leads yet. Create one or import a CSV."}</td></tr>
               )}
             </tbody>
           </table>

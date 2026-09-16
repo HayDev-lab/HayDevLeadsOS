@@ -42,6 +42,7 @@ model Organization {
   settings             Setting[]
   savedFilters         SavedFilter[]
   assignmentRules      AssignmentRule[]
+  webhookEndpoints     WebhookEndpoint[]
   activities           Activity[]
   tasks                Task[]
   notes                Note[]
@@ -622,6 +623,25 @@ model AssignmentRule {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   assignee     User          @relation("AssignmentRuleAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, enabled])
+}
+
+model WebhookEndpoint {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  url            String
+  secret         String?
+  events         String   // comma-separated event names, or "*" for all
+  enabled        Boolean  @default(true)
+  lastDeliveryAt DateTime?
+  lastStatus     String?  // OK | FAILED
+  failCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, enabled])
 }

@@ -385,6 +385,34 @@ export function useWebhookEvents(event?: string, limit?: number) {
     queryFn: () => api.get<{ rows: any[]; byEvent: Record<string, number>; total: number }>(`/webhooks/events?${p.toString()}`),
   });
 }
+export function useWebhookEndpoints() {
+  return useQuery({
+    queryKey: ["webhook-endpoints"],
+    queryFn: () => api.get<{ rows: any[] }>("/webhooks/endpoints"),
+  });
+}
+export function useCreateWebhookEndpoint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; url: string; secret?: string; events?: string; enabled?: boolean }) =>
+      api.post<{ endpoint: any }>("/webhooks/endpoints", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-endpoints"] }),
+  });
+}
+export function useDeleteWebhookEndpoint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/webhooks/endpoints/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-endpoints"] }),
+  });
+}
+export function useTestWebhookEndpoint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ ok: boolean; status?: number; error?: string }>(`/webhooks/endpoints/${id}/test`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-endpoints"] }),
+  });
+}
 
 // ---------- mutations ----------
 
@@ -462,6 +490,17 @@ export function useArchiveLead() {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["kanban"] });
       qc.invalidateQueries({ queryKey: ["lost-detector"] });
+    },
+  });
+}
+export function useRestoreLead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ lead: any }>(`/leads/${id}/restore`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
     },
   });
 }
