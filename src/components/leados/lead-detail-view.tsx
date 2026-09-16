@@ -261,27 +261,141 @@ function DuplicateBanner({ leadId }: { leadId: string }) {
   const dup = useLeadDuplicate(leadId);
   const merge = useMergeLead(leadId);
   const [, navigate] = useHashRoute();
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
   if (!dup.data?.hasDuplicates) return null;
+  const match = dup.data.matches[0];
   return (
-    <Card className="border-amber-300/60 bg-amber-50/50 dark:bg-amber-950/30">
-      <CardContent className="py-3 flex items-center gap-3">
-        <GitMerge className="h-4 w-4 text-amber-600" />
-        <div className="flex-1 text-sm">
-          <span className="font-semibold">{t("lead.duplicate_detected")}</span>
-          <span className="text-muted-foreground ml-2">{dup.data.matches.length} possible match(es)</span>
+    <>
+      <Card className="border-amber-300/60 bg-amber-50/50 dark:bg-amber-950/30">
+        <CardContent className="py-3 flex items-center gap-3">
+          <GitMerge className="h-4 w-4 text-amber-600" />
+          <div className="flex-1 text-sm">
+            <span className="font-semibold">{t("lead.duplicate_detected")}</span>
+            <span className="text-muted-foreground ml-2">{dup.data.matches.length} possible match(es) — matched by {match?.reason}</span>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => navigate("lead", { id: match.id })}><ExternalLink className="h-3.5 w-3.5 mr-1" />{t("lead.merge.open_existing")}</Button>
+            <Button size="sm" variant="default" onClick={() => setShowMergeDialog(true)}>
+              <GitMerge className="h-3.5 w-3.5 mr-1" />{t("lead.merge")}…
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      {showMergeDialog && (
+        <MergeDialog leadId={leadId} matchId={match.id} onClose={() => setShowMergeDialog(false)} onMerged={() => { toast.success("Leads merged"); navigate("lead", { id: leadId }); }} />
+      )}
+    </>
+  );
+}
+
+function MergeDialog({ leadId, matchId, onClose, onMerged }: { leadId: string; matchId: string; onClose: () => void; onMerged: () => void }) {
+  const { t } = useLocale();
+  const target = useLead(leadId);
+  const source = useLead(matchId);
+  const merge = useMergeLead(leadId);
+  const [sourceFields, setSourceFields] = useState<Set<string>>(new Set());
+
+  if (target.isLoading || source.isLoading) return <div className="p-6"><Skeleton className="h-40 w-full" /></div>;
+  const tl = target.data?.lead;
+  const sl = source.data?.lead;
+  if (!tl || !sl) return null;
+
+  const fields = [
+    { key: "firstName", label: "First name" },
+    { key: "lastName", label: "Last name" },
+    { key: "company", label: "Company" },
+    { key: "phone", label: "Phone" },
+    { key: "email", label: "Email" },
+    { key: "summary", label: "Summary" },
+    { key: "requirements", label: "Requirements" },
+    { key: "estimatedValue", label: "Est. value" },
+    { key: "priority", label: "Priority" },
+  ];
+
+  const doMerge = async () => {
+    // if user selected source fields, copy them to target first, then merge
+    if (sourceFields.size > 0) {
+      const patch: Record<string, unknown> = {};
+      for (const key of sourceFields) {
+        (patch as any)[key] = (sl as any)[key];
+      }
+      try {
+        await fetch(`/api/v1/leads/${leadId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+      } catch {}
+    }
+    await merge.mutateAsync(matchId);
+    onMerged();
+  };
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><GitMerge className="h-5 w-5 text-amber-500" />Merge leads</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <p className="text-xs text-muted-foreground">The duplicate (source) will be archived. Its activities, tasks, notes, events and tags are moved to this lead. Select fields to copy from the source before merging:</p>
+          {/* comparison table */}
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 text-muted-foreground">
+                <tr>
+                  <th className="text-left font-medium px-3 py-2">Field</th>
+                  <th className="text-left font-medium px-3 py-2">This lead (target)</th>
+                  <th className="text-left font-medium px-3 py-2">Duplicate (source)</th>
+                  <th className="text-center font-medium px-3 py-2 w-16">Use source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fields.map((f) => {
+                  const targetVal = (tl as any)[f.key];
+                  const sourceVal = (sl as any)[f.key];
+                  const hasDiff = (targetVal ?? "") !== (sourceVal ?? "");
+                  const selected = sourceFields.has(f.key);
+                  return (
+                    <tr key={f.key} className={cn("border-t", hasDiff && "bg-amber-50/30 dark:bg-amber-950/10")}>
+                      <td className="px-3 py-2 font-medium text-muted-foreground">{f.label}</td>
+                      <td className="px-3 py-2 truncate max-w-[140px]">{targetVal != null && targetVal !== "" ? String(targetVal) : <span className="text-muted-foreground/50">—</span>}</td>
+                      <td className="px-3 py-2 truncate max-w-[140px]">{sourceVal != null && sourceVal !== "" ? String(sourceVal) : <span className="text-muted-foreground/50">—</span>}</td>
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          disabled={!hasDiff || sourceVal == null || sourceVal === ""}
+                          onChange={(e) => {
+                            setSourceFields((cur) => {
+                              const n = new Set(cur);
+                              if (e.target.checked) n.add(f.key); else n.delete(f.key);
+                              return n;
+                            });
+                          }}
+                          className="accent-primary disabled:opacity-30"
+                          title={!hasDiff ? "Values are identical" : !sourceVal ? "Source has no value" : "Copy from source"}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center justify-center h-5 w-5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-bold">{sourceFields.size}</span>
+            field(s) will be copied from source before merge
+          </div>
         </div>
-        <div className="flex gap-2">
-          {dup.data.matches.slice(0, 1).map((m: any) => (
-            <div key={m.id} className="flex gap-1">
-              <Button size="sm" variant="outline" onClick={() => navigate("lead", { id: m.id })}><ExternalLink className="h-3.5 w-3.5 mr-1" />{t("lead.merge.open_existing")}</Button>
-              <Button size="sm" variant="default" onClick={async () => { await merge.mutateAsync(m.id); toast.success("Merged"); }}>
-                <GitMerge className="h-3.5 w-3.5 mr-1" />{t("lead.merge")} (this ← that)
-              </Button>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button onClick={doMerge} disabled={merge.isPending} className="bg-amber-600 hover:bg-amber-700 text-white">
+            <GitMerge className="h-3.5 w-3.5 mr-1.5" />Merge & archive source
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

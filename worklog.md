@@ -482,3 +482,58 @@ Next-phase priorities:
 3. Notification channel adapters (email/Telegram/WhatsApp delivery).
 4. Kanban quick-view hover card (preview lead without navigation).
 5. Lead merge UI improvements (field selection).
+
+---
+Task ID: 10
+Agent: main (cron round 7)
+Task: QA + add Kanban hover preview, Lead merge dialog with field selection, notification center improvements, styling polish.
+
+QA Assessment:
+- Dev server stable (HTTP 200). All 8 nav views verified without console errors.
+- No bugs found — proceeded to new features.
+
+Work completed this round:
+1. Kanban Quick-View Hover Card (NEW):
+   - pipeline-view.tsx: HoverCard wrapping each draggable card (400ms open delay, 150ms close)
+   - LeadQuickPreview component: fetches full lead via useLead, shows avatar, name, company, priority badge, score, stage, phone/email/source, owner, next action (red if overdue), last contact, summary (2-line clamp), "Open lead" button
+   - Lazy-loads lead data only on hover (no upfront cost for kanban rendering)
+
+2. Lead Merge Dialog with Field Selection (NEW):
+   - lead-detail-view.tsx: MergeDialog component with field comparison table
+   - Side-by-side comparison: Field / This lead (target) / Duplicate (source) / Use source checkbox
+   - 9 fields compared (firstName, lastName, company, phone, email, summary, requirements, estimatedValue, priority)
+   - Rows with differences highlighted amber; checkboxes disabled for identical or empty source fields
+   - Pre-merge: copies selected source fields to target via PATCH, then merges (archives source, moves activities/tasks/notes/events/tags)
+   - Count badge shows how many fields will be copied
+
+3. Notification Center Improvements (NEW):
+   - header-controls.tsx: NotificationsBell redesigned
+   - Unread count badge (number instead of dot, "9+" for >9)
+   - "Mark all read" button in dropdown header
+   - Per-notification: blue unread dot, title, message, relative timestamp (now/Xm/Xh/Xd)
+   - Unread items highlighted with primary/5 background
+   - Empty state with Bell icon + message
+   - Wider dropdown (w-96), up to 20 items shown
+
+4. Styling Polish:
+   - Dashboard header: gradient text (from-foreground to-foreground/70, bg-clip-text)
+   - Merge dialog: amber accent for merge action, comparison table with highlighted diff rows
+   - Notification badge: min-width pill with bold count
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: kanban hover preview (shows lead details + Open button), merge dialog (field comparison table with checkboxes), notifications (Mark all read + unread indicators + timestamps), dark mode, mobile 390×844
+- Merge dialog verified: created duplicate lead → banner shows → dialog opens with field comparison
+
+Unresolved issues / risks:
+- Dev server stable throughout this round (no restart needed).
+- Webhook background delivery worker still not implemented (on-demand test only).
+- Real auth (NextAuth) still deferred.
+
+Next-phase priorities:
+1. Background webhook delivery worker (cron-like polling).
+2. Real auth (NextAuth) for production.
+3. Notification channel adapters (email/Telegram/WhatsApp delivery).
+4. Kanban card quick-actions (inline assign/change-stage without opening lead).
+5. Lead activity timeline export (PDF/CSV for client reports).

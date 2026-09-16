@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent, useDraggable, useDroppable } from "@dnd-kit/core";
-import { useKanban, useSetLeadStage } from "@/hooks/leados/use-api";
+import { useKanban, useSetLeadStage, useLead } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LeadAvatar, PriorityBadge, ScoreBadge, formatMoney, EmptyState } from "./primitives";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { LeadAvatar, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, formatMoney, timeAgo, EmptyState } from "./primitives";
 import { cn } from "@/lib/utils";
-import { KanbanSquare, GripVertical } from "lucide-react";
+import { KanbanSquare, GripVertical, Phone, Mail, Clock, Calendar, User as UserIcon, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 export function PipelineView() {
@@ -99,7 +100,75 @@ function DraggableCard({ lead, onClick }: { lead: any; onClick: (id: string) => 
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id });
   return (
     <div ref={setNodeRef} {...attributes} {...listeners} className={cn("touch-none", isDragging && "opacity-30")}>
-      <LeadCard lead={lead} onClick={onClick} />
+      <HoverCard openDelay={400} closeDelay={150}>
+        <HoverCardTrigger asChild>
+          <div>
+            <LeadCard lead={lead} onClick={onClick} />
+          </div>
+        </HoverCardTrigger>
+        <HoverCardContent className="w-80 p-0" side="right" align="start">
+          <LeadQuickPreview leadId={lead.id} onOpen={() => onClick(lead.id)} />
+        </HoverCardContent>
+      </HoverCard>
+    </div>
+  );
+}
+
+function LeadQuickPreview({ leadId, onOpen }: { leadId: string; onOpen: () => void }) {
+  const lead = useLead(leadId);
+  if (lead.isLoading) return <div className="p-4"><Skeleton className="h-20 w-full" /></div>;
+  const l = lead.data?.lead;
+  if (!l) return <div className="p-4 text-sm text-muted-foreground">Lead not found</div>;
+  return (
+    <div className="space-y-2.5 p-3">
+      {/* header */}
+      <div className="flex items-start gap-2.5">
+        <LeadAvatar first={l.firstName} last={l.lastName} color={l.owner?.avatarColor} size={36} />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold truncate">{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</div>
+          <div className="text-xs text-muted-foreground truncate">{l.company || "—"}</div>
+        </div>
+        <PriorityBadge priority={l.priority} />
+      </div>
+      {/* score + stage */}
+      <div className="flex items-center gap-2">
+        <ScoreBadge score={l.leadScore} category={l.scoreCategory} />
+        {l.stage && <StageBadge name={l.stage.name} color={l.stage.color} type={l.stage.type} />}
+      </div>
+      {/* contact */}
+      <div className="space-y-1 text-xs">
+        {l.phone && <div className="flex items-center gap-2"><Phone className="h-3 w-3 text-muted-foreground" /><span className="truncate">{l.phone}</span></div>}
+        {l.email && <div className="flex items-center gap-2"><Mail className="h-3 w-3 text-muted-foreground" /><span className="truncate">{l.email}</span></div>}
+        {l.source && <div className="flex items-center gap-2"><SourceBadge name={l.source.name} type={l.source.type} /></div>}
+      </div>
+      {/* owner + next action */}
+      <div className="space-y-1 pt-1.5 border-t text-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3" />Owner</span>
+          <span className="font-medium">{l.owner?.name || "Unassigned"}</span>
+        </div>
+        {l.nextActionAt && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />Next action</span>
+            <span className={cn("font-medium", new Date(l.nextActionAt).getTime() < Date.now() && "text-red-500")}>{timeAgo(l.nextActionAt)}</span>
+          </div>
+        )}
+        {l.lastContactAt && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" />Last contact</span>
+            <span>{timeAgo(l.lastContactAt)}</span>
+          </div>
+        )}
+      </div>
+      {/* summary */}
+      {l.summary && <p className="text-xs text-muted-foreground line-clamp-2 pt-1.5 border-t">{l.summary}</p>}
+      {/* open button */}
+      <button
+        onClick={onOpen}
+        className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium py-1.5 hover:bg-primary/90 transition"
+      >
+        Open lead <ArrowRight className="h-3 w-3" />
+      </button>
     </div>
   );
 }
