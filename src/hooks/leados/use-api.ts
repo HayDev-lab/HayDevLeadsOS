@@ -413,6 +413,12 @@ export function useTestWebhookEndpoint() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-endpoints"] }),
   });
 }
+export function useDuplicatesScan() {
+  return useQuery({
+    queryKey: ["duplicates-scan"],
+    queryFn: () => api.get<{ groups: any[]; total: number; leadsScanned: number }>("/leads/duplicates-scan"),
+  });
+}
 
 // ---------- mutations ----------
 

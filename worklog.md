@@ -537,3 +537,55 @@ Next-phase priorities:
 3. Notification channel adapters (email/Telegram/WhatsApp delivery).
 4. Kanban card quick-actions (inline assign/change-stage without opening lead).
 5. Lead activity timeline export (PDF/CSV for client reports).
+
+---
+Task ID: 11
+Agent: main (cron round 8)
+Task: QA + add Lead activity timeline export, Duplicate scanner tool, styling polish.
+
+QA Assessment:
+- Dev server stable (HTTP 200). All 8 nav views verified without console errors.
+- No bugs found — proceeded to new features.
+
+Work completed this round:
+1. Lead Activity Timeline Export (NEW):
+   - API: /api/v1/leads/[id]/export-activity (GET) — exports full lead timeline as CSV
+   - CSV includes: Lead summary (name, company, contact, status, priority, score, created), Activities (date, type, title, user), Tasks (created, due, status, title, assignee), Notes (date, author, content), Events/audit trail (date, type, user), Business audits (6 scores + summary)
+   - Lead Detail header: "Export" button (Download icon) opens CSV download in new tab
+   - Filename: leados-<company>-activity-<date>.csv (sanitized)
+   - Verified: HTTP 200, Content-Type text/csv, full CSV with all sections
+
+2. Duplicate Lead Scanner (NEW):
+   - API: /api/v1/leads/duplicates-scan (GET) — scans all active leads, groups by normalized phone/email
+   - Returns groups with matched leads, reason (phone/email), matchValue
+   - Hook: useDuplicatesScan
+   - duplicates-scanner.tsx: DuplicatesScanner component with dialog
+   - Leads list header: "Find duplicates" button with count badge (amber, shows group count)
+   - Dialog: shows scanned count, found count, per-group cards with lead comparison
+   - Each group: first lead marked "KEEP", others have "Merge into ↑" button
+   - Merge action: archives source, moves all related records, navigates to target lead
+   - Empty state: emerald checkmark "No duplicates found"
+   - Verified: scanned 36 leads, found 1 group, merge button works
+
+3. Styling Polish:
+   - Duplicate scanner: amber-themed cards with reason badges, KEEP label in emerald
+   - Export button: Download icon, opens in new tab
+   - Count badge on Find duplicates button (amber, min-width pill)
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: duplicates scanner dialog (groups visible, KEEP/Merge buttons), Export button on lead detail, dark mode, mobile 390×844
+- API checks: duplicates-scan (1 group, 36 leads scanned), export-activity (HTTP 200, text/csv)
+
+Unresolved issues / risks:
+- Dev server stable throughout this round (no restart needed).
+- Webhook background delivery worker still not implemented.
+- Real auth (NextAuth) still deferred.
+
+Next-phase priorities:
+1. Background webhook delivery worker (cron-like polling).
+2. Real auth (NextAuth) for production.
+3. Notification channel adapters (email/Telegram/WhatsApp delivery).
+4. Kanban card quick-actions (inline assign/change-stage without opening lead).
+5. Lead batch operations: bulk merge suggestions from duplicate scanner.

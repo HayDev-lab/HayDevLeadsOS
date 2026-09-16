@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain } from "lucide-react";
+import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain, Download } from "lucide-react";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPill, SourceBadge, TagChip, formatDate, formatDay, formatMoney, timeAgo } from "./primitives";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -195,6 +195,7 @@ function LeadHeader({ lead: l, onEdit }: { lead: any; onEdit: () => void }) {
           <Button size="sm" variant="outline" onClick={onEdit}><StickyNote className="h-3.5 w-3.5 mr-1.5" />{t("common.edit")}</Button>
           <Button size="sm" variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}><RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", sync.isPending && "animate-spin")} />{l.integrationSyncs?.some((s: any) => s.status === "SYNCED") ? t("lead.synced_erp") : t("lead.sync_erp")}</Button>
           <Button size="sm" variant="outline" onClick={() => recalc.mutate()} disabled={recalc.isPending}><Zap className="h-3.5 w-3.5 mr-1.5" />{t("common.score")}</Button>
+          <Button size="sm" variant="outline" onClick={() => window.open(`/api/v1/leads/${l.id}/export-activity`, "_blank")} title="Export activity timeline as CSV"><Download className="h-3.5 w-3.5 mr-1.5" />Export</Button>
           <Button size="sm" variant="outline" disabled title={t("lead.create_quote.disabled")}><FileText className="h-3.5 w-3.5 mr-1.5" />{t("lead.create_quote")}</Button>
           <AlertDialog>
             <AlertDialogTrigger asChild><Button size="sm" variant="outline"><Archive className="h-3.5 w-3.5 mr-1.5" />{t("common.archive")}</Button></AlertDialogTrigger>

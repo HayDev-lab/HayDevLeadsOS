@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight, Download, Filter, Plus, Search, X, Archive, Upload, Star, Bookmark } from "lucide-react";
 import { LeadFormDialog } from "./lead-form-dialog";
+import { DuplicatesScanner } from "./duplicates-scanner";
 import { ImportDialog } from "./import-dialog";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, timeAgo } from "./primitives";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,7 @@ export function LeadsView() {
           <p className="text-sm text-muted-foreground">{leads.data ? `${leads.data.total} total` : ""}</p>
         </div>
         <div className="flex items-center gap-2">
+          <DuplicatesScanner />
           <ImportDialog>
             <Button variant="outline" size="sm"><Upload className="h-4 w-4 mr-1.5" />{t("leads.import")}</Button>
           </ImportDialog>
