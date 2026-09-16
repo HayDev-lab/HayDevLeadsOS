@@ -15,6 +15,7 @@ import { LeadFormDialog } from "./lead-form-dialog";
 import { DuplicatesScanner } from "./duplicates-scanner";
 import { ImportDialog } from "./import-dialog";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, timeAgo } from "./primitives";
+import { ResponseSlaBadge } from "./response-sla-badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -312,7 +313,12 @@ export function LeadsView() {
                     <td className="px-3 py-2.5 truncate max-w-[160px]">{l.company || "—"}</td>
                     <td className="px-3 py-2.5"><SourceBadge name={l.source?.name} type={l.source?.type} /></td>
                     <td className="px-3 py-2.5"><StageBadge name={l.stage?.name} color={l.stage?.color} type={l.stage?.type} /></td>
-                    <td className="px-3 py-2.5"><ScoreBadge score={l.leadScore} category={l.scoreCategory} /></td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <ScoreBadge score={l.leadScore} category={l.scoreCategory} />
+                        <ResponseSlaBadge createdAt={l.createdAt} lastContactAt={l.lastContactAt} status={l.status} />
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5"><PriorityBadge priority={l.priority} /></td>
                     <td className="px-3 py-2.5">{l.owner ? <OwnerChip name={l.owner.name} avatarColor={l.owner.avatarColor} /> : <span className="text-xs text-muted-foreground italic">{t("common.unassigned")}</span>}</td>
                     <td className="px-3 py-2.5 text-xs">

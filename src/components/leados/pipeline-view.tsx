@@ -2,15 +2,17 @@
 
 import { useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent, useDraggable, useDroppable } from "@dnd-kit/core";
-import { useKanban, useSetLeadStage, useLead } from "@/hooks/leados/use-api";
+import { useKanban, useSetLeadStage, useLead, useAssignLead, useUsers, usePipeline } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { LeadAvatar, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, formatMoney, timeAgo, EmptyState } from "./primitives";
+import { ResponseSlaBadge } from "./response-sla-badge";
 import { cn } from "@/lib/utils";
-import { KanbanSquare, GripVertical, Phone, Mail, Clock, Calendar, User as UserIcon, ArrowRight } from "lucide-react";
+import { KanbanSquare, GripVertical, Phone, Mail, Clock, Calendar, User as UserIcon, ArrowRight, MoreVertical, UserPlus, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
 
 export function PipelineView() {
@@ -174,10 +176,23 @@ function LeadQuickPreview({ leadId, onOpen }: { leadId: string; onOpen: () => vo
 }
 
 function LeadCard({ lead, dragging, onClick }: { lead: any; dragging?: boolean; onClick: (id: string) => void }) {
+  const assign = useAssignLead(lead.id);
+  const setStage = useSetLeadStage();
+  const users = useUsers();
+  const pipeline = usePipeline();
+  const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
+
+  const doAssign = async (ownerId: string) => {
+    try { await assign.mutateAsync(ownerId); toast.success("Lead assigned"); } catch (e) { toast.error((e as Error).message); }
+  };
+  const doStage = async (stageId: string) => {
+    try { await setStage.mutateAsync({ leadId: lead.id, stageId }); toast.success("Stage changed"); } catch (e) { toast.error((e as Error).message); }
+  };
+
   return (
     <Card
       onClick={() => onClick(lead.id)}
-      className={cn("p-2.5 cursor-pointer hover:shadow-md hover:border-primary/40 transition", dragging && "shadow-xl rotate-2 border-primary")}
+      className={cn("p-2.5 cursor-pointer hover:shadow-md hover:border-primary/40 transition group relative", dragging && "shadow-xl rotate-2 border-primary")}
     >
       <div className="flex items-start gap-2">
         <LeadAvatar first={lead.firstName} last={lead.lastName} color={lead.owner?.avatarColor} size={26} />
@@ -186,10 +201,49 @@ function LeadCard({ lead, dragging, onClick }: { lead: any; dragging?: boolean; 
           <div className="text-[11px] text-muted-foreground truncate">{lead.company || "—"}</div>
         </div>
         {lead.estimatedValue ? <span className="text-[10px] font-medium text-muted-foreground">{formatMoney(lead.estimatedValue)}</span> : null}
+        {/* quick-actions menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              onClick={(e) => e.stopPropagation()}
+              className="opacity-0 group-hover:opacity-100 transition absolute top-1.5 right-1.5 h-5 w-5 rounded flex items-center justify-center hover:bg-accent text-muted-foreground"
+              title="Quick actions"
+            >
+              <MoreVertical className="h-3 w-3" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Quick actions</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1.5"><ArrowLeftRight className="h-3 w-3" />Move to stage</DropdownMenuLabel>
+            {stages.filter((s: any) => s.id !== lead.stageId).map((s: any) => (
+              <DropdownMenuItem key={s.id} onClick={() => doStage(s.id)} className="text-xs gap-2">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
+                {s.name}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1.5"><UserPlus className="h-3 w-3" />Assign to</DropdownMenuLabel>
+            {(users.data?.rows ?? []).map((u: any) => (
+              <DropdownMenuItem key={u.id} onClick={() => doAssign(u.id)} className="text-xs gap-2">
+                <LeadAvatar first={u.name} color={u.avatarColor} size={16} />
+                {u.name}
+                {lead.ownerId === u.id && <span className="ml-auto text-[10px] text-emerald-600">●</span>}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onClick(lead.id)} className="text-xs gap-2">
+              <ArrowRight className="h-3 w-3" />Open lead detail
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className="flex items-center justify-between mt-2">
         <PriorityBadge priority={lead.priority} />
-        <ScoreBadge score={lead.leadScore} category={lead.scoreCategory} />
+        <div className="flex items-center gap-1.5">
+          <ResponseSlaBadge createdAt={lead.createdAt} lastContactAt={lead.lastContactAt} status={lead.status} />
+          <ScoreBadge score={lead.leadScore} category={lead.scoreCategory} />
+        </div>
       </div>
       {!lead.ownerId && <div className="mt-1.5 text-[10px] text-amber-600 font-medium">⚠ Unassigned</div>}
     </Card>

@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain, Download } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPill, SourceBadge, TagChip, formatDate, formatDay, formatMoney, timeAgo } from "./primitives";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -624,19 +625,46 @@ function NotesTab({ leadId }: { leadId: string }) {
   const rows = useLeadNotes(leadId);
   const add = useAddNote(leadId);
   const [content, setContent] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
   if (rows.isLoading) return <Skeleton className="h-40 w-full" />;
   const r = rows.data?.rows ?? [];
   const submit = async () => {
     if (!content.trim()) return;
     try { await add.mutateAsync(content); setContent(""); toast.success(t("toast.note_added")); } catch (e) { toast.error((e as Error).message); }
   };
+  const insertMd = (before: string, after: string = "") => {
+    const ta = document.getElementById("note-textarea") as HTMLTextAreaElement;
+    if (!ta) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const sel = content.substring(start, end) || "text";
+    const newText = content.substring(0, start) + before + sel + after + content.substring(end);
+    setContent(newText);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + before.length, start + before.length + sel.length); }, 0);
+  };
   return (
     <Card>
       <CardContent className="p-3 space-y-3">
-        <div className="flex gap-2">
-          <Textarea rows={2} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Add a note…" />
-          <Button size="sm" onClick={submit} disabled={add.isPending || !content.trim()} className="self-end">{t("common.save")}</Button>
+        {/* markdown toolbar */}
+        <div className="flex items-center gap-1 flex-wrap">
+          <button onClick={() => insertMd("**", "**")} className="h-7 w-7 rounded text-xs font-bold hover:bg-accent border" title="Bold">B</button>
+          <button onClick={() => insertMd("*", "*")} className="h-7 w-7 rounded text-xs italic hover:bg-accent border" title="Italic">I</button>
+          <button onClick={() => insertMd("`", "`")} className="h-7 w-7 rounded text-xs font-mono hover:bg-accent border" title="Code">{`<>`}</button>
+          <button onClick={() => insertMd("- ")} className="h-7 px-2 rounded text-xs hover:bg-accent border" title="Bullet list">• List</button>
+          <button onClick={() => insertMd("## ")} className="h-7 px-2 rounded text-xs hover:bg-accent border" title="Heading">H</button>
+          <button onClick={() => insertMd("[", "](url)")} className="h-7 px-2 rounded text-xs hover:bg-accent border" title="Link">🔗</button>
+          <div className="ml-auto flex items-center gap-1">
+            <button onClick={() => setShowPreview(false)} className={cn("h-7 px-2 rounded text-xs", !showPreview ? "bg-primary text-primary-foreground" : "hover:bg-accent border")}>Write</button>
+            <button onClick={() => setShowPreview(true)} className={cn("h-7 px-2 rounded text-xs", showPreview ? "bg-primary text-primary-foreground" : "hover:bg-accent border")}>Preview</button>
+          </div>
         </div>
+        {showPreview ? (
+          <div className="min-h-[60px] rounded-lg border p-3 prose prose-sm dark:prose-invert max-w-none">
+            <MarkdownPreview content={content} />
+          </div>
+        ) : (
+          <Textarea id="note-textarea" rows={3} value={content} onChange={(e) => setContent(e.target.value)} placeholder="Add a note… (markdown supported)" className="font-mono text-sm" />
+        )}
+        <Button size="sm" onClick={submit} disabled={add.isPending || !content.trim()} className="self-end">{t("common.save")}</Button>
         <div className="space-y-2 max-h-72 overflow-y-auto">
           {r.length === 0 && <p className="text-xs text-muted-foreground">No notes.</p>}
           {r.map((n: any) => (
@@ -645,13 +673,19 @@ function NotesTab({ leadId }: { leadId: string }) {
                 <span className="text-xs font-medium flex items-center gap-1.5"><LeadAvatar first={n.user?.name} size={18} />{n.user?.name ?? "System"}</span>
                 <span className="text-[11px] text-muted-foreground">{formatDate(n.createdAt)}</span>
               </div>
-              <p className="text-sm whitespace-pre-wrap">{n.content}</p>
+              <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                <MarkdownPreview content={n.content} />
+              </div>
             </div>
           ))}
         </div>
       </CardContent>
     </Card>
   );
+}
+
+function MarkdownPreview({ content }: { content: string }) {
+  return <ReactMarkdown>{content}</ReactMarkdown>;
 }
 
 function TasksTab({ leadId }: { leadId: string }) {

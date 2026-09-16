@@ -589,3 +589,59 @@ Next-phase priorities:
 3. Notification channel adapters (email/Telegram/WhatsApp delivery).
 4. Kanban card quick-actions (inline assign/change-stage without opening lead).
 5. Lead batch operations: bulk merge suggestions from duplicate scanner.
+
+---
+Task ID: 12
+Agent: main (cron round 9)
+Task: QA + add Kanban card quick-actions, Lead SLA response time badges, Markdown notes support.
+
+QA Assessment:
+- Dev server stable (HTTP 200). All 8 nav views verified without console errors.
+- No bugs found — proceeded to new features.
+
+Work completed this round:
+1. Kanban Card Quick-Actions (NEW):
+   - pipeline-view.tsx: LeadCard now has a 3-dot menu (MoreVertical) that appears on hover
+   - Dropdown menu with: Move to stage (all stages with color dots, excludes current), Assign to (all users with avatars, current owner marked), Open lead detail
+   - Uses useAssignLead + useSetLeadStage hooks with toast feedback
+   - stopPropagation prevents card click navigation when interacting with menu
+
+2. Lead SLA Response Time Badges (NEW):
+   - response-sla-badge.tsx: ResponseSlaBadge component
+   - Color-coded: emerald (<1h responded), sky (new <1h), amber (1-4h), orange (4-24h), red (>24h or no response)
+   - Shows response time from lead creation to first contact, or time waiting if no contact yet
+   - Won/Lost/Archived leads don't show SLA
+   - Added to: Kanban cards (next to score badge), Leads list table (next to score badge)
+   - Thresholds: 1h target, 4h warning, 24h breach (deterministic, configurable)
+
+3. Markdown Notes Support (NEW):
+   - lead-detail-view.tsx NotesTab: full markdown editor with toolbar
+   - Toolbar: Bold (B), Italic (I), Code (<>), Bullet list (•), Heading (H), Link (🔗)
+   - Write/Preview toggle tabs — Preview renders markdown via ReactMarkdown
+   - Notes display rendered markdown (prose styling, dark mode support)
+   - Textarea uses monospace font for editing
+   - insertMd helper: wraps/inserts markdown syntax at cursor position
+
+4. Styling Polish:
+   - Kanban cards: group-hover reveals quick-actions menu button (opacity transition)
+   - SLA badges: inline-flex with icons (CheckCircle2 for responded, AlertTriangle for breach)
+   - Notes: prose styling for rendered markdown, dark:prose-invert for dark mode
+   - Toolbar buttons: bordered, hover-accent, active state for Write/Preview tabs
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: kanban quick-actions menu (stage list + assignee list + open detail), SLA badges in leads list ("new" badge visible), markdown notes toolbar (Bold/List/Heading/Write/Preview), dark mode, mobile 390×844
+- Quick-actions verified: menu opens with Move to stage + Assign to + Open lead detail options
+
+Unresolved issues / risks:
+- Dev server stable throughout this round (no restart needed).
+- Webhook background delivery worker still not implemented.
+- Real auth (NextAuth) still deferred.
+
+Next-phase priorities:
+1. Background webhook delivery worker (cron-like polling).
+2. Real auth (NextAuth) for production.
+3. Notification channel adapters (email/Telegram/WhatsApp delivery).
+4. SLA configuration in Settings (currently hardcoded thresholds).
+5. Lead activity timeline with visual timeline component (not just list).
