@@ -19,6 +19,7 @@ import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPil
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SCORE_THRESHOLDS } from "@/lib/leados/constants";
+import { CustomFieldsPanel } from "./custom-fields-panel";
 
 export function LeadDetailView({ leadId }: { leadId: string | null }) {
   const { t } = useLocale();
@@ -111,6 +112,9 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
               <AiSummary lead={l} />
             </CardContent>
           </Card>
+
+          {/* custom fields (per-lead editor) */}
+          <CustomFieldsPanel leadId={l.id} values={l.customValues ?? []} />
 
           {/* tabs: activity / tasks / notes / events */}
           <Tabs value={tab} onValueChange={setTab}>

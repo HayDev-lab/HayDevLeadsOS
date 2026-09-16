@@ -278,6 +278,38 @@ export function useSetCustomValue(fieldId: string) {
     },
   });
 }
+export function useCreateStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { pipelineId: string; name: string; type?: string; color?: string; position?: number }) =>
+      api.post<{ stage: any }>("/pipeline/stages", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipeline"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
+    },
+  });
+}
+export function useUpdateStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { name?: string; type?: string; color?: string; position?: number } }) =>
+      api.patch<{ stage: any }>(`/pipeline/stages/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipeline"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
+    },
+  });
+}
+export function useDeleteStage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/pipeline/stages/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipeline"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
+    },
+  });
+}
 
 // ---------- mutations ----------
 

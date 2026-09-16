@@ -216,3 +216,59 @@ Next-phase priorities:
 2. Add per-lead custom field editor inside Lead Detail (right panel section).
 3. Deeper dark-mode polish on new views (inbox thread, analytics charts).
 4. Consider pipeline/stage admin CRUD (currently seeded-only).
+
+---
+Task ID: 5
+Agent: main (cron round 2)
+Task: QA new views (Inbox/Analytics/Custom Fields) + add per-lead custom field editor + pipeline/stage CRUD + saved filters + styling polish.
+
+QA Assessment:
+- Dev server was down at start of round (crashed in round 1, not auto-restarted). Manually restarted via `nohup bash .zscripts/dev.sh`.
+- All new views verified working: Inbox (4 conversations), Analytics (34 leads, 6% conversion, 1h avg response), Custom Fields (2 fields: Industry, Budget), Pipeline CRUD (8 stages with inline rename + color picker).
+- Lead Detail shows Custom Fields panel with Industry/Budget editors.
+- Dark mode + mobile (390×844) verified on all new views.
+- Stale Turbopack cache error about inbox/route.ts (canMutate import) — file is correct, API works, error is cosmetic only.
+
+Work completed this round:
+1. Per-lead Custom Field Editor (NEW):
+   - custom-fields-panel.tsx: renders org's custom fields as editable inputs (text/number/select/bool/date) with debounced auto-save (400ms)
+   - Integrated into Lead Detail (after AI Summary card)
+   - Lead GET API now includes customValues with field definitions
+   - Key-based remount on value change (no useEffect sync needed)
+
+2. Pipeline/Stage Admin CRUD (NEW):
+   - API: /api/v1/pipeline/stages (GET, POST), /api/v1/pipeline/stages/[id] (PATCH, DELETE)
+   - Hooks: useCreateStage, useUpdateStage, useDeleteStage
+   - Settings → Pipeline tab: inline rename (blur to save), color picker per stage, add new stage (name + type + color), delete (blocked if leads are in the stage)
+   - Changes reflect immediately in Kanban via cache invalidation
+
+3. Saved Filters (NEW):
+   - use-saved-filters.ts: localStorage-based hook (add/remove, no backend needed)
+   - Leads list: saved filter chips bar appears when filters are active; "Save current" prompt with name input; click chip to apply; hover to delete
+   - Persists across sessions per browser
+
+4. Styling Polish:
+   - Dashboard: framer-motion animated attention banner with leados-pulse icon, staggered metric card entrance (delay i*0.03)
+   - App shell: leados-fade-in page transition on view change (key=currentView)
+   - Pipeline CRUD: color swatches, inline edit borders, smooth transitions
+   - All new views: consistent dark-mode styling, custom scrollbar, focus-visible rings
+
+5. Inbox data: added 4 test incoming messages via API (instagram/telegram/whatsapp/facebook) — all unlinked, ready for link-to-lead testing.
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: dashboard, leads, lead detail (with custom fields), inbox (4 conversations), analytics (charts render), settings (pipeline CRUD, custom fields CRUD), dark mode, mobile 390×844
+- API checks: analytics (34 leads, 6% conversion), inbox (4 messages, 4 unassigned), custom-fields (2 fields)
+
+Unresolved issues / risks:
+- Dev server requires manual restart (nohup bash .zscripts/dev.sh) — system auto-restart not working. Next round: verify if server stays up.
+- Stale Turbopack cache error about inbox route (cosmetic, doesn't affect functionality).
+- Inbox reply composer still disabled (outbound adapter not connected — by design).
+
+Next-phase priorities:
+1. Verify dev server stability across rounds.
+2. Notification channel adapters (email/Telegram/WhatsApp delivery — architecture ready, channels not wired).
+3. Real auth (NextAuth) — demo session context works but needs production auth.
+4. Deeper analytics: response time distribution, source ROI, team performance.
+5. Saved filters sync to backend (currently localStorage only).

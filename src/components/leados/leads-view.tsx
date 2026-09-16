@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useLeads, useSources, useUsers, usePipeline, useTags, type LeadsQuery } from "@/hooks/leados/use-api";
+import { useSavedFilters } from "@/hooks/leados/use-saved-filters";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { Card } from "@/components/ui/card";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, Download, Filter, Plus, Search, X, Archive, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Filter, Plus, Search, X, Archive, Upload, Star, Bookmark } from "lucide-react";
 import { LeadFormDialog } from "./lead-form-dialog";
 import { ImportDialog } from "./import-dialog";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, timeAgo } from "./primitives";
@@ -30,6 +31,9 @@ export function LeadsView() {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState("createdAt:desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [savePromptOpen, setSavePromptOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const savedFilters = useSavedFilters();
   const limit = 25;
 
   const sources = useSources();
@@ -142,6 +146,65 @@ export function LeadsView() {
           <button onClick={() => { setUnassigned((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", unassigned ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300" : "bg-background hover:bg-accent")}>👤 {t("leads.filter.unassigned")}</button>
           {hasFilters && <Button variant="ghost" size="sm" onClick={reset}><X className="h-3.5 w-3.5 mr-1" />{t("common.clear")}</Button>}
         </div>
+        {/* saved filters bar */}
+        {(savedFilters.filters.length > 0 || hasFilters) && (
+          <div className="flex flex-wrap items-center gap-1.5 mt-2 pt-2 border-t">
+            <Bookmark className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            {savedFilters.filters.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => {
+                  const q = f.query;
+                  setQ((q.q as string) ?? "");
+                  setSourceId((q.sourceId as string) ?? "");
+                  setOwnerId((q.ownerId as string) ?? "");
+                  setStageId((q.stageId as string) ?? "");
+                  setPriority((q.priority as string[]) ?? []);
+                  setOverdue(!!q.overdue);
+                  setUnassigned(!!q.unassigned);
+                  setPage(1);
+                }}
+                className="group inline-flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent transition"
+              >
+                <Star className="h-3 w-3 text-amber-500" />
+                {f.name}
+                <span
+                  onClick={(e) => { e.stopPropagation(); savedFilters.remove(f.id); }}
+                  className="ml-0.5 text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                >✕</span>
+              </button>
+            ))}
+            {hasFilters && (
+              savePromptOpen ? (
+                <div className="inline-flex items-center gap-1.5">
+                  <Input
+                    autoFocus
+                    value={saveName}
+                    onChange={(e) => setSaveName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && saveName.trim()) {
+                        savedFilters.add(saveName, { q, sourceId, ownerId, stageId, priority, overdue, unassigned });
+                        setSaveName(""); setSavePromptOpen(false);
+                        toast.success("Filter saved");
+                      }
+                      if (e.key === "Escape") { setSavePromptOpen(false); setSaveName(""); }
+                    }}
+                    placeholder="Filter name…"
+                    className="h-7 w-32 text-xs"
+                  />
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setSavePromptOpen(false); setSaveName(""); }}>✕</Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setSavePromptOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent transition"
+                >
+                  <Plus className="h-3 w-3" />Save current
+                </button>
+              )
+            )}
+          </div>
+        )}
       </Card>
 
       {/* bulk bar */}

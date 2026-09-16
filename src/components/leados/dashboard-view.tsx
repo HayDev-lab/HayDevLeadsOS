@@ -66,20 +66,22 @@ export function DashboardView() {
 
       {/* attention banner */}
       {(lost.data?.leadsNeedingAttention ?? 0) > 0 && (
-        <Card className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/30 dark:border-amber-900">
-          <CardContent className="py-3 flex items-center gap-3">
-            <div className="rounded-lg bg-amber-100 dark:bg-amber-900 p-2">
-              <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
-            </div>
-            <div className="flex-1 text-sm">
-              <span className="font-semibold">{lost.data?.leadsNeedingAttention} {t("lost.needs_attention")}</span>
-              <span className="text-muted-foreground ml-2">— {t("lost.detector.title")}</span>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => navigate("leads", { overdue: "1" })}>
-              {t("common.actions")} <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
-            </Button>
-          </CardContent>
-        </Card>
+        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+          <Card className="border-amber-300/60 bg-amber-50/60 dark:bg-amber-950/30 dark:border-amber-900">
+            <CardContent className="py-3 flex items-center gap-3">
+              <div className="rounded-lg bg-amber-100 dark:bg-amber-900 p-2 leados-pulse">
+                <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+              </div>
+              <div className="flex-1 text-sm">
+                <span className="font-semibold">{lost.data?.leadsNeedingAttention} {t("lost.needs_attention")}</span>
+                <span className="text-muted-foreground ml-2">— {t("lost.detector.title")}</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => navigate("leads", { overdue: "1" })}>
+                {t("common.actions")} <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </CardContent>
+          </Card>
+        </motion.div>
       )}
 
       {/* metrics */}

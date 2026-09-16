@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField } from "@/hooks/leados/use-api";
+import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField, useCreateStage, useUpdateStage, useDeleteStage } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -105,26 +105,97 @@ function UsersTab() {
 }
 
 function PipelineTab() {
+  const { t } = useLocale();
   const settings = useSettings();
+  const createStage = useCreateStage();
+  const updateStage = useUpdateStage();
+  const delStage = useDeleteStage();
+  const [newStage, setNewStage] = useState<{ name: string; type: string; color: string }>({ name: "", type: "open", color: "#94a3b8" });
+
   if (settings.isLoading) return <Skeleton className="h-48 w-full" />;
   const pipelines = settings.data?.pipelines ?? [];
+
+  const addStage = async (pipelineId: string) => {
+    if (!newStage.name.trim()) return;
+    try {
+      await createStage.mutateAsync({ pipelineId, name: newStage.name, type: newStage.type, color: newStage.color });
+      toast.success("Stage added");
+      setNewStage({ name: "", type: "open", color: "#94a3b8" });
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  const renameStage = async (id: string, name: string) => {
+    try { await updateStage.mutateAsync({ id, body: { name } }); } catch (e) { toast.error((e as Error).message); }
+  };
+  const recolorStage = async (id: string, color: string) => {
+    try { await updateStage.mutateAsync({ id, body: { color } }); } catch (e) { toast.error((e as Error).message); }
+  };
+  const removeStage = async (id: string) => {
+    try { await delStage.mutateAsync(id); toast.success("Stage deleted"); } catch (e) { toast.error((e as Error).message); }
+  };
+
   return (
     <div className="space-y-3">
       {pipelines.map((p: any) => (
         <Card key={p.id}>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between"><CardTitle className="text-sm">{p.name}</CardTitle>{p.isDefault && <Badge>Default</Badge>}</CardHeader>
-          <CardContent className="pt-0 flex flex-wrap gap-1.5">
-            {p.stages.map((s: any) => (
-              <span key={s.id} className="inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
-                {s.name}
-                <Badge variant="outline" className="text-[10px] px-1 py-0">{s.type}</Badge>
-              </span>
-            ))}
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">{p.name}</CardTitle>
+            {p.isDefault && <Badge>Default</Badge>}
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            <div className="space-y-1.5">
+              {p.stages.map((s: any) => (
+                <div key={s.id} className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
+                  <input
+                    type="color"
+                    value={s.color ?? "#94a3b8"}
+                    onChange={(e) => recolorStage(s.id, e.target.value)}
+                    className="h-6 w-6 rounded cursor-pointer border-0 bg-transparent p-0"
+                    title="Stage color"
+                  />
+                  <input
+                    defaultValue={s.name}
+                    onBlur={(e) => { if (e.target.value !== s.name) renameStage(s.id, e.target.value); }}
+                    className="flex-1 bg-transparent text-sm font-medium outline-none border-b border-transparent focus:border-primary"
+                  />
+                  <Badge variant="outline" className="text-[10px] px-1 py-0">{s.type}</Badge>
+                  <button
+                    onClick={() => removeStage(s.id)}
+                    className="text-muted-foreground hover:text-red-500 text-xs px-1"
+                    title="Delete stage"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+            {/* add new stage */}
+            <div className="flex items-center gap-2 pt-1 border-t">
+              <input
+                type="color"
+                value={newStage.color}
+                onChange={(e) => setNewStage((s) => ({ ...s, color: e.target.value }))}
+                className="h-6 w-6 rounded cursor-pointer border-0 bg-transparent p-0"
+              />
+              <Input
+                value={newStage.name}
+                onChange={(e) => setNewStage((s) => ({ ...s, name: e.target.value }))}
+                placeholder="New stage name…"
+                className="h-8 flex-1 text-sm"
+              />
+              <Select value={newStage.type} onValueChange={(v) => setNewStage((s) => ({ ...s, type: v }))}>
+                <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">open</SelectItem>
+                  <SelectItem value="won">won</SelectItem>
+                  <SelectItem value="lost">lost</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline" onClick={() => addStage(p.id)} disabled={!newStage.name.trim() || createStage.isPending}>
+                <Plus className="h-3.5 w-3.5 mr-1" />{t("common.create")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ))}
-      <p className="text-xs text-muted-foreground px-1">Pipeline and stages are seeded. Full CRUD config UI is part of the remaining 20%.</p>
+      <p className="text-xs text-muted-foreground px-1">Rename inline · recolor via swatch · delete (blocked if leads are in the stage). Changes reflect immediately in the Kanban.</p>
     </div>
   );
 }

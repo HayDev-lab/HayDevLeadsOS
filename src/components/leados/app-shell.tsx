@@ -144,7 +144,9 @@ export function LeadOSApp() {
 
         {/* main */}
         <main className="flex-1 min-w-0 overflow-x-hidden">
-          {renderView()}
+          <div key={currentView} className="leados-fade-in">
+            {renderView()}
+          </div>
         </main>
       </div>
 

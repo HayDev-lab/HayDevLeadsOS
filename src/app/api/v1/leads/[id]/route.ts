@@ -21,6 +21,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         attributions: true,
         integrationSyncs: { orderBy: { createdAt: "desc" }, take: 5 },
         flags: { where: { resolvedAt: null } },
+        customValues: { include: { field: true } },
       },
     });
     if (!lead || lead.organizationId !== session.orgId) return notFound("lead");
