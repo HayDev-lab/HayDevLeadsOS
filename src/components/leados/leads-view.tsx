@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useLeads, useSources, useUsers, usePipeline, useTags, type LeadsQuery } from "@/hooks/leados/use-api";
+import { useLeads, useSources, useUsers, usePipeline, useTags, useArchiveLead, useBulkLeads, type LeadsQuery } from "@/hooks/leados/use-api";
 import { useSavedFilters } from "@/hooks/leados/use-saved-filters";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
@@ -16,7 +16,6 @@ import { ImportDialog } from "./import-dialog";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, timeAgo } from "./primitives";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useArchiveLead } from "@/hooks/leados/use-api";
 
 export function LeadsView() {
   const { t } = useLocale();
@@ -41,6 +40,7 @@ export function LeadsView() {
   const pipeline = usePipeline();
   const tags = useTags();
   const archive = useArchiveLead();
+  const bulk = useBulkLeads();
 
   // pick initial overdue from route
   const query: LeadsQuery = useMemo(() => ({
@@ -75,11 +75,32 @@ export function LeadsView() {
     else setSelected(new Set(rows.map((r: any) => r.id)));
   };
   const bulkArchive = async () => {
-    for (const id of selected) {
-      try { await archive.mutateAsync(id); } catch {}
-    }
-    toast.success(`Archived ${selected.size} lead(s)`);
-    setSelected(new Set());
+    try {
+      const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "archive" });
+      toast.success(`Archived ${res.updated} lead(s)`);
+      setSelected(new Set());
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  const bulkAssign = async (ownerId: string) => {
+    try {
+      const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "assign", ownerId });
+      toast.success(`Assigned ${res.updated} lead(s)`);
+      setSelected(new Set());
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  const bulkStage = async (stageId: string) => {
+    try {
+      const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "stage", stageId });
+      toast.success(`Moved ${res.updated} lead(s)`);
+      setSelected(new Set());
+    } catch (e) { toast.error((e as Error).message); }
+  };
+  const bulkPriority = async (priority: string) => {
+    try {
+      const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "priority", priority });
+      toast.success(`Updated ${res.updated} lead(s)`);
+      setSelected(new Set());
+    } catch (e) { toast.error((e as Error).message); }
   };
 
   const exportCsv = () => {
@@ -209,10 +230,37 @@ export function LeadsView() {
 
       {/* bulk bar */}
       {selected.size > 0 && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border bg-primary/5 px-3 py-2 text-sm">
-          <span className="font-medium">{selected.size} selected</span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={bulkArchive} disabled={archive.isPending}><Archive className="h-3.5 w-3.5 mr-1.5" />{t("common.archive")}</Button>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-primary/5 px-3 py-2.5 text-sm shadow-sm">
+          <span className="font-medium flex items-center gap-2">
+            <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">{selected.size}</span>
+            selected
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <Select onValueChange={(v) => v !== "__none" && bulkAssign(v)}>
+              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Assign to…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">—</SelectItem>
+                {(users.data?.rows ?? []).map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select onValueChange={(v) => v !== "__none" && bulkStage(v)}>
+              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Move to stage…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">—</SelectItem>
+                {stages.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select onValueChange={(v) => v !== "__none" && bulkPriority(v)}>
+              <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder="Priority…" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">—</SelectItem>
+                <SelectItem value="LOW">Low</SelectItem>
+                <SelectItem value="MEDIUM">Medium</SelectItem>
+                <SelectItem value="HIGH">High</SelectItem>
+                <SelectItem value="URGENT">Urgent</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" onClick={bulkArchive} disabled={bulk.isPending}><Archive className="h-3.5 w-3.5 mr-1.5" />{t("common.archive")}</Button>
             <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>{t("common.cancel")}</Button>
           </div>
         </div>

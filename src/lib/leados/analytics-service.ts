@@ -69,6 +69,37 @@ export async function getAnalytics(orgId: string) {
     days.push({ date: start.toISOString().slice(0, 10), count });
   }
 
+  // 30-day trend for the heatmap
+  const trend30: { date: string; count: number; won: number }[] = [];
+  for (let i = 29; i >= 0; i--) {
+    const start = new Date(Date.now() - i * 86400000);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start.getTime() + 86400000);
+    const [count, won] = await Promise.all([
+      db.lead.count({ where: { organizationId: orgId, createdAt: { gte: start, lt: end } } }),
+      db.lead.count({ where: { organizationId: orgId, status: "WON", updatedAt: { gte: start, lt: end } } }),
+    ]);
+    trend30.push({ date: start.toISOString().slice(0, 10), count, won });
+  }
+
+  // Response time distribution (buckets)
+  const respBuckets = { "0-1h": 0, "1-4h": 0, "4-24h": 0, "1-3d": 0, "3d+": 0, "none": 0 };
+  for (const l of leads) {
+    const firstAct = await db.activity.findFirst({
+      where: { leadId: l.id, type: { in: ["CALL", "MESSAGE", "EMAIL", "FOLLOW_UP"] } },
+      orderBy: { createdAt: "asc" },
+      select: { createdAt: true },
+    });
+    if (!firstAct) { respBuckets.none++; continue; }
+    const diffH = (new Date(firstAct.createdAt).getTime() - new Date(l.createdAt).getTime()) / 3600000;
+    if (diffH < 0) { respBuckets.none++; continue; }
+    if (diffH <= 1) respBuckets["0-1h"]++;
+    else if (diffH <= 4) respBuckets["1-4h"]++;
+    else if (diffH <= 24) respBuckets["4-24h"]++;
+    else if (diffH <= 72) respBuckets["1-3d"]++;
+    else respBuckets["3d+"]++;
+  }
+
   // Leads by stage (funnel)
   const stages = await db.pipelineStage.findMany({
     where: { pipeline: { organizationId: orgId, isDefault: true } },
@@ -158,6 +189,8 @@ export async function getAnalytics(orgId: string) {
     winsBySource,
     lostReasons,
     days,
+    trend30,
+    respBuckets,
     funnel,
     openPipelineValue: openValueRaw._sum.estimatedValue ?? 0,
     wonValue: wonValueRaw._sum.estimatedValue ?? 0,

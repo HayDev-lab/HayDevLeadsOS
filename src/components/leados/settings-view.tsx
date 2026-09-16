@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField, useCreateStage, useUpdateStage, useDeleteStage } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Check, Plus, RefreshCw, Save, Sparkles, Webhook, Trash2, Settings2 } from "lucide-react";
+import { Brain, Check, Plus, RefreshCw, Save, Sparkles, Webhook, Trash2, Settings2, GripVertical, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { LeadAvatar, formatDate, timeAgo } from "./primitives";
@@ -112,6 +115,11 @@ function PipelineTab() {
   const delStage = useDeleteStage();
   const [newStage, setNewStage] = useState<{ name: string; type: string; color: string }>({ name: "", type: "open", color: "#94a3b8" });
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
   if (settings.isLoading) return <Skeleton className="h-48 w-full" />;
   const pipelines = settings.data?.pipelines ?? [];
 
@@ -132,6 +140,23 @@ function PipelineTab() {
   const removeStage = async (id: string) => {
     try { await delStage.mutateAsync(id); toast.success("Stage deleted"); } catch (e) { toast.error((e as Error).message); }
   };
+  const onDragEnd = async (pipelineId: string, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const p = pipelines.find((pp: any) => pp.id === pipelineId);
+    if (!p) return;
+    const oldIndex = p.stages.findIndex((s: any) => s.id === active.id);
+    const newIndex = p.stages.findIndex((s: any) => s.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(p.stages as any[], oldIndex, newIndex) as any[];
+    // persist new positions
+    for (let i = 0; i < reordered.length; i++) {
+      if (reordered[i].position !== i) {
+        try { await updateStage.mutateAsync({ id: reordered[i].id, body: { position: i } }); } catch {}
+      }
+    }
+    toast.success("Stages reordered");
+  };
 
   return (
     <div className="space-y-3">
@@ -142,30 +167,22 @@ function PipelineTab() {
             {p.isDefault && <Badge>Default</Badge>}
           </CardHeader>
           <CardContent className="pt-0 space-y-2">
-            <div className="space-y-1.5">
-              {p.stages.map((s: any) => (
-                <div key={s.id} className="flex items-center gap-2 rounded-lg border px-2 py-1.5">
-                  <input
-                    type="color"
-                    value={s.color ?? "#94a3b8"}
-                    onChange={(e) => recolorStage(s.id, e.target.value)}
-                    className="h-6 w-6 rounded cursor-pointer border-0 bg-transparent p-0"
-                    title="Stage color"
-                  />
-                  <input
-                    defaultValue={s.name}
-                    onBlur={(e) => { if (e.target.value !== s.name) renameStage(s.id, e.target.value); }}
-                    className="flex-1 bg-transparent text-sm font-medium outline-none border-b border-transparent focus:border-primary"
-                  />
-                  <Badge variant="outline" className="text-[10px] px-1 py-0">{s.type}</Badge>
-                  <button
-                    onClick={() => removeStage(s.id)}
-                    className="text-muted-foreground hover:text-red-500 text-xs px-1"
-                    title="Delete stage"
-                  >✕</button>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onDragEnd(p.id, e)}>
+              <SortableContext items={p.stages.map((s: any) => s.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-1.5">
+                  {p.stages.map((s: any) => (
+                    <SortableStage
+                      key={s.id}
+                      stage={s}
+                      onRecolor={recolorStage}
+                      onRename={renameStage}
+                      onRemove={removeStage}
+                      updating={updateStage.isPending}
+                    />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
             {/* add new stage */}
             <div className="flex items-center gap-2 pt-1 border-t">
               <input
@@ -195,7 +212,45 @@ function PipelineTab() {
           </CardContent>
         </Card>
       ))}
-      <p className="text-xs text-muted-foreground px-1">Rename inline · recolor via swatch · delete (blocked if leads are in the stage). Changes reflect immediately in the Kanban.</p>
+      <p className="text-xs text-muted-foreground px-1 flex items-center gap-1.5">
+        <GripVertical className="h-3 w-3" />
+        Drag the handle to reorder · rename inline · recolor via swatch · delete (blocked if leads are in the stage). Changes reflect immediately in the Kanban.
+      </p>
+    </div>
+  );
+}
+
+function SortableStage({ stage, onRecolor, onRename, onRemove, updating }: { stage: any; onRecolor: (id: string, c: string) => void; onRename: (id: string, n: string) => void; onRemove: (id: string) => void; updating: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: stage.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 10 : "auto",
+  };
+  return (
+    <div ref={setNodeRef} style={style} className={cn("flex items-center gap-2 rounded-lg border px-2 py-1.5 bg-card", isDragging && "shadow-lg ring-2 ring-primary/30 opacity-90")}>
+      <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground touch-none" title="Drag to reorder">
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <input
+        type="color"
+        value={stage.color ?? "#94a3b8"}
+        onChange={(e) => onRecolor(stage.id, e.target.value)}
+        className="h-6 w-6 rounded cursor-pointer border-0 bg-transparent p-0"
+        title="Stage color"
+      />
+      <input
+        defaultValue={stage.name}
+        onBlur={(e) => { if (e.target.value !== stage.name) onRename(stage.id, e.target.value); }}
+        className="flex-1 bg-transparent text-sm font-medium outline-none border-b border-transparent focus:border-primary"
+      />
+      <Badge variant="outline" className="text-[10px] px-1 py-0">{stage.type}</Badge>
+      {updating && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+      <button
+        onClick={() => onRemove(stage.id)}
+        className="text-muted-foreground hover:text-red-500 text-xs px-1"
+        title="Delete stage"
+      >✕</button>
     </div>
   );
 }

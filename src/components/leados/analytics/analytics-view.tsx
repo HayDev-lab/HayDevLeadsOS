@@ -176,6 +176,92 @@ export function AnalyticsView() {
         </CardContent>
       </Card>
 
+      {/* 30-day trend heatmap + response time distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {data.trend30 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" />30-day activity trend</CardTitle>
+              <CardDescription className="text-xs">New leads (blue) vs won (green) per day</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="grid grid-cols-10 gap-1">
+                {data.trend30.map((d: any) => {
+                  const maxCount = Math.max(1, ...data.trend30.map((x: any) => x.count));
+                  const intensity = d.count / maxCount;
+                  const wonIntensity = d.won / Math.max(1, maxCount);
+                  return (
+                    <div
+                      key={d.date}
+                      title={`${d.date}: ${d.count} new, ${d.won} won`}
+                      className="aspect-square rounded relative group"
+                      style={{ backgroundColor: `color-mix(in oklch, var(--primary) ${Math.round(intensity * 80)}%, transparent)` }}
+                    >
+                      {d.won > 0 && (
+                        <span
+                          className="absolute bottom-0 right-0 h-1.5 w-1.5 rounded-full bg-emerald-500"
+                          style={{ opacity: 0.4 + wonIntensity * 0.6 }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between mt-2 text-[10px] text-muted-foreground">
+                <span>30 days ago</span>
+                <div className="flex items-center gap-1">
+                  <span>less</span>
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "color-mix(in oklch, var(--primary) 20%, transparent)" }} />
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "color-mix(in oklch, var(--primary) 50%, transparent)" }} />
+                  <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "color-mix(in oklch, var(--primary) 80%, transparent)" }} />
+                  <span>more</span>
+                </div>
+                <span>today</span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {data.respBuckets && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Clock className="h-4 w-4" />Response time distribution</CardTitle>
+              <CardDescription className="text-xs">Time from lead creation to first contact</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {[
+                  { key: "0-1h", label: "Under 1 hour", color: "#16a34a" },
+                  { key: "1-4h", label: "1–4 hours", color: "#0ea5e9" },
+                  { key: "4-24h", label: "4–24 hours", color: "#f59e0b" },
+                  { key: "1-3d", label: "1–3 days", color: "#f97316" },
+                  { key: "3d+", label: "Over 3 days", color: "#dc2626" },
+                  { key: "none", label: "No contact yet", color: "#94a3b8" },
+                ].map((b) => {
+                  const val = data.respBuckets[b.key] ?? 0;
+                  const total = Object.values(data.respBuckets).reduce((a: number, x: any) => a + (x as number), 0);
+                  const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+                  return (
+                    <div key={b.key} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: b.color }} />
+                          {b.label}
+                        </span>
+                        <span className="tabular-nums text-muted-foreground">{val} · {pct}%</span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: b.color }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
       {/* source ROI */}
       {data.sourceRoi && data.sourceRoi.length > 0 && (
         <Card>

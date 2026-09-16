@@ -244,6 +244,8 @@ export function useAnalytics() {
         winsBySource: { type: string; name: string; count: number; value: number }[];
         lostReasons: { reason: string; count: number }[];
         days: { date: string; count: number }[];
+        trend30: { date: string; count: number; won: number }[];
+        respBuckets: Record<string, number>;
         funnel: { stage: string; type: string; color: string | null; count: number; value: number }[];
         openPipelineValue: number; wonValue: number;
         sourceRoi: { type: string; name: string; count: number; won: number; lost: number; value: number; conversion: number }[];
@@ -397,6 +399,19 @@ export function useArchiveLead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.post<{ lead: any }>(`/leads/${id}/archive`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["kanban"] });
+      qc.invalidateQueries({ queryKey: ["lost-detector"] });
+    },
+  });
+}
+export function useBulkLeads() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { ids: string[]; action: "assign" | "stage" | "archive" | "priority"; ownerId?: string; stageId?: string; priority?: string }) =>
+      api.post<{ updated: number; total: number }>("/leads/bulk", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });

@@ -1,0 +1,75 @@
+// Bulk operations on leads — assign owner, change stage, archive.
+// All org-scoped; ids validated against the session org.
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { getSession, canMutate } from "@/lib/leados/context";
+import { ok, badRequest, serverError, validate, parseJson } from "@/lib/leados/api";
+import { z } from "zod";
+import { ACTIVITY_TYPE, LEAD_EVENT } from "@/lib/leados/constants";
+import { publishEvent } from "@/lib/leados/events";
+
+const BulkAction = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(200),
+  action: z.enum(["assign", "stage", "archive", "priority"]),
+  ownerId: z.string().optional(),
+  stageId: z.string().optional(),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
+});
+
+export async function POST(req: Request) {
+  try {
+    const session = await getSession();
+    if (!canMutate(session.role)) return badRequest("Viewers cannot perform bulk actions");
+    const body = await parseJson(req);
+    const v = validate(BulkAction, body);
+    if (!v.ok) return v.error;
+
+    const { ids, action } = v.value;
+    // fetch leads within org
+    const leads = await db.lead.findMany({ where: { id: { in: ids }, organizationId: session.orgId }, select: { id: true, ownerId: true, stageId: true, priority: true, status: true } });
+    if (!leads.length) return badRequest("no-leads-in-org");
+
+    let updated = 0;
+    const now = new Date();
+
+    if (action === "archive") {
+      const res = await db.lead.updateMany({ where: { id: { in: leads.map((l) => l.id) } }, data: { status: "ARCHIVED", archivedAt: now } });
+      updated = res.count;
+      for (const l of leads) {
+        await db.activity.create({ data: { organizationId: session.orgId, leadId: l.id, userId: session.userId, type: ACTIVITY_TYPE.SYSTEM_EVENT, title: "Lead archived (bulk)" } });
+        await publishEvent({ orgId: session.orgId, leadId: l.id, userId: session.userId, type: LEAD_EVENT.LEAD_ARCHIVED });
+      }
+    } else if (action === "assign") {
+      if (!v.value.ownerId) return badRequest("ownerId-required");
+      const owner = await db.user.findUnique({ where: { id: v.value.ownerId }, select: { organizationId: true, name: true } });
+      if (!owner || owner.organizationId !== session.orgId) return badRequest("owner-not-in-org");
+      const res = await db.lead.updateMany({ where: { id: { in: leads.map((l) => l.id) } }, data: { ownerId: v.value.ownerId } });
+      updated = res.count;
+      for (const l of leads) {
+        await db.activity.create({ data: { organizationId: session.orgId, leadId: l.id, userId: session.userId, type: ACTIVITY_TYPE.ASSIGNMENT, title: `Bulk assigned to ${owner.name}` } });
+        await publishEvent({ orgId: session.orgId, leadId: l.id, userId: session.userId, type: LEAD_EVENT.LEAD_ASSIGNED, payload: { ownerId: v.value.ownerId, bulk: true } as never });
+      }
+    } else if (action === "stage") {
+      if (!v.value.stageId) return badRequest("stageId-required");
+      const stage = await db.pipelineStage.findUnique({ where: { id: v.value.stageId }, include: { pipeline: true } });
+      if (!stage || stage.pipeline.organizationId !== session.orgId) return badRequest("stage-not-in-org");
+      const res = await db.lead.updateMany({ where: { id: { in: leads.map((l) => l.id) } }, data: { stageId: v.value.stageId, pipelineId: stage.pipelineId } });
+      updated = res.count;
+      for (const l of leads) {
+        await db.activity.create({ data: { organizationId: session.orgId, leadId: l.id, userId: session.userId, type: ACTIVITY_TYPE.STAGE_CHANGE, title: `Bulk moved to ${stage.name}` } });
+        await publishEvent({ orgId: session.orgId, leadId: l.id, userId: session.userId, type: LEAD_EVENT.STAGE_CHANGED, payload: { stageId: v.value.stageId, bulk: true } as never });
+      }
+    } else if (action === "priority") {
+      if (!v.value.priority) return badRequest("priority-required");
+      const res = await db.lead.updateMany({ where: { id: { in: leads.map((l) => l.id) } }, data: { priority: v.value.priority } });
+      updated = res.count;
+      for (const l of leads) {
+        await db.activity.create({ data: { organizationId: session.orgId, leadId: l.id, userId: session.userId, type: ACTIVITY_TYPE.SYSTEM_EVENT, title: `Bulk priority → ${v.value.priority}` } });
+      }
+    }
+
+    return ok({ updated, total: leads.length });
+  } catch (e) {
+    return serverError("bulk-failed", e);
+  }
+}

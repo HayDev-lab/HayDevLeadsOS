@@ -326,3 +326,56 @@ Next-phase priorities:
 3. Saved filters sync to backend (currently localStorage).
 4. Deeper analytics: response time distribution, trend over time.
 5. Pipeline stage reordering (drag to reorder positions).
+
+---
+Task ID: 7
+Agent: main (cron round 4)
+Task: QA + add bulk lead operations, pipeline stage drag-reorder, activity trend analytics, styling polish.
+
+QA Assessment:
+- Dev server stable (HTTP 200). All 8 nav views verified without console errors.
+- No bugs found — proceeded to new features.
+
+Work completed this round:
+1. Bulk Lead Operations (NEW):
+   - API: /api/v1/leads/bulk (POST) — actions: assign, stage, archive, priority
+   - Hook: useBulkLeads with full cache invalidation
+   - Leads list bulk bar: redesigned with count badge, 3 dropdowns (Assign to / Move to stage / Priority) + Archive button
+   - All bulk actions emit activities + events (LEAD_ASSIGNED, STAGE_CHANGED, LEAD_ARCHIVED with bulk:true payload)
+   - Server-side org isolation + role check on every bulk action
+
+2. Pipeline Stage Drag Reorder (NEW):
+   - settings-view.tsx PipelineTab: dnd-kit SortableContext with verticalListSortingStrategy
+   - Drag handle (GripVertical) per stage, visual feedback (shadow + ring on drag)
+   - onDragEnd persists new positions via updateStage mutation
+   - SortableStage component: color picker, inline rename, type badge, delete button, loading spinner
+   - Keyboard accessible (sortableKeyboardCoordinates)
+
+3. Activity Trend Analytics (NEW):
+   - analytics-service.ts: trend30 (30-day new leads + won per day), respBuckets (0-1h, 1-4h, 4-24h, 1-3d, 3d+, none)
+   - analytics-view.tsx: 30-day heatmap (grid of colored squares with intensity = lead count, green dot for won days), response time distribution (color-coded progress bars per bucket)
+   - Legend with less/more gradient
+
+4. Styling Polish:
+   - Bulk bar: shadow-sm, count badge in primary circle, responsive flex-wrap
+   - Sortable stages: shadow-lg + ring on drag, cursor-grab handle
+   - Heatmap: aspect-square cells, color-mix for intensity, tooltip on hover
+   - Response distribution: color-coded buckets (green→red gradient by urgency)
+
+Verification:
+- TypeScript PASS (lib + api + components clean)
+- ESLint PASS (0 errors, 0 warnings)
+- Browser QA PASS: analytics with 30-day heatmap + response distribution, pipeline sortable stages (drag handles visible), bulk actions (Assign/Move/Priority dropdowns), dark mode, mobile 390×844
+- API checks: trend30 (30 days), respBuckets (0-1h:26, none:8), bulk API (correctly rejects non-org leads with "no-leads-in-org")
+
+Unresolved issues / risks:
+- Dev server stable from round 2's manual restart — still not auto-restarting if it crashes.
+- Inbox reply composer still disabled (by design).
+- Real auth (NextAuth) still deferred.
+
+Next-phase priorities:
+1. Notification channel adapters (email/Telegram/WhatsApp delivery).
+2. Real auth (NextAuth) for production.
+3. Saved filters sync to backend (currently localStorage).
+4. Lead assignment round-robin / auto-assignment rules.
+5. Webhook outgoing events (for Automation Engine subscribers to consume).
