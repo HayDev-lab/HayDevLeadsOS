@@ -38,6 +38,8 @@ model Organization {
   webhookLogs           WebhookLog[]
   notifications         Notification[]
   domainEvents         DomainEvent[]
+  automationRules       AutomationRule[]
+  automationExecutions  AutomationExecution[]
   customFields         CustomField[]
   scoringConfigs       ScoringConfig[]
   settings             Setting[]
@@ -311,6 +313,9 @@ model Task {
   /** Task discriminator: TASK (generic) | FOLLOW_UP (drives Follow-up SLA). */
   type           String    @default("TASK") // TaskType
   completedAt    DateTime?
+  /** Automation attribution (spec 61/64): set when the task was created by the Automation Engine. */
+  automationRuleId      String?
+  automationExecutionId String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -587,6 +592,10 @@ model DomainEvent {
   deduplicationKey String
   /** Set by the projector after notifications were created (crash recovery). */
   processedAt      DateTime?
+  /** CAUSATION (v0.15 spec 29): the AutomationExecution whose action created this
+   *  event — makes automation chains auditable and enables loop protection.
+   *  NEVER used as a "processed" flag (processedAt belongs to the projector). */
+  automationExecutionId String?
   createdAt        DateTime  @default(now())
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -596,6 +605,7 @@ model DomainEvent {
   @@index([organizationId, type])
   @@index([organizationId, processedAt])
   @@index([organizationId, entityType, entityId])
+  @@index([automationExecutionId])
 }
 
 model CustomField {
@@ -711,4 +721,71 @@ model WebhookEndpoint {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, enabled])
+}
+
+// ---------------------------------------------------------------------------
+// AUTOMATION ENGINE (v0.15) — WHEN → IF → THEN
+// DomainEvent is the trigger source of truth. The engine is a SECOND
+// independent consumer beside the Notification Projector:
+//   projector idempotency = Notification unique(eventId, userId)
+//   engine idempotency   = AutomationExecution unique(ruleId, eventId)
+// processedAt on DomainEvent is NEVER used as an automation flag.
+// ---------------------------------------------------------------------------
+
+model AutomationRule {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  enabled        Boolean   @default(false)
+  /** DomainEventType trigger (existing event types only — no second trigger system). */
+  triggerType    String
+  /** Structured condition DSL: { all: [item, ...] } | { any: [...] } | null = always. */
+  conditions     Json?
+  /** Ordered action list: [ { type, params } ] — validated against the action whitelist. */
+  actions        Json
+  /** Bumped on significant edits (trigger/conditions/actions); executions store ruleVersion (spec 69-72). */
+  version        Int       @default(1)
+  /** BACKLOG GUARD (spec 92-93): only events with occurredAt >= enabledAt are processed. */
+  enabledAt      DateTime?
+  /** Soft delete (spec 68): history stays readable, the rule stops matching. */
+  deletedAt      DateTime?
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  executions    AutomationExecution[]
+
+  @@index([organizationId, enabled])
+  @@index([organizationId, triggerType])
+}
+
+model AutomationExecution {
+  id             String    @id @default(cuid())
+  organizationId String
+  ruleId         String
+  eventId        String
+  /** PENDING | RUNNING | SUCCESS | SKIPPED | FAILED (spec 20). */
+  status         String
+  /** Rule version at execution time (spec 69). */
+  ruleVersion    Int       @default(1)
+  startedAt      DateTime?
+  completedAt    DateTime?
+  /** Human-readable failure cause (spec 52 — no stack traces in the UI). */
+  error          String?
+  /** SKIPPED cause: CONDITIONS_NOT_MATCHED | EVENT_NO_LONGER_ACTIONABLE | AUTOMATION_DEPTH_EXCEEDED. */
+  skipReason     String?
+  /** { trigger, conditions: [trace], actions: [ { type, status, entityId?, error? } ] } (spec 21/53). */
+  result         Json?
+  createdAt      DateTime  @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rule         AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  /** ONE EVENT + ONE RULE = max ONE automatic execution (spec 25). */
+  @@unique([ruleId, eventId])
+  @@index([organizationId, createdAt])
+  @@index([ruleId, createdAt])
+  @@index([eventId])
 }

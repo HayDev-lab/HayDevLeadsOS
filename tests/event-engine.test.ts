@@ -621,10 +621,10 @@ describe("task events", () => {
     const fuNotifs = await notificationsFor(orgId, DOMAIN_EVENT.FOLLOW_UP_OVERDUE);
     expect(fuNotifs.length).toBeGreaterThan(0);
     for (const n of fuNotifs) {
-      const task = await db.task.findUnique({ where: { id: n.entityId } });
+      const task = await db.task.findUnique({ where: { id: n.entityId! } });
       expect(task?.type).toBe("FOLLOW_UP");
       const dup = await db.notification.findFirst({
-        where: { organizationId: orgId, type: DOMAIN_EVENT.TASK_OVERDUE, entityId: n.entityId },
+        where: { organizationId: orgId, type: DOMAIN_EVENT.TASK_OVERDUE, entityId: n.entityId ?? undefined },
       });
       expect(dup).toBeNull();
     }

@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle2, Circle, Clock, Plus, Trash2, AlertCircle, Calendar } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Plus, Trash2, AlertCircle, Calendar, Zap } from "lucide-react";
 import { OwnerChip, PriorityBadge, timeAgo, EmptyState } from "./primitives";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -80,6 +80,11 @@ export function TasksView() {
                 <div className="flex items-center gap-2">
                   <span className={cn("text-sm font-medium", task.status === "DONE" && "line-through text-muted-foreground")}>{task.title}</span>
                   <PriorityBadge priority={task.priority} />
+                  {task.automationRuleId && (
+                    <span className="inline-flex items-center gap-0.5 rounded bg-violet-500/10 border border-violet-200 px-1 py-px text-[9px] font-semibold text-violet-600 dark:text-violet-300 dark:border-violet-900" title="Created by automation">
+                      <Zap className="h-2.5 w-2.5" /> {t("auto.automated")}
+                    </span>
+                  )}
                   {overdue && <span className="inline-flex items-center gap-1 text-[11px] font-medium text-red-600"><AlertCircle className="h-3 w-3" /> {timeAgo(task.dueAt)}</span>}
                 </div>
                 {task.description && <p className="text-xs text-muted-foreground mt-0.5">{task.description}</p>}

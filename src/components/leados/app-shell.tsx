@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { useLocale } from "@/lib/leados/locale";
-import { useLostDetector, useSession, useSeed, useReconcileEvents } from "@/hooks/leados/use-api";
+import { useLostDetector, useSession, useSeed, useRunWorkers } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database, Inbox as InboxIcon, BarChart3, UserCircle } from "lucide-react";
+import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database, Inbox as InboxIcon, BarChart3, UserCircle, Zap } from "lucide-react";
 import { LangSwitcher, NotificationsBell, SearchTrigger, ThemeToggle, UserSwitcher } from "./header-controls";
 import { DemoBadge } from "./primitives";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import { InboxView } from "./inbox/inbox-view";
 import { AnalyticsView } from "./analytics/analytics-view";
 import { TeamView } from "./team/team-view";
 import { NotificationsView } from "./notifications/notifications-view";
+import { AutomationsView } from "./automations/automations-view";
 import { useInboxStats } from "@/hooks/leados/use-api";
 
 const NAV = [
@@ -29,28 +30,30 @@ const NAV = [
   { view: "pipeline", icon: KanbanSquare, key: "nav.pipeline" as const },
   { view: "tasks", icon: CheckSquare, key: "nav.tasks" as const },
   { view: "inbox", icon: InboxIcon, key: "nav.inbox" as const },
+  { view: "automations", icon: Zap, key: "nav.automations" as const },
   { view: "analytics", icon: BarChart3, key: "nav.analytics" as const },
   { view: "team", icon: UserCircle, key: "nav.team" as const },
   { view: "settings", icon: Settings, key: "nav.settings" as const },
 ];
 
 /**
- * EVENT ENGINE background trigger (spec Sections 23–24): no production
- * scheduler exists in this deployment, so the app reconciles on mount and
- * then every 5 minutes while open (paused when the tab is hidden). The
- * endpoint is idempotent — concurrent triggers can never duplicate events.
+ * WORKER ORCHESTRATOR background trigger (spec 81–84): no production
+ * scheduler exists in this deployment, so the app runs the full worker
+ * chain (reconcile → project → automations) on mount and then every 5
+ * minutes while open (paused when the tab is hidden). Every step is
+ * idempotent — concurrent triggers can never duplicate events or actions.
  */
-function useEventReconciliationTick() {
-  const reconcile = useReconcileEvents();
+function useWorkersTick() {
+  const runWorkers = useRunWorkers();
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
     started.current = true;
     const run = () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      reconcile.mutate(undefined, {
+      runWorkers.mutate(undefined, {
         onError: () => {
-          /* silent — the bell stays usable; next tick retries (Section 82) */
+          /* silent — the bell and automations stay usable; next tick retries (spec 82) */
         },
       });
     };
@@ -69,7 +72,7 @@ export function LeadOSApp() {
   const seed = useSeed();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  useEventReconciliationTick();
+  useWorkersTick();
 
   useEffect(() => {
     // auto-seed on very first load if there is no org
@@ -136,7 +139,6 @@ export function LeadOSApp() {
       : NAV.some((n) => n.view === route.view) || EXTRA_VIEWS.includes(route.view)
       ? route.view
       : "dashboard";
-
   const renderView = () => {
     switch (currentView) {
       case "leads":
@@ -155,6 +157,8 @@ export function LeadOSApp() {
         return <TeamView />;
       case "notifications":
         return <NotificationsView />;
+      case "automations":
+        return <AutomationsView />;
       case "settings":
         return <SettingsView />;
       default:

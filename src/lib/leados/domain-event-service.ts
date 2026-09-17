@@ -28,6 +28,7 @@ import {
 } from "@/lib/domain-events";
 import { parseNotificationPreferences, type NotificationPreferences } from "@/lib/domain-events";
 import { notificationPreferencesSettingKey } from "./notification-service";
+import { getAutomationExecutionContext } from "./automation-context";
 
 // ---------------------------------------------------------------------------
 // Deep link resolution per event type
@@ -270,6 +271,10 @@ export async function publishDomainEvent(
 ): Promise<{ event: DomainEvent; created: boolean; projection: ProjectionResult }> {
   let event: DomainEvent | null = null;
   let created = false;
+  // CAUSATION (v0.15 spec 29): events published inside an automation
+  // execution are stamped with that execution id — audit trail + loop
+  // protection. Outside an automation this is a plain null.
+  const autoCtx = getAutomationExecutionContext();
   try {
     event = await db.domainEvent.create({
       data: {
@@ -281,6 +286,7 @@ export async function publishDomainEvent(
         occurredAt: input.occurredAt,
         payload: input.payload as Prisma.InputJsonValue,
         deduplicationKey: input.deduplicationKey,
+        automationExecutionId: autoCtx?.executionId ?? null,
       },
     });
     created = true;

@@ -29,6 +29,8 @@ async function main() {
   await db.webhookEndpoint.deleteMany();
   await db.notification.deleteMany();
   await db.domainEvent.deleteMany();
+  await db.automationExecution.deleteMany();
+  await db.automationRule.deleteMany();
   await db.setting.deleteMany();
   await db.scoringConfig.deleteMany();
   await db.customField.deleteMany();

@@ -954,3 +954,60 @@ Stage Summary:
 - FINAL VERDICT: VERIFIED_COMPLETE — see final report in the conversation.
 - Key numbers: 51 new tests (160 total), 9 event types, 500-lead reconciliation ~930ms first run / ~23ms steady-state, zero duplicates by construction (DB unique constraints).
 - Limitations (documented): background execution is client-tick + API trigger (no production scheduler in this deployment); TASK events cover type=TASK only (FOLLOW_UP belongs to the follow-up engine — no double notifications); preferences are per-user Setting rows (real User model exists, so user-scoped).
+
+---
+Task ID: auto-1 (INSPECT)
+Agent: main
+Task: Inspect codebase for AUTOMATION ENGINE (v0.15) integration.
+
+Work Log:
+- Read prisma/schema.prisma: DomainEvent (deduplicationKey unique, processedAt = PROJECTOR-owned), Notification (unique(eventId,userId)), Task (type TASK/FOLLOW_UP), Lead, Setting.
+- Read domain-event-service.ts: publishDomainEvent() creates event + projects notifications; projectEventToNotifications stamps processedAt — MUST NOT be reused by automation.
+- Read event-reconciler.ts: runEventReconciliation(orgId) sweep, batch, idempotent.
+- Read lead-service.ts: updateLead (priority), assignLead, changeStage, createLead — business services for actions.
+- Read tasks route: creates task inline (db.task.create + publishEvent + TASK_ASSIGNED domain event) — to extract into task-service for automation reuse.
+- Read context.ts: getSession(), canManage() = OWNER/ADMIN, canMutate() = !VIEWER.
+- Read app-shell.tsx (NAV + views), hash-route.ts, use-api.ts (React Query patterns), i18n.ts (flat keys hy/ru/en), seed.ts (demo org, runs reconciliation at end).
+- Tests: bun test; DB-backed integration pattern in tests/event-engine.test.ts (throwaway org, cascade cleanup).
+
+Stage Summary:
+- Integration points mapped: event store exists and is durable; projector idempotency = Notification unique(eventId,userId); automation needs OWN AutomationExecution unique(ruleId,eventId).
+- Plan: add AutomationRule + AutomationExecution + DomainEvent.automationExecutionId (causation) + Task automation trace columns; pure condition DSL in src/lib/automation-conditions.ts; engine/processor under src/lib/leados/; worker orchestrator runLeadOSWorkers; API /api/v1/automations/*; UI automations view; seed demo rules; tests.
+
+---
+Task ID: auto-2 (IMPLEMENT: engine + API + UI)
+Agent: main
+Task: Implement AUTOMATION ENGINE v0.15 (rule model → final UI).
+
+Work Log:
+- Prisma: AutomationRule (version, enabledAt backlog guard, deletedAt soft delete) + AutomationExecution (unique(ruleId,eventId), ruleVersion, result JSON) + DomainEvent.automationExecutionId (causation) + Task automation attribution columns. db push OK.
+- Pure modules: automation-conditions.ts (13-field whitelist, 8 operators, ALL/ANY, validation with org-scoped dynamic refs, structured trace), automation-actions.ts (5 action types, validation, interpolation), automation-templates.ts (3 templates, template 4 deliberately omitted per spec 48).
+- Services: automation-context.ts (AsyncLocalStorage causation), task-service.ts + note-service.ts (extracted business paths from routes), automation-engine.ts (processEventRule with tenant/enabled/backlog/idempotency/actionability/loop guards, STOP-on-failure, partial results, retryAutomationExecution that never re-runs already-SUCCESS actions, dryRunAutomationRule), automation-processor.ts (batch: rules by trigger, candidates ASC, one executions query, per-rule enabledAt filter), leados-workers.ts (runLeadOSWorkers: reconcile → project → automations, each step independently try/catch), automation-rule-service.ts (CRUD + validation + version bump on significant edits + metrics via groupBy, no N+1).
+- publishDomainEvent stamps automationExecutionId from ALS (causation chain, spec 29).
+- API: /automations (GET list+summary, POST create OWNER/ADMIN), /automations/[id] (GET/PATCH/DELETE soft), /automations/[id]/dry-run (POST), /automations/executions (GET history), /automations/executions/[id] (GET detail, POST manual retry), /workers/run (POST session OR x-workers-secret).
+- Client tick switched to workers/run (reconcile → project → automations each 5 min).
+- UI: automations-view (rule cards with WHEN/IF/THEN summary + metrics + run-now + templates gallery + history with status filter), rule-builder (vertical WHEN/IF/THEN, structured selects, per-action params, enabledAt hint), execution-detail (condition trace, action results with partial completion, human error only, retry for FAILED), DryRunDialog (lead picker, preview, creates nothing), Automated badge on tasks. i18n HY/RU/EN (126 keys × 3 + stage.type/task.status enums).
+- Seed: 3 demo rules enabled (stale+HIGH→task, FU overdue+HIGH→notify+task, FR breached+HIGH/URGENT→urgent task) + processor run for honest SUCCESS/SKIPPED/FAILED history.
+- Fixed: dynamic i18n key typing (tr wrapper), pre-existing event-engine.test.ts null typing, engine guards (enabled + backlog in processEventRule itself).
+
+Stage Summary:
+- TypeScript PASS, ESLint PASS (0 warnings), tests 229/229 PASS (46 pure condition + 23 engine integration + 160 regression).
+- Next: reseed demo → browser QA → mobile/dark/i18n QA → production build → final report.
+
+---
+Task ID: auto-3 (TEST + BROWSER QA + FINAL VERIFY)
+Agent: main
+Task: Prove the AUTOMATION ENGINE end-to-end: tests, scale, browser QA, repair loops, all gates.
+
+Work Log:
+- Tests: 46 pure condition/action tests (all operators, ALL vs ANY difference, validation failures incl. whitelist traversal attempts + forbidden action types) + 23 DB integration tests (SUCCESS/SKIPPED traces, idempotency ×10, two rules → 2 executions, disabled rule, enabledAt backlog guard, actionability incl. WON lead + STAGE_TIMER_RESET + TASK_COMPLETED + ASSIGNEE_CHANGED, multi-action partial failure with STOP, manual retry after fixing owner [SUCCESS actions not re-run, same execution row], SUCCESS not replayable, causation stamping, chain depth 0/1/2 + depth-5 skip, tenant isolation, dry-run purity ×2, processor ×5 zero duplicates, worker chain).
+- Full suite: 229/229 PASS (160 pre-existing + 69 new). TypeScript PASS, ESLint 0/0, production build PASS (all automation routes present).
+- Scale test (spec 107-108): 500 leads + 667 events + 3 rules → 1167 executions in 12.1s batch; runs 2-5 → 0 duplicates, 23ms steady; rule A conditions respected at scale (225 HIGH tasks, 0 MEDIUM); 34 FAILED all "no owner" (unassigned leads). PASS.
+- Demo seed re-run: honest history — 5 SUCCESS (tasks for stale HIGH deals + overdue FU), SKIPPED (conditions trace + no-longer-actionable), FAILED ("This lead has no owner to assign to." — ExpressDelivery) + 6 automation tasks + 3 automation notifications.
+- Browser QA (agent-browser, 17 screenshots in download/auto-qa/): automations list (summary chips, rule cards, metrics, WHEN/IF/THEN with LOCALIZED enum values), builder (name+condition+URGENT value+task title → saved rule verified via API), dry-run (lead picker → MATCH + condition trace + action preview with resolved assignee name; DB counts unchanged — creates nothing), execution detail (event + condition trace localized + action FAILED + human error + duration), manual Retry after assigning owner (FAILED→SUCCESS, exactly 1 task, same row), pause toggle (enabled=false, enabledAt=null), history status filter with skip reasons (localized), "Run now" workers button, RU locale page, HY default, dark mode, mobile 390×844 (0 horizontal overflow, stacked cards), tasks view "Automated" badges.
+- REPAIR LOOPS: (1) Radix ScrollArea overlapped the Save button in flex dialogs → replaced with native overflow-y-auto in builder/detail/dry-run dialogs; (2) raw enum values in rule chips → localized via enumLabel; (3) inverted switch aria-label fixed; (4) PRE-EXISTING bug found & fixed: tasks GET did not split comma-joined status values (?status=TODO,IN_PROGRESS) → active tasks list was empty since v0.1 — fixed with flatMap split, both contracts work.
+- Console: clean (no page errors, no unexpected console output).
+
+Stage Summary:
+- VERIFIED end-to-end: SLA → DomainEvent → AutomationExecution → Task with zero duplicates; one event + one rule = max one automatic execution — proven by unique constraint, engine tests, ×5 stress and the 500-lead scale test.
+- Remaining (documented): no production cron (client tick 5min + /workers/run with secret header ready); automation action error messages are English human strings; executions stuck in RUNNING from a crash need manual DB fix (documented); processor processes max 1000 candidate events per run.

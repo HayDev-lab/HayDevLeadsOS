@@ -29,6 +29,7 @@ import {
 } from "@/lib/domain-events";
 import { publishDomainEvent } from "./domain-event-service";
 import { runEventReconciliation } from "./event-reconciler";
+import { runAutomationProcessor } from "./automation-processor";
 
 const ORG_SLUG = "haydev-demo";
 
@@ -731,6 +732,97 @@ export async function seed(): Promise<{ orgId: string }> {
         },
       });
     }
+  }
+
+  // AUTOMATION ENGINE demo rules (spec 74–78): three REAL, enabled rules
+  // driven by the same demo state the engines produce. enabledAt covers the
+  // demo event history (all within ~40 days) so the first processor run below
+  // produces an honest mix of SUCCESS / SKIPPED / FAILED executions:
+  //   • stale HIGH-priority deals (AquaService…)  → SUCCESS (task created)
+  //   • overdue follow-up on NORMAL priority leads  → SKIPPED (trace shown)
+  //   • unassigned breached HIGH lead (ExpressDelivery) → FAILED (no owner)
+  {
+    const enabledAt = new Date(Date.now() - 60 * 24 * 3_600_000);
+    await db.automationRule.create({
+      data: {
+        organizationId: orgId,
+        name: "Review stalled high-priority deals",
+        description: "WHEN a deal goes stale and priority is HIGH → task for the owner",
+        enabled: true,
+        enabledAt,
+        triggerType: "STAGE_BECAME_STALE",
+        conditions: { all: [{ field: "lead.priority", operator: "equals", value: "HIGH" }] } as Prisma.InputJsonValue,
+        actions: [
+          {
+            type: "CREATE_TASK",
+            params: {
+              title: "Review stalled deal: {leadName} ({stageName})",
+              description: "Automated: this high-priority deal has been stalled in its stage past the limit.",
+              dueInHours: 24,
+              priority: "HIGH",
+              assignTo: "LEAD_OWNER",
+            },
+          },
+        ] as Prisma.InputJsonValue,
+        createdBy: users[0].id,
+      },
+    });
+    await db.automationRule.create({
+      data: {
+        organizationId: orgId,
+        name: "Escalate overdue high-priority follow-ups",
+        description: "WHEN follow-up overdue + priority HIGH → notify the owner and create an escalation task",
+        enabled: true,
+        enabledAt,
+        triggerType: "FOLLOW_UP_OVERDUE",
+        conditions: { all: [{ field: "lead.priority", operator: "equals", value: "HIGH" }] } as Prisma.InputJsonValue,
+        actions: [
+          {
+            type: "CREATE_NOTIFICATION",
+            params: {
+              recipient: "LEAD_OWNER",
+              message: "Automation: the follow-up for {leadName} is overdue — an escalation task was created for you.",
+            },
+          },
+          {
+            type: "CREATE_TASK",
+            params: {
+              title: "Escalation: overdue follow-up for {leadName}",
+              dueInHours: 8,
+              priority: "URGENT",
+              assignTo: "LEAD_OWNER",
+            },
+          },
+        ] as Prisma.InputJsonValue,
+        createdBy: users[0].id,
+      },
+    });
+    await db.automationRule.create({
+      data: {
+        organizationId: orgId,
+        name: "Urgent first-response escalation",
+        description: "WHEN first response breached on a HIGH/URGENT lead → urgent task for the owner",
+        enabled: true,
+        enabledAt,
+        triggerType: "FIRST_RESPONSE_BREACHED",
+        conditions: { all: [{ field: "lead.priority", operator: "in", value: ["HIGH", "URGENT"] }] } as Prisma.InputJsonValue,
+        actions: [
+          {
+            type: "CREATE_TASK",
+            params: {
+              title: "First response overdue — contact {leadName} now",
+              description: "Automated: this lead is still waiting for a first response.",
+              dueInHours: 4,
+              priority: "URGENT",
+              assignTo: "LEAD_OWNER",
+            },
+          },
+        ] as Prisma.InputJsonValue,
+        createdBy: users[0].id,
+      },
+    });
+    // Generate the honest demo execution history (SUCCESS / SKIPPED / FAILED).
+    await runAutomationProcessor(orgId);
   }
 
   // a notification for the owner about a new unassigned urgent lead

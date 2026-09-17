@@ -333,6 +333,144 @@ export function useReconcileEvents() {
   });
 }
 
+/** WORKER ORCHESTRATOR (v0.15): reconcile → project → process automations. */
+export function useRunWorkers() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ ok: boolean; result: {
+        reconciliation: { eventsCreated?: number; notificationsCreated?: number; error?: string } | null;
+        automations: { executionsCreated?: number; candidateEvents?: number; error?: string } | null;
+      } }>("/workers/run", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["domain-events"] });
+      qc.invalidateQueries({ queryKey: ["automations"] });
+      qc.invalidateQueries({ queryKey: ["automation-executions"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      qc.invalidateQueries({ queryKey: ["leads"] });
+    },
+  });
+}
+
+// ---------- automations (v0.15) ----------
+
+export interface AutomationRuleRow {
+  id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  triggerType: string;
+  conditions: { all?: unknown[]; any?: unknown[] } | null;
+  actions: { type: string; params: Record<string, unknown> }[];
+  version: number;
+  enabledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  metrics: { runs: number; success: number; failed: number; skipped: number; lastRunAt: string | null; lastStatus: string | null };
+}
+
+export interface AutomationExecutionRow {
+  id: string;
+  ruleId: string;
+  eventId: string;
+  status: string;
+  ruleVersion: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
+  skipReason: string | null;
+  result: {
+    trigger?: { eventType: string; occurredAt: string };
+    conditions?: { field: string; operator: string; expected: unknown; actual: unknown; passed: boolean }[];
+    conditionMode?: string;
+    actions?: { type: string; status: string; entityId?: string | null; error?: string | null }[];
+    durationMs?: number;
+    notActionableBecause?: string;
+    chainDepth?: number;
+  } | null;
+  createdAt: string;
+  ruleName: string;
+  eventName: string;
+}
+
+export function useAutomations() {
+  return useQuery({
+    queryKey: ["automations"],
+    queryFn: () =>
+      api.get<{ rows: AutomationRuleRow[]; summary: { rules: number; active: number; runsToday: number; failedTotal: number }; canManage: boolean }>("/automations"),
+  });
+}
+
+export function useAutomationExecutions(filter: { ruleId?: string; status?: string; page?: number } = {}) {
+  const p = new URLSearchParams();
+  if (filter.ruleId) p.set("ruleId", filter.ruleId);
+  if (filter.status) p.set("status", filter.status);
+  p.set("page", String(filter.page ?? 1));
+  return useQuery({
+    queryKey: ["automation-executions", p.toString()],
+    queryFn: () => api.get<{ rows: AutomationExecutionRow[]; total: number }>(`/automations/executions?${p.toString()}`),
+  });
+}
+
+export function useCreateAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => api.post<{ rule: AutomationRuleRow }>("/automations", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["automations"] }),
+  });
+}
+
+export function useUpdateAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: unknown }) => api.patch<{ rule: AutomationRuleRow }>(`/automations/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["automations"] });
+      qc.invalidateQueries({ queryKey: ["automation-executions"] });
+    },
+  });
+}
+
+export function useDeleteAutomation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ rule: AutomationRuleRow }>(`/automations/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["automations"] });
+      qc.invalidateQueries({ queryKey: ["automation-executions"] });
+    },
+  });
+}
+
+export function useDryRunAutomation() {
+  return useMutation({
+    mutationFn: ({ id, leadId }: { id: string; leadId?: string | null }) =>
+      api.post<{ result: {
+        triggerMatched: boolean;
+        conditionsMatched: boolean;
+        conditions: { field: string; operator: string; expected: unknown; actual: unknown; passed: boolean }[];
+        conditionMode: string;
+        actions: { type: string; status: string; summary: string }[];
+        actionabilityNote: string | null;
+        leadId: string | null;
+        leadName: string | null;
+      } }>(`/automations/${id}/dry-run`, leadId ? { leadId } : {}),
+  });
+}
+
+export function useRetryAutomationExecution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ execution: AutomationExecutionRow }>(`/automations/executions/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["automation-executions"] });
+      qc.invalidateQueries({ queryKey: ["automations"] });
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
 export function useDomainEvents(page = 1, limit = 50) {
   return useQuery({
     queryKey: ["domain-events", page, limit],
