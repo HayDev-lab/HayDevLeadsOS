@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound } from "@/lib/leados/api";
 import { archiveLead } from "@/lib/leados/lead-service";
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -12,6 +12,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return ok({ lead: archived });
   } catch (e) {
     if ((e as Error).message === "LEAD_NOT_FOUND") return notFound("lead");
-    return serverError("archive-failed", e);
+    return apiError("archive-failed", e);
   }
 }

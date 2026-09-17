@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, parseJson } from "@/lib/leados/api";
 import { syncLeadToErp } from "@/lib/leados/erp-adapter";
 import { z } from "zod";
 
@@ -21,7 +21,7 @@ export async function GET(_req: Request) {
     });
     return ok({ rows, events });
   } catch (e) {
-    return serverError("erp-list-failed", e);
+    return apiError("erp-list-failed", e);
   }
 }
 
@@ -38,6 +38,6 @@ export async function POST(req: Request) {
     return ok({ sync: record });
   } catch (e) {
     if ((e as Error).message === "LEAD_NOT_FOUND") return notFound("lead");
-    return serverError("erp-sync-failed", e);
+    return apiError("erp-sync-failed", e);
   }
 }

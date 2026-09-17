@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson } from "@/lib/leados/api";
 import {
   countUnreadNotifications,
   listNotifications,
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     const result = await listNotifications(session.orgId, session.userId, { filter, page, limit });
     return ok(result);
   } catch (e) {
-    return serverError("notifications-list-failed", e);
+    return apiError("notifications-list-failed", e);
   }
 }
 
@@ -66,6 +66,6 @@ export async function PATCH(req: Request) {
     const marked = await markNotificationRead(session.orgId, session.userId, id);
     return ok({ ok: marked });
   } catch (e) {
-    return serverError("notification-update-failed", e);
+    return apiError("notification-update-failed", e);
   }
 }

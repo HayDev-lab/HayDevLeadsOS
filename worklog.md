@@ -1071,3 +1071,59 @@ Stage Summary:
 - PROOF spec 74: scheduler ran trigger=scheduler runs (60s interval) with NO browser — WorkerRun rows verified; UI shows them.
 - Live HTTP: parallel workers/run → 200 SUCCESS + 409 LEASE_BUSY.
 - Browser QA: 17 screenshots (worker health, integrations incl. SSRF-block toast, channel prefs + save verified in DB, notifications delivery chips, failed jobs + manual retry → PENDING → scheduler SENT, rule builder external actions + endpoint picker, execution detail localized error, mobile 390×844 no overflow, dark mode, fresh-session console 0 errors).
+
+---
+Task ID: v0.17-1 (INSPECT)
+Agent: main
+Task: Inspect auth/tenant state before production authentication (v0.17).
+
+Work Log:
+- getSession() trusted leados_uid cookie WITHOUT verification (any user impersonation) + implicit fallback to first org OWNER — no real auth existed.
+- User: single-org (organizationId + role columns), email unique per org, NO passwordHash/locale/timezone; 5 roles (OWNER/ADMIN/MANAGER/SALES_MANAGER/VIEWER); no membership entity, no sessions, no invites, no security audit.
+- next-auth@4 installed but unused (incompatible with Next 16 App Router patterns) → decision: custom secure email/password auth (spec-allowed), runtime is bun everywhere.
+- Prefs: org Setting rows keyed notification_preferences:<userId> (fanout + projector + prefs route call sites mapped).
+- fanout renders in ORG locale (users had no locale column); Activity.userId nullable + automation actorUserId null (system actor pattern already present).
+- Session/seed routes unguarded; no middleware; IDOR pattern verified GOOD across routes (findUnique + organizationId check everywhere).
+
+Stage Summary:
+- Plan: schema (OrganizationMember/Session/PasswordResetToken/OrganizationInvite/AuditLog/UserNotificationPreference + User passwordHash/locale/timezone/global email + org isDemo) → backfill → auth libs (password/tokens/session-store/rate-limit/permissions/audit/auth-service) → context rework (production path + demo fallback + membership revalidation) → apiError codemod → auth/members/audit routes → proxy.ts (CSRF+headers) → services migration (prefs table + user locale) → UI (login/invite/profile/team/audit tabs + user menu + permission gating) → seed → tests → QA.
+
+---
+Task ID: v0.17-2 (IMPLEMENT: production auth)
+Agent: main
+Task: Implement full v0.17 production authentication, membership, permissions, tenant isolation, audit.
+
+Work Log:
+- PRISMA: 6 new models (OrganizationMember unique(org,user), Session tokenHash-unique + absolute 30d + idle 7d rolling + revokedAt, PasswordResetToken hashed+1h+single-use, OrganizationInvite tokenHash+7d+single-use+org/email-bound, AuditLog actor-typed append-only, UserNotificationPreference composite PK) + User.passwordHash/locale/timezone + global email @unique + Organization.isDemo. db push OK.
+- BACKFILL (scripts/auth-backfill.ts, idempotent): 4 memberships ensured, MANAGER/SALES_MANAGER→MEMBER, demo org flagged isDemo, prefs Setting→UserNotificationPreference (9 rows), user locale/timezone from org.
+- AUTH CORE: password.ts (Bun bcrypt cost 12 + scrypt fallback + policy), tokens.ts (32B base64url + sha256 + timing-safe), session-store.ts (create/validate with throttled idle-touch/revoke/revokeAll/list + HttpOnly SameSite=Lax cookie, Secure in prod), rate-limit.ts (sliding window + escalating lockout 15m→60m cap), permissions.ts (17 PERMISSIONS constants + ROLE_PERMISSIONS OWNER/ADMIN/MEMBER/VIEWER + normalizeRole legacy map + can()), audit.ts (30 AUDIT_ACTIONS + actor types USER/AUTOMATION/WORKER/SYSTEM/ANONYMOUS).
+- context.ts REWORK: production path = cookie token → DB session → ACTIVE user → ACTIVE membership in active org (fallback hop to remaining membership when lost, spec 29); role/permissions from MEMBERSHIP (user.role cache never trusted); demo path = demo org only (leados_uid switcher strictly inside isDemo org); AuthRequiredError/ForbiddenError → apiError() maps 401/403.
+- CODEMOD: 80 API route files serverError→apiError (200 replacements).
+- ROUTES: auth/login (performLogin service: IP+email rate limit, lockout, enumeration-safe, audit, rotation), logout(+all), me (memberships+sessions), switch-org (membership-validated, demo blocked), bootstrap (one-time gate while zero password accounts; demo-org emails rejected), forgot/reset-password (hashed 1h single-use token, all sessions revoked; email via provider when configured else server console), demo-login (LEADOS_DEMO only), profile (name/locale/timezone), password change (current required, other sessions revoked), invite/accept (acceptInvite service: atomic single-use claim in transaction, new-user + existing-user paths).
+- members API: GET list+invites (TEAM_READ), POST invite (MEMBER_MANAGE; OWNER-only ADMIN invites; OWNER never grantable), invite/[id] resend (token rotation)/revoke, members/[id] PATCH role (last-owner 409 BEFORE self-change 400; admin scope 403) / DELETE (last owner 409, admin scope, invite cleanup); users route membership-based; session POST demo-only; seed guarded (empty DB or demo mode).
+- member-service + auth-service extracted (cookie-free, testable); audit wired into login/logout/invites/member CRUD/automation CRUD+enable-disable/webhook CRUD+secret ROTATION (POST webhooks/[id]).
+- SERVICES: notification-service + projector + fanout → UserNotificationPreference table; fanout renders in RECIPIENT locale (User.locale, org fallback).
+- MIDDLEWARE→proxy.ts (Next 16 convention): CSRF Origin check for mutating /api/v1 (webhook/workers/ingest exempt), security headers (nosniff, SAMEORIGIN, referrer, permissions-policy, CSP, HSTS in prod), no CORS ever.
+- UI: login screen (login card + demo button gated by server probe + forgot + reset + first-run BootstrapCard), InviteScreen, user menu (profile/org switcher when multi-org/logout/logout-all; demo switcher only in demo), SettingsView: Profile tab (name/locale/timezone/password/sessions), Team tab (members, role select, remove, invite dialog with shareable link), Security Audit tab (filter+pagination); admin tabs hidden without permission (MEMBER sees 3 tabs); DemoBadge only for demo sessions; ?tab= deep-link.
+- SEED: isDemo org, memberships per user, prefs rows, MEMBER roles.
+- i18n: ~96 keys ×3 locales.
+
+Stage Summary:
+- TypeScript PASS, ESLint PASS, 323/323 tests PASS (283 regression + 40 new), production build PASS.
+
+---
+Task ID: v0.17-3 (SECURITY TESTS + QA + FINAL VERIFY)
+Agent: main
+Task: Prove the auth system: unit/integration tests, live HTTP QA, tenant load test, browser QA both modes.
+
+Work Log:
+- tests/auth-security.test.ts (40 tests): password hash/verify/policy; tokens; rate limiter window/lockout/clear; permission map incl. legacy MANAGER→MEMBER; session store (hash-only storage, idle+absolute expiry, revoke, revokeAll, disabled user); performLogin (success+audit, enumeration-safe, 5-fail lockout blocks even correct password); resolveAuthenticatedSessionFromToken (membership role beats user.role cache, garbage/revoked→null, membership-loss→null or safe fallback to other org with pointer self-heal, escalation via cache impossible); member guards (MEMBER cannot invite, OWNER not grantable by invite, ADMIN scope, last-owner 409, self-demotion guard, role-cache sync, removal kills session immediately); invite lifecycle (new-user accept+session, reuse→ALREADY_USED, expired, revoked, existing-user requires matching session, token rotation); cross-tenant service write blocked (LEAD_NOT_FOUND); demo isolation (demo user pinned to demo org even with forged pointer); audit actor-typed rows; personal prefs roundtrip (no org Setting rows); fanout renders RU for ru-locale user in hy org.
+- scripts/auth-http-qa.ts: PROD pass 47/47 (unauth 401s ×6, demo switcher/demo-login 403, headers, CSRF foreign origin 403, brute-force 429, bootstrap→login cookie HttpOnly+SameSite, enumeration-safe 401, cross-tenant read/write 404, org switch no-membership 404, invite create/accept/reuse, MEMBER automation/webhook 403 + read-only automations, role escalation blocked, OWNER positives, removed membership→immediate 401, logout/logout-all kill both sessions, workers without session 401); workers with x-workers-secret 200; telegram webhook secret-verified 401 without; public ingest 200. DEMO pass 4/4. Self-cleaning QA orgs.
+- scripts/auth-tenant-load-test.ts (spec 89): 10 orgs × 5 users × 50 leads; every org sees exactly own 50; 90/90 cross-tenant write probes blocked; 90/90 read probes blocked; session resolution 2.8ms/request; cascade cleanup zero leftovers.
+- Browser QA (27 screenshots, download/v017-qa/): demo mode (dashboard + DEMO·synthetic banner, settings 16 tabs for OWNER, Profile tab functional, Team tab with invite dialog → link extraction → second-session acceptance → Anna QA MEMBER joined → MEMBER sees only 3 settings tabs + automations without create button → owner removes her via UI with confirm, Security Audit tab shows MEMBER_INVITED/INVITE_ACCEPTED/LOGIN_SUCCESS, user menu, dark mode, mobile 390×844 no overflow, console clean); production mode (BootstrapCard first-run → Real Estate Co + OWNER Sona → workspace WITHOUT demo banner → invite Tigran → accepts with own session → user menu Logout/Logout everywhere → logout → login screen → login as Sona → dashboard; mobile login screen no overflow; zero console errors). QA orgs deleted after.
+- REPAIR LOOPS during QA: (1) removed-member login edge → performLogin now rejects NO_ORGANIZATION (clear 403, no zombie session); (2) last-owner guard reordered BEFORE self-change guard (409 semantics); (3) Next 16 deprecation → middleware.ts renamed proxy.ts (headers verified still applied); (4) test type-guards for true|ServiceError unions; (5) dev-server restart after production build (.next swap).
+
+Stage Summary:
+- VERIFIED: user Org A physically cannot read, write or trigger anything in Org B even with forged API payloads — proven at service level, live HTTP level (47/47), scale level (90/90 probes) and browser level.
+- Final state: demo mode restored (LEADOS_DEMO=true), 323/323 tests, TS PASS, ESLint PASS, production build PASS, console clean.
+- Remaining limitations documented in final report (invite delivery without email provider = shareable link; CSP allows unsafe-inline/eval for Next; password reset via console log in self-hosted mode without provider; lead visibility policy = org-wide for MEMBER; executions history in AuditLog retained forever until org deletion).

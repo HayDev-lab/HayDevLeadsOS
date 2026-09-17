@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 
 export async function GET() {
@@ -10,7 +10,7 @@ export async function GET() {
     const rows = await db.tag.findMany({ where: { organizationId: session.orgId }, orderBy: { name: "asc" } });
     return ok({ rows });
   } catch (e) {
-    return serverError("tags-list-failed", e);
+    return apiError("tags-list-failed", e);
   }
 }
 
@@ -28,6 +28,6 @@ export async function POST(req: Request) {
     });
     return ok({ tag });
   } catch (e) {
-    return serverError("tag-create-failed", e);
+    return apiError("tag-create-failed", e);
   }
 }

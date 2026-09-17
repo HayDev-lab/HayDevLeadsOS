@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ok, badRequest, serverError, validate } from "@/lib/leados/api";
+import { ok, badRequest, apiError, validate } from "@/lib/leados/api";
 import { LeadCreate } from "@/lib/schemas/lead";
 import { createLead } from "@/lib/leados/lead-service";
 import { parseUtm, recordAttribution } from "@/lib/leados/attribution";
@@ -57,6 +57,6 @@ export async function POST(req: Request) {
     if (utm) await recordAttribution(result.lead.id, v.value.sourceType ?? "website", utm);
     return ok({ leadId: result.lead.id, duplicate: result.duplicate, created: result.created });
   } catch (e) {
-    return serverError("ingest-failed", e);
+    return apiError("ingest-failed", e);
   }
 }

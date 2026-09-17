@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { serverError } from "@/lib/leados/api";
+import { apiError } from "@/lib/leados/api";
 import { toCsv } from "@/lib/leados/attribution";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 import { SLA_STATUS, computeFirstResponseSla, type SlaStatus } from "@/lib/sla";
@@ -177,6 +177,6 @@ export async function GET(req: Request) {
       },
     });
   } catch (e) {
-    return serverError("export-failed", e);
+    return apiError("export-failed", e);
   }
 }

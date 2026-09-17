@@ -15,7 +15,9 @@ async function jfetch<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await res.json();
       msg = body?.error ?? msg;
     } catch {}
-    throw new Error(msg || `Request failed: ${res.status}`);
+    const err = new Error(msg || `Request failed: ${res.status}`) as Error & { status?: number };
+    err.status = res.status;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -34,14 +36,203 @@ export const api = {
 export function useSession() {
   return useQuery({
     queryKey: ["session"],
+    retry: false,
     queryFn: () =>
       api.get<{
         session: {
-          user: { id: string; name: string; email: string; role: string; title?: string | null; avatarColor?: string | null };
-          organization: { id: string; name: string; slug: string; locale: string; timezone: string; currency: string };
+          user: { id: string; name: string; email: string; role: string; title?: string | null; avatarColor?: string | null; locale: string; timezone: string };
+          organization: { id: string; name: string; slug: string; locale: string; timezone: string; currency: string; isDemo: boolean };
+          orgId: string;
+          userId: string;
+          role: string;
+          permissions: string[];
+          demo: boolean;
+          authenticated: boolean;
         };
         users: { id: string; name: string; email: string; role: string; title?: string | null; avatarColor?: string | null }[];
       }>("/session"),
+  });
+}
+
+// ---------- v0.17 AUTH ----------
+
+export function useLogin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email: string; password: string }) =>
+      api.post<{ ok: boolean; user: { id: string; name: string } }>("/auth/login", body),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+export function useDemoLogin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean; demo: boolean }>("/auth/demo-login"),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+export function useLogout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (all?: boolean) => api.post<{ ok: boolean; revoked: number }>("/auth/logout", { all: all ?? false }),
+    onSuccess: () => {
+      qc.clear();
+      if (typeof window !== "undefined") window.location.reload();
+    },
+  });
+}
+
+export function useForgotPassword() {
+  return useMutation({
+    mutationFn: (email: string) => api.post<{ ok: boolean; message: string }>("/auth/forgot-password", { email }),
+  });
+}
+
+export function useResetPassword() {
+  return useMutation({
+    mutationFn: (body: { token: string; password: string }) =>
+      api.post<{ ok: boolean; sessionsRevoked: number }>("/auth/reset-password", body),
+  });
+}
+
+export function useBootstrapStatus() {
+  return useQuery({
+    queryKey: ["auth-bootstrap-status"],
+    retry: false,
+    queryFn: () => api.get<{ bootstrapOpen: boolean; hasData: boolean }>("/auth/bootstrap"),
+  });
+}
+
+export function useBootstrap() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email: string; password: string; name?: string; organizationName?: string }) =>
+      api.post<{ ok: boolean; created?: boolean; claimed?: boolean }>("/auth/bootstrap", body),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+export function useAcceptInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { token: string; name?: string; password?: string }) =>
+      api.post<{ ok: boolean; joined?: boolean; alreadyMember?: boolean; organization?: { name: string } }>("/auth/invite/accept", body),
+    onSuccess: () => qc.invalidateQueries(),
+  });
+}
+
+export function useAuthMe() {
+  return useQuery({
+    queryKey: ["auth-me"],
+    retry: false,
+    queryFn: () =>
+      api.get<{
+        memberships: { organizationId: string; role: string; active: boolean; organization: { id: string; name: string; slug: string; isDemo: boolean } }[];
+        sessions: { id: string; ip: string | null; userAgent: string | null; createdAt: string; lastSeenAt: string; expiresAt: string; current: boolean }[];
+      }>("/auth/me"),
+  });
+}
+
+export function useSwitchOrg() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (organizationId: string) =>
+      api.post<{ ok: boolean; organization: { id: string; name: string } }>("/auth/switch-org", { organizationId }),
+    onSuccess: () => {
+      qc.clear();
+      if (typeof window !== "undefined") window.location.hash = "#/dashboard";
+      return qc.invalidateQueries();
+    },
+  });
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name?: string; locale?: string; timezone?: string }) =>
+      api.put<{ ok: boolean; user: { name: string; locale: string; timezone: string } }>("/auth/profile", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["session"] });
+      qc.invalidateQueries({ queryKey: ["profile"] });
+    },
+  });
+}
+
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (body: { currentPassword: string; newPassword: string }) =>
+      api.post<{ ok: boolean; otherSessionsRevoked: number }>("/auth/password", body),
+  });
+}
+
+export function useMembers() {
+  return useQuery({
+    queryKey: ["members"],
+    queryFn: () =>
+      api.get<{
+        members: { id: string; userId: string; name: string; email: string; userStatus: string; role: string; title?: string | null; avatarColor?: string | null; joinedAt: string; isSelf: boolean }[];
+        invites: { id: string; email: string; role: string; invitedBy: string | null; createdAt: string; expiresAt: string }[];
+        canManage: boolean;
+        myRole: string;
+      }>("/members"),
+  });
+}
+
+export function useInviteMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { email: string; role: string }) =>
+      api.post<{ ok: boolean; inviteUrl: string; emailed: boolean; expiresAt: string }>("/members/invite", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["members"] }),
+  });
+}
+
+export function useResendInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ ok: boolean; inviteUrl: string; emailed: boolean }>(`/members/invite/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["members"] }),
+  });
+}
+
+export function useRevokeInvite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/members/invite/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["members"] }),
+  });
+}
+
+export function useChangeMemberRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, role }: { id: string; role: string }) =>
+      api.patch<{ ok: boolean }>(`/members/${id}`, { role }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["members"] }),
+  });
+}
+
+export function useRemoveMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/members/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["members"] }),
+  });
+}
+
+export function useAuditLog(action?: string, page = 1) {
+  return useQuery({
+    queryKey: ["audit", action ?? "all", page],
+    queryFn: () =>
+      api.get<{
+        rows: { id: string; actor: string; actorType: string; action: string; resourceType: string; resourceId: string | null; metadata: unknown; ip: string | null; createdAt: string }[];
+        total: number;
+        page: number;
+        availableActions: string[];
+      }>(`/audit?action=${encodeURIComponent(action ?? "")}&page=${page}`),
   });
 }
 

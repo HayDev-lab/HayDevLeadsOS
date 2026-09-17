@@ -22,6 +22,10 @@ model Organization {
   locale    String   @default("hy") // hy | ru | en
   timezone  String   @default("Asia/Yerevan")
   currency  String   @default("AMD")
+  /// DEMO ISOLATION (v0.17 spec 26): a synthetic demo org holds only demo
+  /// data. Demo sessions resolve exclusively inside isDemo orgs and can
+  /// never see real organizations (and vice versa via membership).
+  isDemo    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -52,15 +56,36 @@ model Organization {
   notes                  Note[]
   leadEvents             LeadEvent[]
   lostLeadFlags          LostLeadFlag[]
+  // v0.17 AUTH
+  members                OrganizationMember[]
+  invites                OrganizationInvite[]
+  auditLogs              AuditLog[]
 }
 
 model User {
   id                  String    @id @default(cuid())
+  /// ACTIVE ORGANIZATION POINTER (v0.17): the org the user currently works
+  /// in. ALWAYS validated against an ACTIVE OrganizationMember row in
+  /// getSession() — the membership table is the source of truth for access;
+  /// this column only keeps existing org-scoped queries working.
   organizationId      String
   name                String
-  email               String
-  role                String    @default("MANAGER") // UserRole
-  status              String    @default("ACTIVE") // UserStatus
+  /// GLOBALLY UNIQUE (login identity). One human = one account with
+  /// memberships in many organizations.
+  email               String    @unique
+  /// Legacy active-org role CACHE, synced from OrganizationMember on every
+  /// membership change / org switch. NEVER used for authorization decisions —
+  /// permission checks read the membership role.
+  role                String    @default("MEMBER")
+  status              String    @default("ACTIVE") // ACTIVE | INVITED
+  /// PRODUCTION AUTH (v0.17): null for demo-only users (no password login);
+  /// bcrypt (Bun.password) / scrypt fallback — never plaintext.
+  passwordHash        String?
+  /// PERSONAL LOCALE (v0.17 spec 48): delivery content prefers the user's
+  /// locale and falls back to the org locale.
+  locale              String    @default("hy")
+  /// PERSONAL TIMEZONE (v0.17 spec 49): relative times in notifications.
+  timezone            String    @default("Asia/Yerevan")
   title               String?
   phone               String?
   avatarColor         String?
@@ -79,10 +104,143 @@ model User {
   activities      Activity[]
   notes           Note[]
   events          LeadEvent[]
-  notifications   Notification[]
+  notifications    Notification[]
+  // v0.17 AUTH
+  sessions              Session[]
+  memberships           OrganizationMember[]
+  notificationPrefs     UserNotificationPreference[]
+  invitesSent           OrganizationInvite[]       @relation("InviteSender")
+  passwordResets        PasswordResetToken[]
+  auditLogs             AuditLog[]
 
-  @@unique([organizationId, email])
   @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// v0.17 PRODUCTION AUTH — MEMBERSHIP, SESSIONS, INVITES, AUDIT
+// Multi-tenant access control. NEVER trust a client-supplied organizationId,
+// userId or role: every request re-validates membership server-side.
+// ---------------------------------------------------------------------------
+
+/// A user's membership + role inside one organization. The ROLE stored here
+/// (OWNER | ADMIN | MEMBER | VIEWER) is the ONLY source of truth for
+/// authorization. Removed membership = the row is deleted (immediate block).
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           String // OWNER | ADMIN | MEMBER | VIEWER
+  status         String   @default("ACTIVE")
+  joinedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+/// Server-side session store — opaque random token, only its SHA-256 hash is
+/// persisted. Cookie: HttpOnly + SameSite=Lax + Secure (production). Absolute
+/// expiry 30d + rolling idle expiry 7d. Revocation = row delete / revokedAt.
+model Session {
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String    @unique
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  /// Absolute expiry — the session dies regardless of activity.
+  expiresAt     DateTime
+  /// Idle expiry — extended (rolling) on activity, capped by expiresAt.
+  idleExpiresAt DateTime
+  revokedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// One-time password reset token (hashed). Expiry 1h, single use, and
+/// completing a reset revokes ALL of the user's sessions.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime // 1 hour
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Organization invite. Cryptographically random token (hashed here),
+/// org-bound + email-bound, expires (7d), single use. Roles ADMIN | MEMBER |
+/// VIEWER — OWNER can never be granted via invite (explicit transfer only).
+model OrganizationInvite {
+  id               String    @id @default(cuid())
+  organizationId   String
+  email            String // lowercased
+  role             String // ADMIN | MEMBER | VIEWER
+  status           String    @default("PENDING") // PENDING | ACCEPTED | REVOKED | EXPIRED
+  tokenHash        String    @unique
+  invitedById      String?
+  expiresAt        DateTime // 7 days
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User?         @relation("InviteSender", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([email])
+}
+
+/// SECURITY AUDIT (append-only, separate from Lead Activity). Never edited
+/// from the UI; rows are inserted by the server on security-sensitive events.
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  actorUserId    String?
+  /// USER | AUTOMATION | WORKER | SYSTEM | ANONYMOUS (spec 39-41: workers and
+  /// automations are NOT fake users).
+  actorType      String
+  action         String // e.g. MEMBER_INVITED, LOGIN_SUCCESS, WEBHOOK_SECRET_ROTATED
+  resourceType   String // e.g. member, session, integration
+  resourceId     String?
+  metadata       Json?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([action])
+}
+
+/// PERSONAL NOTIFICATION PREFERENCES (v0.17 spec 50): user-owned storage
+/// (was org Setting rows keyed by userId). One row per (user, event type);
+/// channel flags default OFF for external channels (spec 98 of v0.16).
+model UserNotificationPreference {
+  userId    String
+  eventType String
+  inApp     Boolean  @default(true)
+  email     Boolean  @default(false)
+  telegram  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventType])
 }
 
 // ---------------------------------------------------------------------------

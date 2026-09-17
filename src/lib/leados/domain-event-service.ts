@@ -26,8 +26,7 @@ import {
   type PlannedEvent,
   type Severity,
 } from "@/lib/domain-events";
-import { parseNotificationPreferences, type NotificationPreferences } from "@/lib/domain-events";
-import { notificationPreferencesSettingKey } from "./notification-service";
+import { DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/lib/domain-events";
 import { getAutomationExecutionContext } from "./automation-context";
 
 // ---------------------------------------------------------------------------
@@ -146,23 +145,20 @@ export async function getPreferencesFor(
     else missing.push(uid);
   }
   if (!missing.length) return result;
-  const rows = await db.setting.findMany({
-    where: {
-      organizationId: orgId,
-      key: { in: missing.map((uid) => notificationPreferencesSettingKey(uid)) },
-    },
+  // v0.17: PERSONAL preferences — UserNotificationPreference rows (one
+  // batched query per projector run; orgId kept for signature stability).
+  const rows = await db.userNotificationPreference.findMany({
+    where: { userId: { in: missing } },
   });
-  for (const row of rows) {
-    const uid = row.key.slice(notificationPreferencesSettingKey("").length);
-    const prefs = parseNotificationPreferences(row.value);
+  for (const uid of missing) {
+    const prefs = { ...DEFAULT_NOTIFICATION_PREFERENCES };
+    for (const row of rows) {
+      if (row.userId === uid && row.eventType in prefs) {
+        (prefs as Record<string, boolean>)[row.eventType] = row.inApp;
+      }
+    }
     result.set(uid, prefs);
     cache?.set(uid, prefs);
-  }
-  for (const uid of missing) {
-    if (!result.has(uid)) {
-      result.set(uid, parseNotificationPreferences(null));
-      cache?.set(uid, parseNotificationPreferences(null));
-    }
   }
   return result;
 }

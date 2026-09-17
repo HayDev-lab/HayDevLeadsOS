@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson } from "@/lib/leados/api";
 import { parseCsv } from "@/lib/leados/attribution";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 import { createLead } from "@/lib/leados/lead-service";
@@ -74,6 +74,6 @@ export async function POST(req: Request) {
     }
     return ok({ imported: { created, updated, skipped, errors }, total: rows.length });
   } catch (e) {
-    return serverError("import-failed", e);
+    return apiError("import-failed", e);
   }
 }

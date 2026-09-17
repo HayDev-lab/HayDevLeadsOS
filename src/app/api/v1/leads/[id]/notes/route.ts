@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { NoteCreate } from "@/lib/schemas/lead";
 import { LEAD_EVENT } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
@@ -19,7 +19,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     });
     return ok({ rows });
   } catch (e) {
-    return serverError("notes-list-failed", e);
+    return apiError("notes-list-failed", e);
   }
 }
 
@@ -50,6 +50,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     });
     return ok({ note });
   } catch (e) {
-    return serverError("note-create-failed", e);
+    return apiError("note-create-failed", e);
   }
 }

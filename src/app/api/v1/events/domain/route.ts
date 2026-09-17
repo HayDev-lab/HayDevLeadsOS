@@ -1,7 +1,7 @@
 // GET /api/v1/events/domain — DEV-ONLY event inspector (spec Section 86):
 // type / entity / dedup key / occurredAt for QA. Tenant-scoped, paginated.
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { listDomainEvents } from "@/lib/leados/domain-event-service";
 
 export async function GET(req: Request) {
@@ -28,6 +28,6 @@ export async function GET(req: Request) {
       limit,
     });
   } catch (e) {
-    return serverError("domain-events-list-failed", e);
+    return apiError("domain-events-list-failed", e);
   }
 }

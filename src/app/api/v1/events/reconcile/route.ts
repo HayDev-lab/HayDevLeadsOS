@@ -8,7 +8,7 @@
 // while open (client tick) — plus this endpoint works as the manual/dev
 // runner target. A real cron/worker can call it unchanged later.
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { runEventReconciliation } from "@/lib/leados/event-reconciler";
 
 export async function POST() {
@@ -17,6 +17,6 @@ export async function POST() {
     const summary = await runEventReconciliation(session.orgId);
     return ok({ ok: true, summary });
   } catch (e) {
-    return serverError("event-reconciliation-failed", e);
+    return apiError("event-reconciliation-failed", e);
   }
 }

@@ -1,11 +1,18 @@
 // PATCH  /api/v1/integrations/webhooks/:id — toggle / edit endpoint (SSRF re-validated).
+// POST   /api/v1/integrations/webhooks/:id — ROTATE the signing secret (v0.17
+//         spec 58): a fresh HMAC secret replaces the old one immediately
+//         (old signatures stop verifying); the secret itself never leaves
+//         the server.
 // DELETE /api/v1/integrations/webhooks/:id — remove endpoint (delivery rows keep history).
 import { db } from "@/lib/db";
 import { getSession, canManage } from "@/lib/leados/context";
-import { ok, badRequest, notFound, forbidden, serverError, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, notFound, forbidden, apiError, parseJson } from "@/lib/leados/api";
 import { validateWebhookUrl } from "@/lib/leados/delivery/ssrf";
+import { recordAudit, requestMeta, AUDIT_ACTIONS, AUDIT_ACTOR } from "@/lib/leados/auth/audit";
+import { randomBytes } from "crypto";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const meta = requestMeta(req);
   try {
     const session = await getSession();
     if (!canManage(session.role)) return forbidden("Only owners and admins manage webhook endpoints");
@@ -33,13 +40,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       data,
       select: { id: true, name: true, url: true, events: true, enabled: true },
     });
+    await recordAudit({
+      organizationId: session.orgId,
+      actorUserId: session.userId,
+      actorType: AUDIT_ACTOR.USER,
+      action: AUDIT_ACTIONS.WEBHOOK_UPDATED,
+      resourceType: "webhook-endpoint",
+      resourceId: id,
+      metadata: { fields: Object.keys(data) },
+      ...meta,
+    });
     return ok({ endpoint: updated });
   } catch (e) {
-    return serverError("integrations-webhooks-update-failed", e);
+    return apiError("integrations-webhooks-update-failed", e);
+  }
+}
+
+/** SECRET ROTATION (spec 58): old secret stops working immediately. */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const meta = requestMeta(req);
+  try {
+    const session = await getSession();
+    if (!canManage(session.role)) return forbidden("Only owners and admins manage webhook endpoints");
+    const { id } = await params;
+    const endpoint = await db.webhookEndpoint.findFirst({ where: { id, organizationId: session.orgId } });
+    if (!endpoint) return notFound("Endpoint not found");
+
+    await db.webhookEndpoint.update({
+      where: { id },
+      data: { secret: randomBytes(24).toString("hex") },
+    });
+    await recordAudit({
+      organizationId: session.orgId,
+      actorUserId: session.userId,
+      actorType: AUDIT_ACTOR.USER,
+      action: AUDIT_ACTIONS.WEBHOOK_SECRET_ROTATED,
+      resourceType: "webhook-endpoint",
+      resourceId: id,
+      metadata: { name: endpoint.name },
+      ...meta,
+    });
+    return ok({ ok: true, secretNote: "A new signing secret was generated. Update the receiving side." });
+  } catch (e) {
+    return apiError("integrations-webhooks-rotate-failed", e);
   }
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const meta = requestMeta(_req);
   try {
     const session = await getSession();
     if (!canManage(session.role)) return forbidden("Only owners and admins manage webhook endpoints");
@@ -47,8 +95,18 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const endpoint = await db.webhookEndpoint.findFirst({ where: { id, organizationId: session.orgId } });
     if (!endpoint) return notFound("Endpoint not found");
     await db.webhookEndpoint.delete({ where: { id } });
+    await recordAudit({
+      organizationId: session.orgId,
+      actorUserId: session.userId,
+      actorType: AUDIT_ACTOR.USER,
+      action: AUDIT_ACTIONS.WEBHOOK_DELETED,
+      resourceType: "webhook-endpoint",
+      resourceId: id,
+      metadata: { name: endpoint.name, url: endpoint.url },
+      ...meta,
+    });
     return ok({ ok: true });
   } catch (e) {
-    return serverError("integrations-webhooks-delete-failed", e);
+    return apiError("integrations-webhooks-delete-failed", e);
   }
 }

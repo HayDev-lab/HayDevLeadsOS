@@ -1,7 +1,7 @@
 // GET /api/v1/automations/executions — org-wide execution history (spec 50).
 // Filters: ?ruleId=&status=&page=&limit= — Members may view history (spec 73).
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { listAutomationExecutions } from "@/lib/leados/automation-rule-service";
 
 export async function GET(req: Request) {
@@ -20,6 +20,6 @@ export async function GET(req: Request) {
     });
     return ok(result);
   } catch (e) {
-    return serverError("automations-executions-failed", e);
+    return apiError("automations-executions-failed", e);
   }
 }

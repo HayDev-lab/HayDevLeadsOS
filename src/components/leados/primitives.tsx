@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { PRIORITY, SCORE_CATEGORY, type ScoreCategory } from "@/lib/leados/constants";
 import { useT } from "@/lib/leados/locale";
 import { initials } from "@/lib/leados/normalize";
+import { useSession } from "@/hooks/leados/use-api";
 
 // ---------- time ----------
 
@@ -218,10 +219,15 @@ export function EmptyState({ icon: Icon, title, hint }: { icon: typeof Globe; ti
 // ---------- demo badge ----------
 
 export function DemoBadge() {
+  // v0.17 (spec 67–68): the DEMO MODE banner renders ONLY for demo sessions
+  // — a production login never shows synthetic-data hints.
+  const { data } = useSession();
+  const isDemo = data?.session?.demo ?? false;
   const t = useT();
+  if (!isDemo) return null;
   return (
     <Badge variant="secondary" className="border border-amber-300/60 bg-amber-100/70 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-      {t("common.demo")}
+      {t("common.demo")} · {t("common.demoSynthetic")}
     </Badge>
   );
 }

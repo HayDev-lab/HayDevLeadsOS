@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 import { ACTIVITY_TYPE, LEAD_EVENT } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
@@ -70,6 +70,6 @@ export async function POST(req: Request) {
 
     return ok({ updated, total: leads.length });
   } catch (e) {
-    return serverError("bulk-failed", e);
+    return apiError("bulk-failed", e);
   }
 }

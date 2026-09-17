@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, serverError, validate, parseJson, badRequest } from "@/lib/leados/api";
+import { ok, apiError, validate, parseJson, badRequest } from "@/lib/leados/api";
 import { TaskCreate } from "@/lib/schemas/lead";
 import { TASK_TYPE } from "@/lib/leados/constants";
 import { createTask } from "@/lib/leados/task-service";
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
     });
     return ok({ rows });
   } catch (e) {
-    return serverError("tasks-list-failed", e);
+    return apiError("tasks-list-failed", e);
   }
 }
 
@@ -54,6 +54,6 @@ export async function POST(req: Request) {
       throw e;
     }
   } catch (e) {
-    return serverError("task-create-failed", e);
+    return apiError("task-create-failed", e);
   }
 }

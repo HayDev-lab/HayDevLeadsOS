@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -14,7 +14,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     await db.customField.delete({ where: { id } });
     return ok({ ok: true });
   } catch (e) {
-    return serverError("custom-field-delete-failed", e);
+    return apiError("custom-field-delete-failed", e);
   }
 }
 
@@ -41,6 +41,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const updated = await db.customField.update({ where: { id }, data });
     return ok({ field: updated });
   } catch (e) {
-    return serverError("custom-field-update-failed", e);
+    return apiError("custom-field-update-failed", e);
   }
 }

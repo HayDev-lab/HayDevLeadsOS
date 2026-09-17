@@ -36,8 +36,8 @@ const ORG_SLUG = "haydev-demo";
 const USERS = [
   { name: "Aram Grigoryan", email: "aram@haydev.am", role: ROLES.OWNER, title: "Founder", color: "#0ea5e9" },
   { name: "Lilit Mkrtchyan", email: "lilit@haydev.am", role: ROLES.ADMIN, title: "Head of Sales", color: "#8b5cf6" },
-  { name: "David Khachatryan", email: "david@haydev.am", role: ROLES.MANAGER, title: "Sales Manager", color: "#16a34a" },
-  { name: "Narek Vardanyan", email: "narek@haydev.am", role: ROLES.SALES_MANAGER, title: "Sales Rep", color: "#f59e0b" },
+  { name: "David Khachatryan", email: "david@haydev.am", role: ROLES.MEMBER, title: "Sales Manager", color: "#16a34a" },
+  { name: "Narek Vardanyan", email: "narek@haydev.am", role: ROLES.MEMBER, title: "Sales Rep", color: "#f59e0b" },
 ];
 
 interface SeedLead {
@@ -132,26 +132,33 @@ export async function seed(): Promise<{ orgId: string }> {
       locale: "hy",
       timezone: "Asia/Yerevan",
       currency: "AMD",
+      // v0.17 (spec 26): the seeded org is SYNTHETIC DEMO data — demo
+      // sessions resolve exclusively inside isDemo orgs.
+      isDemo: true,
     },
   });
   const orgId = org.id;
 
-  // users
+  // users + v0.17 MEMBERSHIPS (role source of truth)
   const users: Awaited<ReturnType<typeof db.user.create>>[] = [];
   for (const u of USERS) {
-    users.push(
-      await db.user.create({
-        data: {
-          organizationId: orgId,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          status: "ACTIVE",
-          title: u.title,
-          avatarColor: u.color,
-        },
-      })
-    );
+    const user = await db.user.create({
+      data: {
+        organizationId: orgId,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        status: "ACTIVE",
+        title: u.title,
+        avatarColor: u.color,
+        locale: "hy",
+        timezone: "Asia/Yerevan",
+      },
+    });
+    await db.organizationMember.create({
+      data: { organizationId: orgId, userId: user.id, role: u.role, status: "ACTIVE" },
+    });
+    users.push(user);
   }
 
   // sources
@@ -849,29 +856,22 @@ export async function seed(): Promise<{ orgId: string }> {
         enabled: true,
       },
     });
-    await db.setting.upsert({
-      where: { organizationId_key: { organizationId: orgId, key: `notification_preferences:${users[0].id}` } },
-      create: {
-        organizationId: orgId,
-        key: `notification_preferences:${users[0].id}`,
-        value: {
-          FIRST_RESPONSE_BREACHED: true,
-          FOLLOW_UP_DUE_SOON: true,
-          FOLLOW_UP_OVERDUE: true,
-          STAGE_AGING: true,
-          STAGE_BECAME_STALE: true,
-          LEAD_ASSIGNED: true,
-          TASK_ASSIGNED: true,
-          TASK_DUE_SOON: true,
-          TASK_OVERDUE: true,
-          channels: {
-            FIRST_RESPONSE_BREACHED: { email: true, telegram: true },
-            FOLLOW_UP_OVERDUE: { email: true, telegram: false },
-          },
-        } as Prisma.InputJsonValue,
-      },
-      update: {},
-    });
+    // v0.17: personal channel preferences live in UserNotificationPreference
+    // (user-owned storage, spec 50) — email+telegram ON for the two critical
+    // event types for the demo owner, everything else stays OFF (spec 98).
+    {
+      const prefRows = [
+        { eventType: "FIRST_RESPONSE_BREACHED", inApp: true, email: true, telegram: true },
+        { eventType: "FOLLOW_UP_OVERDUE", inApp: true, email: true, telegram: false },
+      ];
+      for (const row of prefRows) {
+        await db.userNotificationPreference.upsert({
+          where: { userId_eventType: { userId: users[0].id, eventType: row.eventType } },
+          create: { userId: users[0].id, ...row },
+          update: {},
+        });
+      }
+    }
     await db.user.update({
       where: { id: users[0].id },
       data: { telegramChatId: "100200300", telegramConnectedAt: new Date() },

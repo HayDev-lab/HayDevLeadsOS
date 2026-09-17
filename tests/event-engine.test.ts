@@ -556,11 +556,11 @@ describe("tenant isolation", () => {
 
 describe("delivery preferences", () => {
   test("disabled STAGE_AGING → the DomainEvent still exists, but NO notification is created", async () => {
-    await setNotificationPreferences(orgId, managerB, {
+    await setNotificationPreferences(managerB, {
       ...{ FIRST_RESPONSE_BREACHED: true, FOLLOW_UP_DUE_SOON: true, FOLLOW_UP_OVERDUE: true, STAGE_BECAME_STALE: true, LEAD_ASSIGNED: true, TASK_ASSIGNED: true, TASK_DUE_SOON: true, TASK_OVERDUE: true },
       STAGE_AGING: false,
     });
-    const prefs = await getNotificationPreferences(orgId, managerB);
+    const prefs = await getNotificationPreferences(managerB);
     expect(prefs.STAGE_AGING).toBe(false);
 
     // Lead inside the AGING window, owned by managerB.
@@ -576,7 +576,7 @@ describe("delivery preferences", () => {
     expect(notif).toBeNull(); // delivery skipped for this recipient
 
     // Restore for later tests.
-    await setNotificationPreferences(orgId, managerB, {
+    await setNotificationPreferences(managerB, {
       FIRST_RESPONSE_BREACHED: true, FOLLOW_UP_DUE_SOON: true, FOLLOW_UP_OVERDUE: true,
       STAGE_AGING: true, STAGE_BECAME_STALE: true, LEAD_ASSIGNED: true,
       TASK_ASSIGNED: true, TASK_DUE_SOON: true, TASK_OVERDUE: true,

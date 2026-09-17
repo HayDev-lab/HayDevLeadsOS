@@ -2,7 +2,7 @@
 // (v0.16 spec 48 documented limitation): enter the chat id directly. Available
 // ONLY while LEADOS_DEMO=true — never in a real deployment.
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson } from "@/lib/leados/api";
 import { linkTelegramChat } from "@/lib/leados/telegram-service";
 
 export async function POST(req: Request) {
@@ -19,6 +19,6 @@ export async function POST(req: Request) {
     if (!linked) return badRequest("User not found in this organization");
     return ok({ ok: true, chatId });
   } catch (e) {
-    return serverError("telegram-connect-demo-failed", e);
+    return apiError("telegram-connect-demo-failed", e);
   }
 }

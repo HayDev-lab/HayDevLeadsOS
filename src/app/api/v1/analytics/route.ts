@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { getAnalytics } from "@/lib/leados/analytics-service";
 
 export async function GET() {
@@ -9,6 +9,6 @@ export async function GET() {
     const data = await getAnalytics(session.orgId);
     return ok(data);
   } catch (e) {
-    return serverError("analytics-failed", e);
+    return apiError("analytics-failed", e);
   }
 }

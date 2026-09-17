@@ -17,7 +17,7 @@
 
 import { timingSafeEqual } from "crypto";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError, unauthorized, conflict } from "@/lib/leados/api";
+import { ok, apiError, unauthorized, conflict } from "@/lib/leados/api";
 import { runAllLeadOSWorkers, runLeadOSWorkers } from "@/lib/leados/leados-workers";
 
 /** Constant-time secret comparison (both must be non-empty). */
@@ -82,6 +82,6 @@ export async function POST(req: Request) {
       stats: result.stats,
     });
   } catch (e) {
-    return serverError("workers-run-failed", e);
+    return apiError("workers-run-failed", e);
   }
 }

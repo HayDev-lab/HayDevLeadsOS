@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { detectDuplicates } from "@/lib/leados/duplicate";
 import { db } from "@/lib/db";
 
@@ -18,6 +18,6 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     });
     return ok(result);
   } catch (e) {
-    return serverError("duplicate-check-failed", e);
+    return apiError("duplicate-check-failed", e);
   }
 }

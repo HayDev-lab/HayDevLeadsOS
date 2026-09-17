@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 
 export async function GET() {
@@ -14,7 +14,7 @@ export async function GET() {
     });
     return ok({ rows });
   } catch (e) {
-    return serverError("assignment-rules-list-failed", e);
+    return apiError("assignment-rules-list-failed", e);
   }
 }
 
@@ -52,6 +52,6 @@ export async function POST(req: Request) {
     });
     return ok({ rule });
   } catch (e) {
-    return serverError("assignment-rule-create-failed", e);
+    return apiError("assignment-rule-create-failed", e);
   }
 }

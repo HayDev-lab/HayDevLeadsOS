@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import {
   getDashboardMetrics,
   getLeadsBySource,
@@ -29,6 +29,6 @@ export async function GET() {
     ]);
     return ok({ metrics, bySource, byStage, recent, overdueTasks, activity, attention, urgentUnassigned, slaAttention });
   } catch (e) {
-    return serverError("dashboard-failed", e);
+    return apiError("dashboard-failed", e);
   }
 }

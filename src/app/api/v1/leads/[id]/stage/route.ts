@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { StageChange } from "@/lib/schemas/lead";
 import { changeStage } from "@/lib/leados/lead-service";
 import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds } from "@/lib/leados/sla-service";
@@ -33,6 +33,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const m = (e as Error).message;
     if (m === "LEAD_NOT_FOUND") return notFound("lead");
     if (m === "STAGE_NOT_FOUND") return notFound("stage");
-    return serverError("stage-change-failed", e);
+    return apiError("stage-change-failed", e);
   }
 }

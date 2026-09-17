@@ -1,7 +1,7 @@
 // POST /api/v1/integrations/telegram/disconnect — clear the linked chat
 // (v0.16 spec 92: "Connected as ... / Disconnect").
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError } from "@/lib/leados/api";
+import { ok, badRequest, apiError } from "@/lib/leados/api";
 import { unlinkTelegram } from "@/lib/leados/telegram-service";
 
 export async function POST() {
@@ -11,6 +11,6 @@ export async function POST() {
     await unlinkTelegram(session.orgId, session.userId);
     return ok({ ok: true });
   } catch (e) {
-    return serverError("telegram-disconnect-failed", e);
+    return apiError("telegram-disconnect-failed", e);
   }
 }

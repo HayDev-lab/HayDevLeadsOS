@@ -3,11 +3,14 @@
 export const ROLES = {
   OWNER: "OWNER",
   ADMIN: "ADMIN",
-  MANAGER: "MANAGER",
-  SALES_MANAGER: "SALES_MANAGER",
+  MEMBER: "MEMBER",
+  // Legacy pre-v0.17 values — normalized to MEMBER by the permission layer
+  // and migrated in data by scripts/auth-backfill.ts.
+  MANAGER: "MEMBER",
+  SALES_MANAGER: "MEMBER",
   VIEWER: "VIEWER",
 } as const;
-export type Role = (typeof ROLES)[keyof typeof ROLES];
+export type Role = string;
 
 export const ROLE_HIERARCHY: Record<Role, number> = {
   OWNER: 100,

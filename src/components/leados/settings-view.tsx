@@ -23,11 +23,24 @@ import { SlaConfigTab } from "./sla-config-tab";
 import { NotificationsTab } from "./notifications/settings-notifications-tab";
 import { IntegrationsTab } from "./settings/integrations-tab";
 import { WorkersTab } from "./settings/workers-tab";
+import { ProfileTab } from "./settings/profile-tab";
+import { TeamTab } from "./settings/team-tab";
+import { SecurityAuditTab } from "./settings/security-audit-tab";
+import { useSession } from "@/hooks/leados/use-api";
 
-export function SettingsView() {
+// v0.17: centralized permission constants (client mirror — the SERVER
+// enforces the real checks; the UI only hides what a role cannot use).
+import { PERMISSIONS } from "@/lib/leados/auth/permissions";
+
+export function SettingsView({ initialTab }: { initialTab?: string }) {
   const { t } = useLocale();
   const settings = useSettings();
-  const [tab, setTab] = useState("org");
+  const session = useSession();
+  const [tab, setTab] = useState(initialTab ?? "profile");
+
+  const perms = session.data?.session?.permissions ?? [];
+  const can = (p: string) => perms.includes(p);
+  const canOrg = can(PERMISSIONS.ORG_SETTINGS_MANAGE);
 
   if (settings.isLoading) return <div className="p-6"><Skeleton className="h-96 w-full" /></div>;
 
@@ -40,35 +53,39 @@ export function SettingsView() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="org">{t("settings.organization")}</TabsTrigger>
-          <TabsTrigger value="users">{t("settings.users")}</TabsTrigger>
-          <TabsTrigger value="pipeline">{t("settings.pipeline")}</TabsTrigger>
-          <TabsTrigger value="sources">{t("settings.sources")}</TabsTrigger>
-          <TabsTrigger value="tags">{t("settings.tags")}</TabsTrigger>
-          <TabsTrigger value="custom">{t("settings.custom_fields")}</TabsTrigger>
-          <TabsTrigger value="scoring">{t("settings.scoring")}</TabsTrigger>
-          <TabsTrigger value="sla">SLA</TabsTrigger>
+          <TabsTrigger value="profile">{t("settings.profile")}</TabsTrigger>
+          <TabsTrigger value="team">{t("settings.team")}</TabsTrigger>
+          {canOrg && <TabsTrigger value="org">{t("settings.organization")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="pipeline">{t("settings.pipeline")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="sources">{t("settings.sources")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="tags">{t("settings.tags")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="custom">{t("settings.custom_fields")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="scoring">{t("settings.scoring")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="sla">SLA</TabsTrigger>}
           <TabsTrigger value="notifications">{t("notif.settings.title")}</TabsTrigger>
-          <TabsTrigger value="integrations">{t("settings.integrations")}</TabsTrigger>
-          <TabsTrigger value="workers">{t("settings.workers")}</TabsTrigger>
-          <TabsTrigger value="rules">Assignment Rules</TabsTrigger>
-          <TabsTrigger value="audit">Audit Ingest</TabsTrigger>
-          <TabsTrigger value="erp">ERP / Events</TabsTrigger>
+          {can(PERMISSIONS.INTEGRATION_MANAGE) && <TabsTrigger value="integrations">{t("settings.integrations")}</TabsTrigger>}
+          {can(PERMISSIONS.WORKER_HEALTH_READ) && <TabsTrigger value="workers">{t("settings.workers")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="rules">Assignment Rules</TabsTrigger>}
+          {canOrg && <TabsTrigger value="auditingest">Audit Ingest</TabsTrigger>}
+          {can(PERMISSIONS.AUDIT_READ) && <TabsTrigger value="security">{t("settings.security")}</TabsTrigger>}
+          {canOrg && <TabsTrigger value="erp">ERP / Events</TabsTrigger>}
         </TabsList>
-        <TabsContent value="org" className="mt-4"><OrgTab /></TabsContent>
-        <TabsContent value="users" className="mt-4"><UsersTab /></TabsContent>
-        <TabsContent value="pipeline" className="mt-4"><PipelineTab /></TabsContent>
-        <TabsContent value="sources" className="mt-4"><SourcesTab /></TabsContent>
-        <TabsContent value="tags" className="mt-4"><TagsTab /></TabsContent>
-        <TabsContent value="custom" className="mt-4"><CustomFieldsTab /></TabsContent>
-        <TabsContent value="scoring" className="mt-4"><ScoringTab /></TabsContent>
-        <TabsContent value="sla" className="mt-4"><SlaConfigTab /></TabsContent>
+        <TabsContent value="profile" className="mt-4"><ProfileTab /></TabsContent>
+        <TabsContent value="team" className="mt-4"><TeamTab /></TabsContent>
+        {canOrg && <TabsContent value="org" className="mt-4"><OrgTab /></TabsContent>}
+        {canOrg && <TabsContent value="pipeline" className="mt-4"><PipelineTab /></TabsContent>}
+        {canOrg && <TabsContent value="sources" className="mt-4"><SourcesTab /></TabsContent>}
+        {canOrg && <TabsContent value="tags" className="mt-4"><TagsTab /></TabsContent>}
+        {canOrg && <TabsContent value="custom" className="mt-4"><CustomFieldsTab /></TabsContent>}
+        {canOrg && <TabsContent value="scoring" className="mt-4"><ScoringTab /></TabsContent>}
+        {canOrg && <TabsContent value="sla" className="mt-4"><SlaConfigTab /></TabsContent>}
         <TabsContent value="notifications" className="mt-4"><NotificationsTab /></TabsContent>
-        <TabsContent value="integrations" className="mt-4"><IntegrationsTab /></TabsContent>
-        <TabsContent value="workers" className="mt-4"><WorkersTab /></TabsContent>
-        <TabsContent value="rules" className="mt-4"><AssignmentRulesTab /></TabsContent>
-        <TabsContent value="audit" className="mt-4"><AuditIngestTab /></TabsContent>
-        <TabsContent value="erp" className="mt-4"><ErpTab /></TabsContent>
+        {can(PERMISSIONS.INTEGRATION_MANAGE) && <TabsContent value="integrations" className="mt-4"><IntegrationsTab /></TabsContent>}
+        {can(PERMISSIONS.WORKER_HEALTH_READ) && <TabsContent value="workers" className="mt-4"><WorkersTab /></TabsContent>}
+        {canOrg && <TabsContent value="rules" className="mt-4"><AssignmentRulesTab /></TabsContent>}
+        {canOrg && <TabsContent value="auditingest" className="mt-4"><AuditIngestTab /></TabsContent>}
+        {can(PERMISSIONS.AUDIT_READ) && <TabsContent value="security" className="mt-4"><SecurityAuditTab /></TabsContent>}
+        {canOrg && <TabsContent value="erp" className="mt-4"><ErpTab /></TabsContent>}
       </Tabs>
     </div>
   );
@@ -99,25 +116,6 @@ function OrgTab() {
       <div className="space-y-1"><Label className="text-xs">Currency</Label><Input value={currency} onChange={(e) => setCurrency(e.target.value)} /></div>
       <div className="col-span-2"><Button size="sm" onClick={save}><Save className="h-3.5 w-3.5 mr-1.5" />Save</Button></div>
     </CardContent></Card>
-  );
-}
-
-function UsersTab() {
-  const users = useUsers();
-  if (users.isLoading) return <Skeleton className="h-48 w-full" />;
-  return (
-    <Card>
-      <CardContent className="p-0 divide-y">
-        {(users.data?.rows ?? []).map((u: any) => (
-          <div key={u.id} className="flex items-center gap-3 px-4 py-3">
-            <LeadAvatar first={u.name} color={u.avatarColor} size={32} />
-            <div className="flex-1 min-w-0"><div className="text-sm font-medium">{u.name}</div><div className="text-xs text-muted-foreground">{u.email} · {u.title || "—"}</div></div>
-            <Badge variant="outline" className="text-xs">{u.role}</Badge>
-            <Badge variant="secondary" className="text-xs">{u.status}</Badge>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
   );
 }
 

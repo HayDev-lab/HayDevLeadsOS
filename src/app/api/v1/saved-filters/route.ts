@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 
 export async function GET() {
@@ -17,7 +17,7 @@ export async function GET() {
     });
     return ok({ rows });
   } catch (e) {
-    return serverError("saved-filters-list-failed", e);
+    return apiError("saved-filters-list-failed", e);
   }
 }
 
@@ -45,6 +45,6 @@ export async function POST(req: Request) {
     });
     return ok({ filter });
   } catch (e) {
-    return serverError("saved-filter-create-failed", e);
+    return apiError("saved-filter-create-failed", e);
   }
 }

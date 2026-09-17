@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, validate, qInt, qStr, qArr, qBool, paginate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, validate, qInt, qStr, qArr, qBool, paginate, parseJson } from "@/lib/leados/api";
 import { LeadCreate } from "@/lib/schemas/lead";
 import { createLead } from "@/lib/leados/lead-service";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
@@ -202,7 +202,7 @@ export async function GET(req: Request) {
       stageInactivityConfig,
     });
   } catch (e) {
-    return serverError("leads-list-failed", e);
+    return apiError("leads-list-failed", e);
   }
 }
 
@@ -215,6 +215,6 @@ export async function POST(req: Request) {
     const result = await createLead(session.orgId, session.userId, v.value);
     return ok({ lead: result.lead, duplicate: result.duplicate, created: result.created });
   } catch (e) {
-    return serverError("lead-create-failed", e);
+    return apiError("lead-create-failed", e);
   }
 }

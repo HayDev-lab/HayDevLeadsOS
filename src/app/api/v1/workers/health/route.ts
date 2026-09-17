@@ -6,7 +6,7 @@
 
 import { db } from "@/lib/db";
 import { getSession, canManage } from "@/lib/leados/context";
-import { ok, forbidden, serverError } from "@/lib/leados/api";
+import { ok, forbidden, apiError } from "@/lib/leados/api";
 import { getWorkerHealth } from "@/lib/leados/worker-run-service";
 import { getWorkerLease, WORKER_LEASE_TYPE } from "@/lib/leados/worker-lease";
 import { runAutomationProcessor } from "@/lib/leados/automation-processor";
@@ -60,7 +60,7 @@ export async function GET() {
       },
     });
   } catch (e) {
-    return serverError("workers-health-failed", e);
+    return apiError("workers-health-failed", e);
   }
 }
 

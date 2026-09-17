@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson, validate } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson, validate } from "@/lib/leados/api";
 import { BusinessAuditPayload } from "@/lib/leados/audit-ingest";
 import { ingestBusinessAudit } from "@/lib/leados/audit-ingest";
 
@@ -14,6 +14,6 @@ export async function POST(req: Request) {
     const result = await ingestBusinessAudit(session.orgId, v.value, session.userId);
     return ok(result);
   } catch (e) {
-    return serverError("audit-ingest-failed", e);
+    return apiError("audit-ingest-failed", e);
   }
 }

@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 import {
   cancelFollowUp,
@@ -51,7 +51,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const msg = (e as Error).message;
     if (msg === "LEAD_NOT_FOUND" || msg === "LEAD_FINAL_STAGE") return badRequest(msg === "LEAD_FINAL_STAGE" ? "Lead is in a final stage (Won/Lost)" : "lead-not-in-org");
     if (msg === "OPEN_FOLLOW_UP_EXISTS") return badRequest("An open follow-up already exists — reschedule it instead");
-    return serverError("followup-schedule-failed", e);
+    return apiError("followup-schedule-failed", e);
   }
 }
 
@@ -86,6 +86,6 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const msg = (e as Error).message;
     if (msg === "NO_OPEN_FOLLOW_UP") return badRequest("No open follow-up on this lead");
     if (msg === "FOLLOW_UP_ALREADY_CLOSED") return badRequest("This follow-up is already closed");
-    return serverError("followup-action-failed", e);
+    return apiError("followup-action-failed", e);
   }
 }

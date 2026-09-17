@@ -4,7 +4,7 @@
 // channel outcomes; technical errorCode details stay OWNER/ADMIN-only (118).
 import { db } from "@/lib/db";
 import { getSession, canManage } from "@/lib/leados/context";
-import { ok, notFound, serverError } from "@/lib/leados/api";
+import { ok, notFound, apiError } from "@/lib/leados/api";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -36,6 +36,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       technical,
     });
   } catch (e) {
-    return serverError("notification-deliveries-failed", e);
+    return apiError("notification-deliveries-failed", e);
   }
 }

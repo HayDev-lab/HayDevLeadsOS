@@ -6,8 +6,9 @@
 //       as defense in depth (providers.ts).
 import { db } from "@/lib/db";
 import { getSession, canManage, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, forbidden, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, forbidden, validate, parseJson } from "@/lib/leados/api";
 import { validateWebhookUrl } from "@/lib/leados/delivery/ssrf";
+import { recordAudit, requestMeta, AUDIT_ACTIONS, AUDIT_ACTOR } from "@/lib/leados/auth/audit";
 import { randomBytes } from "crypto";
 import { z } from "zod";
 
@@ -31,7 +32,7 @@ export async function GET() {
       }),
     });
   } catch (e) {
-    return serverError("integrations-webhooks-list-failed", e);
+    return apiError("integrations-webhooks-list-failed", e);
   }
 }
 
@@ -44,6 +45,7 @@ const Create = z.object({
 });
 
 export async function POST(req: Request) {
+  const meta = requestMeta(req);
   try {
     const session = await getSession();
     if (!canManage(session.role)) return forbidden("Only owners and admins manage webhook endpoints");
@@ -75,8 +77,18 @@ export async function POST(req: Request) {
       },
       select: { id: true, name: true, url: true, events: true, enabled: true, createdAt: true },
     });
+    await recordAudit({
+      organizationId: session.orgId,
+      actorUserId: session.userId,
+      actorType: AUDIT_ACTOR.USER,
+      action: AUDIT_ACTIONS.WEBHOOK_CREATED,
+      resourceType: "webhook-endpoint",
+      resourceId: endpoint.id,
+      metadata: { name: endpoint.name, url: endpoint.url, events: endpoint.events },
+      ...meta,
+    });
     return ok({ endpoint, secretNote: "A signing secret was generated. Use the Test button to verify delivery." });
   } catch (e) {
-    return serverError("integrations-webhooks-create-failed", e);
+    return apiError("integrations-webhooks-create-failed", e);
   }
 }

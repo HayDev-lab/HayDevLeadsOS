@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 import { listMessages, getInboxStats, groupByConversation } from "@/lib/leados/inbox-service";
 
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     const conversations = groupByConversation(rows as any[]);
     return ok({ rows, conversations, total: rows.length });
   } catch (e) {
-    return serverError("inbox-list-failed", e);
+    return apiError("inbox-list-failed", e);
   }
 }
 
@@ -59,6 +59,6 @@ export async function POST(req: Request) {
     });
     return ok({ message: msg });
   } catch (e) {
-    return serverError("inbox-create-failed", e);
+    return apiError("inbox-create-failed", e);
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 
 export async function GET() {
@@ -14,7 +14,7 @@ export async function GET() {
     return ok({ rows });
   } catch (e) {
     console.error("[webhook-endpoints] error:", e);
-    return serverError("webhook-endpoints-list-failed", e instanceof Error ? e.message : String(e));
+    return apiError("webhook-endpoints-list-failed", e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -45,6 +45,6 @@ export async function POST(req: Request) {
     });
     return ok({ endpoint });
   } catch (e) {
-    return serverError("webhook-endpoint-create-failed", e);
+    return apiError("webhook-endpoint-create-failed", e);
   }
 }

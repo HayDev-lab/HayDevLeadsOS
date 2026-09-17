@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson } from "@/lib/leados/api";
 import { DEFAULT_SCORING_RULES } from "@/lib/leados/constants";
 import { SLA_SETTING_KEY, invalidateSlaThresholdsCache } from "@/lib/leados/sla-service";
 import { FOLLOWUP_SETTING_KEY, invalidateFollowUpConfigCache } from "@/lib/leados/followup-sla-service";
@@ -31,7 +31,7 @@ export async function GET() {
     ]);
     return ok({ org, users, sources, tags, lostReasons, scoring, customFields, pipelines, settings });
   } catch (e) {
-    return serverError("settings-get-failed", e);
+    return apiError("settings-get-failed", e);
   }
 }
 
@@ -56,7 +56,7 @@ export async function PATCH(req: Request) {
     }
     return ok({ ok: true });
   } catch (e) {
-    return serverError("settings-update-failed", e);
+    return apiError("settings-update-failed", e);
   }
 }
 
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
     }
     return ok({ ok: true });
   } catch (e) {
-    return serverError("settings-init-failed", e);
+    return apiError("settings-init-failed", e);
   }
 }
 

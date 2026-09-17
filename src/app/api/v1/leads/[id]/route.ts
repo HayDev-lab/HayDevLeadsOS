@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { LeadUpdate } from "@/lib/schemas/lead";
 import { updateLead, archiveLead } from "@/lib/leados/lead-service";
 import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds } from "@/lib/leados/sla-service";
@@ -46,7 +46,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const [withStage] = attachStageInactivityToLeads([withFollowUp], stageInactivityConfig);
     return ok({ lead: withStage, slaConfig: slaThresholds, followUpConfig, stageInactivityConfig });
   } catch (e) {
-    return serverError("lead-get-failed", e);
+    return apiError("lead-get-failed", e);
   }
 }
 
@@ -64,7 +64,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const m = (e as Error).message;
     if (m === "LEAD_NOT_FOUND") return notFound("lead");
     if (m === "STAGE_NOT_FOUND") return notFound("stage");
-    return serverError("lead-update-failed", e);
+    return apiError("lead-update-failed", e);
   }
 }
 
@@ -77,6 +77,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return ok({ lead: archived });
   } catch (e) {
     if ((e as Error).message === "LEAD_NOT_FOUND") return notFound("lead");
-    return serverError("lead-archive-failed", e);
+    return apiError("lead-archive-failed", e);
   }
 }

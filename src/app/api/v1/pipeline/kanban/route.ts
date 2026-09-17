@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds } from "@/lib/leados/sla-service";
 import {
   attachFollowUpToLeads,
@@ -69,6 +69,6 @@ export async function GET(req: Request) {
       stageInactivityConfig,
     });
   } catch (e) {
-    return serverError("kanban-failed", e);
+    return apiError("kanban-failed", e);
   }
 }

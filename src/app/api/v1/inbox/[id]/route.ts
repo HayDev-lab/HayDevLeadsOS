@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 import { createLead } from "@/lib/leados/lead-service";
@@ -17,7 +17,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     if (!msg || msg.organizationId !== session.orgId) return notFound("message");
     return ok({ message: msg });
   } catch (e) {
-    return serverError("inbox-get-failed", e);
+    return apiError("inbox-get-failed", e);
   }
 }
 
@@ -53,7 +53,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     return ok({ ok: true });
   } catch (e) {
-    return serverError("inbox-link-failed", e);
+    return apiError("inbox-link-failed", e);
   }
 }
 
@@ -82,6 +82,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     });
     return ok({ leadId: res.lead?.id ?? null });
   } catch (e) {
-    return serverError("inbox-create-lead-failed", e);
+    return apiError("inbox-create-lead-failed", e);
   }
 }

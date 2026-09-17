@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 
 export async function GET(req: Request) {
@@ -31,6 +31,6 @@ export async function GET(req: Request) {
     });
     return ok({ rows });
   } catch (e) {
-    return serverError("search-failed", e);
+    return apiError("search-failed", e);
   }
 }

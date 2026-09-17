@@ -2,7 +2,7 @@
 // (v0.16 spec 48 step 1). The user then sends the code to the bot; the
 // webhook links the chat. No secret ever travels to the client.
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError } from "@/lib/leados/api";
+import { ok, badRequest, apiError } from "@/lib/leados/api";
 import { issueTelegramConnectCode } from "@/lib/leados/telegram-service";
 
 export async function POST() {
@@ -18,6 +18,6 @@ export async function POST() {
       botUsername: process.env.TELEGRAM_BOT_USERNAME ?? null,
     });
   } catch (e) {
-    return serverError("telegram-connect-failed", e);
+    return apiError("telegram-connect-failed", e);
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson, validate } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson, validate } from "@/lib/leados/api";
 import { z } from "zod";
 
 const Create = z.object({
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     });
     return ok({ stage });
   } catch (e) {
-    return serverError("stage-create-failed", e);
+    return apiError("stage-create-failed", e);
   }
 }
 
@@ -50,6 +50,6 @@ export async function GET(req: Request) {
     const rows = await db.pipelineStage.findMany({ where: { pipelineId }, orderBy: { position: "asc" } });
     return ok({ rows });
   } catch (e) {
-    return serverError("stage-list-failed", e);
+    return apiError("stage-list-failed", e);
   }
 }

@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, parseJson, validate } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, parseJson, validate } from "@/lib/leados/api";
 import { z } from "zod";
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -17,7 +17,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     });
     return ok({ values });
   } catch (e) {
-    return serverError("custom-values-list-failed", e);
+    return apiError("custom-values-list-failed", e);
   }
 }
 
@@ -55,6 +55,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     else value = await db.customFieldValue.create({ data });
     return ok({ value });
   } catch (e) {
-    return serverError("custom-value-upsert-failed", e);
+    return apiError("custom-value-upsert-failed", e);
   }
 }

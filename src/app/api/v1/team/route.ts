@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { getTeamPerformance } from "@/lib/leados/team-service";
 
 export async function GET() {
@@ -9,6 +9,6 @@ export async function GET() {
     const data = await getTeamPerformance(session.orgId);
     return ok(data);
   } catch (e) {
-    return serverError("team-perf-failed", e);
+    return apiError("team-perf-failed", e);
   }
 }

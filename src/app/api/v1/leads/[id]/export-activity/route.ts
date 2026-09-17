@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { serverError, notFound } from "@/lib/leados/api";
+import { apiError, notFound } from "@/lib/leados/api";
 import { toCsv } from "@/lib/leados/attribution";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -89,6 +89,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       },
     });
   } catch (e) {
-    return serverError("activity-export-failed", e);
+    return apiError("activity-export-failed", e);
   }
 }

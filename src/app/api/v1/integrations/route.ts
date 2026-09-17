@@ -5,7 +5,7 @@
 //   webhook  → org endpoints (id/name/enabled only — NEVER the secret, spec 89)
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { getChannelAvailability } from "@/lib/leados/delivery/providers";
 
 export async function GET() {
@@ -34,6 +34,6 @@ export async function GET() {
       appUrl: process.env.APP_URL ?? null,
     });
   } catch (e) {
-    return serverError("integrations-status-failed", e);
+    return apiError("integrations-status-failed", e);
   }
 }

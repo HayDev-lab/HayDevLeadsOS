@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError, qInt, qStr } from "@/lib/leados/api";
+import { ok, apiError, qInt, qStr } from "@/lib/leados/api";
 
 export async function GET(req: Request) {
   try {
@@ -32,6 +32,6 @@ export async function GET(req: Request) {
 
     return ok({ rows, byEvent, total: rows.length });
   } catch (e) {
-    return serverError("webhook-events-list-failed", e);
+    return apiError("webhook-events-list-failed", e);
   }
 }

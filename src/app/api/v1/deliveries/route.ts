@@ -5,7 +5,7 @@
 // "Email: sent / failed" without the provider stack trace (spec 118).
 import { db } from "@/lib/db";
 import { getSession, canManage } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 
 const VALID_STATUSES = new Set(["PENDING", "SENDING", "SENT", "FAILED_RETRYABLE", "FAILED", "SKIPPED"]);
 const VALID_CHANNELS = new Set(["EMAIL", "TELEGRAM", "WEBHOOK"]);
@@ -56,6 +56,6 @@ export async function GET(req: Request) {
       technical,
     });
   } catch (e) {
-    return serverError("deliveries-list-failed", e);
+    return apiError("deliveries-list-failed", e);
   }
 }

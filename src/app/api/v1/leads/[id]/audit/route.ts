@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError, notFound } from "@/lib/leados/api";
+import { ok, apiError, notFound } from "@/lib/leados/api";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -15,6 +15,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     });
     return ok({ audits });
   } catch (e) {
-    return serverError("audit-list-failed", e);
+    return apiError("audit-list-failed", e);
   }
 }

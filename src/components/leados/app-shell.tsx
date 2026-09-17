@@ -22,6 +22,7 @@ import { AnalyticsView } from "./analytics/analytics-view";
 import { TeamView } from "./team/team-view";
 import { NotificationsView } from "./notifications/notifications-view";
 import { AutomationsView } from "./automations/automations-view";
+import { LoginScreen, InviteScreen } from "./auth/login-screen";
 import { useInboxStats } from "@/hooks/leados/use-api";
 
 const NAV = [
@@ -76,8 +77,10 @@ export function LeadOSApp() {
   useWorkersTick();
 
   useEffect(() => {
-    // auto-seed on very first load if there is no org
-    if (session.isError && !session.isFetching && !seed.isPending) {
+    // auto-seed on very first load if there is no org (DEMO MODE ONLY —
+    // production must never auto-seed from a browser).
+    const status = (session.error as { status?: number } | null)?.status;
+    if (session.isError && status !== 401 && !session.isFetching && !seed.isPending && process.env.NEXT_PUBLIC_LEADOS_DEMO_UI !== "false") {
       seed.mutate(undefined, {
         onSuccess: (r) => {
           if (r.seeded) {
@@ -87,7 +90,7 @@ export function LeadOSApp() {
         },
       });
     }
-  }, [session.isError, session.isFetching, seed]);
+  }, [session.isError, session.isFetching, session.error, seed]);
 
   // HYDRATION-SAFE MOUNT GATE: the active view lives in the URL HASH, which
   // the server never sees — so the server always renders the dashboard shell
@@ -111,7 +114,16 @@ export function LeadOSApp() {
   }
 
   const org = session.data?.session?.organization;
-  const needsSeed = session.isError && !session.data;
+  // v0.17 AUTH GATE (spec 61): 401 → login screen (production mode).
+  const authError = (session.error as { status?: number } | null)?.status === 401;
+  // v0.17 invite/reset deep links work WITHOUT a session (spec 38).
+  if (route.view === "invite" && route.params.id) {
+    return <InviteScreen token={route.params.id} />;
+  }
+  if (authError && route.view !== "reset-password") {
+    return <LoginScreen />;
+  }
+  const needsSeed = session.isError && !session.data && !authError;
 
   const attentionCount = lost.data?.leadsNeedingAttention ?? 0;
   const inboxUnassigned = inboxStats.data?.unassigned ?? 0;
@@ -133,10 +145,12 @@ export function LeadOSApp() {
   }
 
   // Hash-route views beyond the sidebar NAV (notifications = bell → "View all").
-  const EXTRA_VIEWS = ["notifications", "lead"];
+  const EXTRA_VIEWS = ["notifications", "lead", "reset-password"];
   const currentView =
     route.view === "lead"
       ? "lead"
+      : route.view === "reset-password"
+      ? "reset-password"
       : NAV.some((n) => n.view === route.view) || EXTRA_VIEWS.includes(route.view)
       ? route.view
       : "dashboard";
@@ -160,8 +174,10 @@ export function LeadOSApp() {
         return <NotificationsView />;
       case "automations":
         return <AutomationsView />;
+      case "reset-password":
+        return <LoginScreen presetToken={route.params.token ?? ""} />;
       case "settings":
-        return <SettingsView />;
+        return <SettingsView initialTab={route.params.tab} />;
       default:
         return <DashboardView />;
     }

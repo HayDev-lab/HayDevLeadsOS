@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 
 const Update = z.object({
@@ -29,7 +29,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const updated = await db.savedFilter.update({ where: { id }, data });
     return ok({ filter: updated });
   } catch (e) {
-    return serverError("saved-filter-update-failed", e);
+    return apiError("saved-filter-update-failed", e);
   }
 }
 
@@ -44,6 +44,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     await db.savedFilter.delete({ where: { id } });
     return ok({ ok: true });
   } catch (e) {
-    return serverError("saved-filter-delete-failed", e);
+    return apiError("saved-filter-delete-failed", e);
   }
 }

@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError } from "@/lib/leados/api";
+import { ok, badRequest, apiError } from "@/lib/leados/api";
 import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 
 export async function GET() {
@@ -52,6 +52,6 @@ export async function GET() {
 
     return ok({ groups, total: groups.length, leadsScanned: leads.length });
   } catch (e) {
-    return serverError("duplicates-scan-failed", e);
+    return apiError("duplicates-scan-failed", e);
   }
 }

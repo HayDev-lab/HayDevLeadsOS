@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { runLostDetector, getActiveFlags, FLAG_REASON_LABEL } from "@/lib/leados/lost-detector-service";
 import { db } from "@/lib/db";
 
@@ -11,7 +11,7 @@ export async function GET() {
     const leadsNeedingAttention = new Set(flags.map((f) => f.leadId)).size;
     return ok({ flags, leadsNeedingAttention, labels: FLAG_REASON_LABEL, total: flags.length });
   } catch (e) {
-    return serverError("lost-detector-get-failed", e);
+    return apiError("lost-detector-get-failed", e);
   }
 }
 
@@ -29,6 +29,6 @@ export async function POST() {
       : [];
     return ok({ ...result, leads });
   } catch (e) {
-    return serverError("lost-detector-run-failed", e);
+    return apiError("lost-detector-run-failed", e);
   }
 }

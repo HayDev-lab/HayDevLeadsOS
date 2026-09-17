@@ -28,13 +28,14 @@ import {
 } from "./delivery/channels";
 
 // ---------------------------------------------------------------------------
-// Preferences storage (Section 55): a real persistent User model exists, so
-// preferences are USER-SCOPED Setting rows keyed "notification_preferences:<userId>".
-// v0.16: the SAME row carries the event × channel matrix under `.channels`
-// (external channels default OFF — spec 98). Backward compatible: legacy rows
-// without `.channels` parse to all-OFF.
+// Preferences storage (v0.17 spec 50–51): USER-OWNED rows in
+// UserNotificationPreference — one per (user, event type) carrying the
+// in-app + email + telegram toggles. Previously org Setting rows keyed by
+// userId; the auth-backfill script migrated them losslessly. External
+// channels default OFF (v0.16 spec 98) — nothing is ever sent without opt-in.
 // ---------------------------------------------------------------------------
 
+/** Legacy Setting key — ONLY used by the migration script (auth-backfill). */
 export function notificationPreferencesSettingKey(userId: string): string {
   return `notification_preferences:${userId}`;
 }
@@ -45,46 +46,57 @@ export interface FullNotificationPreferences {
   channels: ChannelPreferences;
 }
 
-export async function getNotificationPreferences(orgId: string, userId: string): Promise<NotificationPreferences> {
-  const row = await db.setting.findUnique({
-    where: { organizationId_key: { organizationId: orgId, key: notificationPreferencesSettingKey(userId) } },
-  });
-  return parseNotificationPreferences(row?.value ?? null);
+/** Load the user's full preference state (missing rows = defaults). */
+export async function getFullNotificationPreferences(userId: string): Promise<FullNotificationPreferences> {
+  const rows = await db.userNotificationPreference.findMany({ where: { userId } });
+  const types = { ...DEFAULT_NOTIFICATION_PREFERENCES };
+  const channels = parseChannelPreferences(null); // fresh per-type objects
+  const known = new Set<string>(DOMAIN_EVENT_TYPES);
+  for (const row of rows) {
+    if (!known.has(row.eventType)) continue;
+    (types as Record<string, boolean>)[row.eventType] = row.inApp;
+    channels[row.eventType as DomainEventType].email = row.email;
+    channels[row.eventType as DomainEventType].telegram = row.telegram;
+  }
+  return { types, channels };
 }
 
-export async function getChannelPreferences(orgId: string, userId: string): Promise<ChannelPreferences> {
-  const row = await db.setting.findUnique({
-    where: { organizationId_key: { organizationId: orgId, key: notificationPreferencesSettingKey(userId) } },
-  });
-  return parseChannelPreferences(row?.value ?? null);
+export async function getNotificationPreferences(userId: string): Promise<NotificationPreferences> {
+  return (await getFullNotificationPreferences(userId)).types;
 }
 
-/** Save types and/or channels ATOMICALLY into the single preference row. */
+export async function getChannelPreferences(userId: string): Promise<ChannelPreferences> {
+  return (await getFullNotificationPreferences(userId)).channels;
+}
+
+/** Save types and/or channels atomically (one row per event type). */
 export async function setNotificationPreferences(
-  orgId: string,
   userId: string,
   prefs: NotificationPreferences,
   channels?: ChannelPreferences
 ): Promise<FullNotificationPreferences> {
-  const key = notificationPreferencesSettingKey(userId);
-  const existing = await db.setting.findUnique({
-    where: { organizationId_key: { organizationId: orgId, key } },
-    select: { value: true },
-  });
-  const storedChannels = parseChannelPreferences(existing?.value ?? null);
-  const value = {
-    ...(existing?.value != null && typeof existing.value === "object" && !Array.isArray(existing.value)
-      ? (existing.value as Record<string, unknown>)
-      : {}),
-    ...prefs,
-    channels: channels ?? storedChannels,
-  };
-  await db.setting.upsert({
-    where: { organizationId_key: { organizationId: orgId, key } },
-    create: { organizationId: orgId, key, value: value as unknown as Prisma.InputJsonValue },
-    update: { value: value as unknown as Prisma.InputJsonValue },
-  });
-  return { types: parseNotificationPreferences(value), channels: parseChannelPreferences(value) };
+  const current = await getFullNotificationPreferences(userId);
+  const nextChannels = channels ?? current.channels;
+  await db.$transaction(
+    DOMAIN_EVENT_TYPES.map((type) =>
+      db.userNotificationPreference.upsert({
+        where: { userId_eventType: { userId, eventType: type } },
+        create: {
+          userId,
+          eventType: type,
+          inApp: prefs[type],
+          email: nextChannels[type].email,
+          telegram: nextChannels[type].telegram,
+        },
+        update: {
+          inApp: prefs[type],
+          email: nextChannels[type].email,
+          telegram: nextChannels[type].telegram,
+        },
+      })
+    )
+  );
+  return { types: prefs, channels: nextChannels };
 }
 
 export function isValidPreferenceInput(raw: unknown) {

@@ -45,7 +45,6 @@ import { isDemoDeliveryMode, signWebhookBody } from "../src/lib/leados/delivery/
 import { runWithAutomationContext } from "../src/lib/leados/automation-context";
 import { processEventRule } from "../src/lib/leados/automation-engine";
 import { parseChannelPreferences, validateChannelPreferences, DEFAULT_CHANNEL_PREFERENCES } from "../src/lib/leados/delivery/channels";
-import { notificationPreferencesSettingKey } from "../src/lib/leados/notification-service";
 
 const db = new PrismaClient();
 const SLUG = `delivery-test-${Date.now()}`;
@@ -138,11 +137,14 @@ async function mkNotification(opts: { user: { id: string }; type?: string; paylo
 }
 
 async function setChannelPrefs(user: { id: string }, channels: Record<string, { email: boolean; telegram: boolean }>) {
-  await db.setting.upsert({
-    where: { organizationId_key: { organizationId: orgId, key: notificationPreferencesSettingKey(user.id) } },
-    create: { organizationId: orgId, key: notificationPreferencesSettingKey(user.id), value: { channels } as never },
-    update: { value: { channels } as never },
-  });
+  // v0.17: personal prefs live in UserNotificationPreference rows.
+  for (const [eventType, toggles] of Object.entries(channels)) {
+    await db.userNotificationPreference.upsert({
+      where: { userId_eventType: { userId: user.id, eventType } },
+      create: { userId: user.id, eventType, inApp: true, email: toggles.email, telegram: toggles.telegram },
+      update: { email: toggles.email, telegram: toggles.telegram },
+    });
+  }
 }
 
 beforeAll(async () => {

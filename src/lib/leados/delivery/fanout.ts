@@ -16,10 +16,11 @@
 // correctness flag): existing notifications are backfilled once at rollout so
 // old history is never emailed retroactively.
 //
-// CONTENT (spec 44–45, 49, 52): rendered once at fan-out time in the ORG
-// locale (the pragmatic recipient-locale proxy — users have no locale column)
-// and snapshotted into delivery.payload — the worker never re-renders, so a
-// preference/locale change mid-flight cannot alter already-planned content.
+// CONTENT (spec 44–45, 49, 52): rendered once at fan-out time — v0.17 uses
+// the RECIPIENT'S personal locale (User.locale) with the org locale as
+// fallback — and snapshotted into delivery.payload; the worker never
+// re-renders, so a preference/locale change mid-flight cannot alter
+// already-planned content.
 
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
@@ -31,12 +32,10 @@ import {
 } from "@/lib/domain-events";
 import {
   DELIVERY_CHANNEL,
-  parseChannelPreferences,
   appLink,
   buildWebhookPayload,
   emailHtml,
 } from "./channels";
-import { notificationPreferencesSettingKey } from "../notification-service";
 
 const BATCH_SIZE = 100;
 
@@ -112,9 +111,9 @@ export async function fanoutNotificationDeliveries(
     remaining: 0,
   };
 
-  // Org-level config (locale for rendering, webhook endpoints).
+  // Org-level config (webhook endpoints; fallback locale for rendering).
   const org = await db.organization.findUnique({ where: { id: orgId }, select: { locale: true } });
-  const locale = org?.locale ?? "en";
+  const orgLocale = org?.locale ?? "en";
 
   let cursor: { createdAt: Date; id: string } | null = null;
   for (;;) {
@@ -138,24 +137,27 @@ export async function fanoutNotificationDeliveries(
     if (!notifications.length) break;
     summary.notificationsScanned += notifications.length;
 
-    // Batch-load users + events + org webhook endpoints.
+    // Batch-load users + events + org webhook endpoints + PERSONAL prefs
+    // (v0.17: user-owned rows + user locale per recipient).
     const userIds: string[] = Array.from(new Set(notifications.filter((n) => n.userId != null).map((n) => n.userId as string)));
     const eventIds: string[] = Array.from(new Set(notifications.filter((n) => n.eventId != null).map((n) => n.eventId as string)));
     const [users, events, endpoints, prefRows] = await Promise.all([
-      db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, telegramChatId: true } }),
+      db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, email: true, telegramChatId: true, locale: true } }),
       db.domainEvent.findMany({ where: { id: { in: eventIds } } }),
       db.webhookEndpoint.findMany({ where: { organizationId: orgId, enabled: true } }),
-      db.setting.findMany({
-        where: { organizationId: orgId, key: { in: userIds.map((uid) => notificationPreferencesSettingKey(uid)) } },
-        select: { key: true, value: true },
-      }),
+      db.userNotificationPreference.findMany({ where: { userId: { in: userIds } } }),
     ]);
     const userById = new Map(users.map((u) => [u.id, u]));
     const eventById = new Map(events.map((e) => [e.id, e]));
-    const prefsByUser = new Map<string, ReturnType<typeof parseChannelPreferences>>();
+    // prefs: userId → eventType → { email, telegram }
+    const prefsByUser = new Map<string, Map<string, { email: boolean; telegram: boolean }>>();
     for (const row of prefRows) {
-      const uid = row.key.slice(notificationPreferencesSettingKey("").length);
-      prefsByUser.set(uid, parseChannelPreferences(row.value));
+      let byType = prefsByUser.get(row.userId);
+      if (!byType) {
+        byType = new Map();
+        prefsByUser.set(row.userId, byType);
+      }
+      byType.set(row.eventType, { email: row.email, telegram: row.telegram });
     }
 
     for (const notification of notifications) {
@@ -168,8 +170,11 @@ export async function fanoutNotificationDeliveries(
         continue;
       }
       const payload = (notification.payload ?? {}) as Record<string, unknown>;
+      // PERSONAL LOCALE (v0.17 spec 48): recipient's locale, org fallback.
+      const recipient = notification.userId != null ? userById.get(notification.userId) : undefined;
+      const renderLocale = resolveLocale(recipient?.locale ?? orgLocale);
       const rendered = renderChannelContent({
-        locale,
+        locale: renderLocale,
         type: notification.type,
         title: notification.title,
         message: notification.message,
@@ -183,8 +188,7 @@ export async function fanoutNotificationDeliveries(
 
       // EMAIL / TELEGRAM — per-user preferences (spec 38–40, 98).
       if (user) {
-        const prefs = prefsByUser.get(user.id) ?? parseChannelPreferences(null);
-        const toggles = prefs[event.type as DomainEventType] ?? { email: false, telegram: false };
+        const toggles = prefsByUser.get(user.id)?.get(event.type as DomainEventType) ?? { email: false, telegram: false };
         if (toggles.email && user.email) {
           creates.push({
             organizationId: orgId,

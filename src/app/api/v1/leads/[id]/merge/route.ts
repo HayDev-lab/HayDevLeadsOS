@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { Merge } from "@/lib/schemas/lead";
 import { mergeLeads } from "@/lib/leados/lead-service";
 
@@ -18,6 +18,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const m = (e as Error).message;
     if (m === "SAME_LEAD") return badRequest("Cannot merge a lead into itself");
     if (m === "TARGET_NOT_FOUND" || m === "SOURCE_NOT_FOUND") return notFound("lead");
-    return serverError("merge-failed", e);
+    return apiError("merge-failed", e);
   }
 }

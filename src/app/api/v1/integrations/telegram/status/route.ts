@@ -2,7 +2,7 @@
 // CURRENT user (v0.16 spec 92). Never exposes the chat id to other users.
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 import { getTelegramProvider } from "@/lib/leados/delivery/providers";
 
 export async function GET() {
@@ -19,6 +19,6 @@ export async function GET() {
       chatIdMasked: user?.telegramChatId ? `${user.telegramChatId.slice(0, 3)}…` : null,
     });
   } catch (e) {
-    return serverError("telegram-status-failed", e);
+    return apiError("telegram-status-failed", e);
   }
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, notFound, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, notFound, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 
 const Update = z.object({
@@ -39,7 +39,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const updated = await db.assignmentRule.update({ where: { id }, data });
     return ok({ rule: updated });
   } catch (e) {
-    return serverError("assignment-rule-update-failed", e);
+    return apiError("assignment-rule-update-failed", e);
   }
 }
 
@@ -53,6 +53,6 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     await db.assignmentRule.delete({ where: { id } });
     return ok({ ok: true });
   } catch (e) {
-    return serverError("assignment-rule-delete-failed", e);
+    return apiError("assignment-rule-delete-failed", e);
   }
 }

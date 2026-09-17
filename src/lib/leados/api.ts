@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { AuthRequiredError, ForbiddenError } from "./context";
 
 export function ok(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -31,9 +32,31 @@ export function conflict(message: string, details?: unknown) {
   return NextResponse.json({ error: message, details }, { status: 409 });
 }
 
+export function tooMany(message = "Too many requests", retryAfterSec?: number) {
+  return NextResponse.json(
+    { error: message },
+    { status: 429, ...(retryAfterSec ? { headers: { "retry-after": String(retryAfterSec) } } : {}) }
+  );
+}
+
 export function serverError(message: string, details?: unknown) {
   console.error("[LEADOS] serverError", message, details);
   return NextResponse.json({ error: message, details }, { status: 500 });
+}
+
+/**
+ * Error mapper for route catch blocks (v0.17): auth-aware replacement for
+ * serverError(). AuthRequiredError → 401, ForbiddenError → 403, everything
+ * else → 500 exactly like serverError.
+ */
+export function apiError(message: string, details?: unknown) {
+  if (details instanceof AuthRequiredError) {
+    return unauthorized(details.message === "Authentication required" ? "Not authenticated" : details.message);
+  }
+  if (details instanceof ForbiddenError) {
+    return forbidden(details.message);
+  }
+  return serverError(message, details);
 }
 
 export function validate<T>(

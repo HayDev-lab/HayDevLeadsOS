@@ -3,7 +3,7 @@
 // pass picks it up regardless of attemptCount (manual action, not the bounded
 // automatic retry loop).
 import { getSession, canManage } from "@/lib/leados/context";
-import { ok, forbidden, notFound, serverError } from "@/lib/leados/api";
+import { ok, forbidden, notFound, apiError } from "@/lib/leados/api";
 import { manuallyRetryDelivery } from "@/lib/leados/delivery/delivery-worker";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +15,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (!result.ok) return notFound(result.error ?? "Delivery not found");
     return ok({ ok: true });
   } catch (e) {
-    return serverError("delivery-retry-failed", e);
+    return apiError("delivery-retry-failed", e);
   }
 }

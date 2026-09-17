@@ -6,9 +6,9 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Moon, Sun, Languages, Search, Bell, User as UserIcon, Check, ChevronDown, Command } from "lucide-react";
+import { Moon, Sun, Languages, Search, Bell, User as UserIcon, Check, ChevronDown, Command, LogOut } from "lucide-react";
 import { useLocale } from "@/lib/leados/locale";
-import { useSearch, useSession, useSwitchUser } from "@/hooks/leados/use-api";
+import { useSearch, useSession, useSwitchUser, useAuthMe, useSwitchOrg, useLogout } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { LeadAvatar } from "./primitives";
@@ -60,11 +60,19 @@ export function LangSwitcher() {
 }
 
 export function UserSwitcher() {
+  const { t } = useLocale();
   const { data } = useSession();
   const switchUser = useSwitchUser();
+  const me = useAuthMe();
+  const switchOrg = useSwitchOrg();
+  const logout = useLogout();
+  const [, navigate] = useHashRoute();
   const user = data?.session?.user;
   if (!user) return <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full"><UserIcon className="h-4 w-4" /></Button>;
-  const roleLabel: Record<string, string> = { OWNER: "Owner", ADMIN: "Admin", MANAGER: "Manager", SALES_MANAGER: "Sales", VIEWER: "Viewer" };
+  const roleLabel: Record<string, string> = { OWNER: "Owner", ADMIN: "Admin", MEMBER: "Member", VIEWER: "Viewer" };
+  const memberships = me.data?.memberships ?? [];
+  const switchable = memberships.filter((m) => !m.active);
+  const isDemo = data?.session?.demo ?? false;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -77,19 +85,48 @@ export function UserSwitcher() {
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground hidden md:block" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="text-xs text-muted-foreground">{user.email}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Switch user (demo)</DropdownMenuLabel>
-        {data?.users?.map((u) => (
-          <DropdownMenuItem key={u.id} onClick={() => switchUser.mutate(u.id)} className="justify-between gap-2">
-            <span className="flex items-center gap-2">
-              <LeadAvatar first={u.name} color={u.avatarColor} size={22} />
-              <span className="text-xs">{u.name}</span>
-            </span>
-            {u.id === user.id && <Check className="h-3.5 w-3.5" />}
+        <DropdownMenuItem onClick={() => navigate("settings", { tab: "profile" })} className="gap-2">
+          <UserIcon className="h-3.5 w-3.5" /> {t("usermenu.profile")}
+        </DropdownMenuItem>
+        {switchable.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">{t("usermenu.switchOrg")}</DropdownMenuLabel>
+            {switchable.map((m) => (
+              <DropdownMenuItem key={m.organizationId} onClick={() => switchOrg.mutate(m.organizationId)} className="justify-between gap-2">
+                <span className="flex items-center gap-2 text-xs">{m.organization.name}{m.organization.isDemo ? " (demo)" : ""}</span>
+                <span className="text-[10px] text-muted-foreground">{roleLabel[m.role] ?? m.role}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+        {isDemo && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">{t("usermenu.switchUser")}</DropdownMenuLabel>
+            {data?.users?.map((u) => (
+              <DropdownMenuItem key={u.id} onClick={() => switchUser.mutate(u.id)} className="justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <LeadAvatar first={u.name} color={u.avatarColor} size={22} />
+                  <span className="text-xs">{u.name}</span>
+                </span>
+                {u.id === user.id && <Check className="h-3.5 w-3.5" />}
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => logout.mutate(false)} className="gap-2">
+          <LogOut className="h-3.5 w-3.5" /> {t("usermenu.logout")}
+        </DropdownMenuItem>
+        {!isDemo && (
+          <DropdownMenuItem onClick={() => logout.mutate(true)} className="gap-2">
+            <LogOut className="h-3.5 w-3.5" /> {t("usermenu.logoutAll")}
           </DropdownMenuItem>
-        ))}
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

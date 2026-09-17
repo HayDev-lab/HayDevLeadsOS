@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/leados/context";
-import { ok, serverError } from "@/lib/leados/api";
+import { ok, apiError } from "@/lib/leados/api";
 
 export async function GET(_req: Request) {
   try {
@@ -14,6 +14,6 @@ export async function GET(_req: Request) {
     const sources = await db.leadSource.findMany({ where: { organizationId: session.orgId }, orderBy: { position: "asc" } });
     return ok({ pipelines, sources });
   } catch (e) {
-    return serverError("pipeline-list-failed", e);
+    return apiError("pipeline-list-failed", e);
   }
 }

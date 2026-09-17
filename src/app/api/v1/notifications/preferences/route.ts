@@ -6,9 +6,10 @@
 //          { types: {...}, channels: { EVENT: {email,telegram} } }     (v0.16)
 //        External channels default OFF (spec 98) and toggle availability is
 //        governed by channel configuration (Integrations, spec 40).
-// User-scoped (Section 55) — persistent User-scoped Setting rows.
+// v0.17: PERSONAL preferences — user-owned UserNotificationPreference rows
+// (moved out of org Settings; migrated losslessly by the backfill script).
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, apiError, parseJson } from "@/lib/leados/api";
 import {
   getNotificationPreferences,
   getChannelPreferences,
@@ -21,12 +22,12 @@ export async function GET() {
   try {
     const session = await getSession();
     const [types, channels] = await Promise.all([
-      getNotificationPreferences(session.orgId, session.userId),
-      getChannelPreferences(session.orgId, session.userId),
+      getNotificationPreferences(session.userId),
+      getChannelPreferences(session.userId),
     ]);
     return ok({ preferences: types, channels });
   } catch (e) {
-    return serverError("notification-preferences-get-failed", e);
+    return apiError("notification-preferences-get-failed", e);
   }
 }
 
@@ -50,9 +51,9 @@ export async function PUT(req: Request) {
       channels = c.channels!;
     }
 
-    const saved = await setNotificationPreferences(session.orgId, session.userId, v.prefs!, channels);
+    const saved = await setNotificationPreferences(session.userId, v.prefs!, channels);
     return ok({ ok: true, preferences: saved.types, channels: saved.channels });
   } catch (e) {
-    return serverError("notification-preferences-save-failed", e);
+    return apiError("notification-preferences-save-failed", e);
   }
 }

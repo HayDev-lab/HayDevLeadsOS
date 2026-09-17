@@ -2,7 +2,7 @@
 // POST /api/v1/automations        — create rule (OWNER/ADMIN only, spec 73/110)
 import { NextResponse } from "next/server";
 import { getSession, canManage } from "@/lib/leados/context";
-import { ok, serverError, forbidden, parseJson } from "@/lib/leados/api";
+import { ok, apiError, forbidden, parseJson } from "@/lib/leados/api";
 import {
   RuleValidationError,
   createAutomationRule,
@@ -19,7 +19,7 @@ export async function GET() {
     ]);
     return ok({ rows: rules, summary, canManage: canManage(session.role) });
   } catch (e) {
-    return serverError("automations-list-failed", e);
+    return apiError("automations-list-failed", e);
   }
 }
 
@@ -36,6 +36,6 @@ export async function POST(req: Request) {
     if (e instanceof RuleValidationError) {
       return NextResponse.json({ error: "Validation failed", details: e.errors }, { status: 400 });
     }
-    return serverError("automation-create-failed", e);
+    return apiError("automation-create-failed", e);
   }
 }
