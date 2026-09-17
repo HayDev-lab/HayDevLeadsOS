@@ -24,6 +24,7 @@ async function jfetch<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   get: <T>(path: string) => jfetch<T>(path),
   post: <T>(path: string, body?: unknown) => jfetch<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  put: <T>(path: string, body?: unknown) => jfetch<T>(path, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) => jfetch<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   del: <T>(path: string) => jfetch<T>(path, { method: "DELETE" }),
 };
@@ -224,11 +225,122 @@ export function useUsers() {
 export function useSettings() {
   return useQuery({ queryKey: ["settings"], queryFn: () => api.get<any>("/settings") });
 }
+
+// ---------- EVENT ENGINE v0.14: notifications ----------
+
+export interface NotificationRow {
+  id: string;
+  userId: string | null;
+  eventId: string | null;
+  leadId: string | null;
+  type: string;
+  templateKey: string | null;
+  payload: Record<string, unknown> | null;
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  entityType: string | null;
+  entityId: string | null;
+  deepLink: string | null;
+  title: string;
+  message: string;
+  readAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  lead: { id: string; firstName: string | null; lastName: string | null; company: string | null } | null;
+}
+
 export function useNotifications() {
+  // Legacy bell hook — recent rows + server-side unread count.
   return useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => api.get<{ rows: any[]; unread: number }>("/notifications"),
+    queryKey: ["notifications", "recent"],
+    queryFn: () =>
+      api.get<{ rows: NotificationRow[]; unread: number }>("/notifications?recent=8&filter=all"),
     refetchInterval: 60_000,
+  });
+}
+
+export function useNotificationsList(filter: "all" | "unread" | "critical" | "resolved", page: number, limit = 20) {
+  return useQuery({
+    queryKey: ["notifications", "list", filter, page, limit],
+    queryFn: () =>
+      api.get<{
+        rows: NotificationRow[];
+        total: number;
+        page: number;
+        limit: number;
+        pages: number;
+        unread: number;
+      }>(`/notifications?filter=${filter}&page=${page}&limit=${limit}`),
+    placeholderData: (prev) => prev,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useUnreadCount() {
+  return useQuery({
+    queryKey: ["notifications", "unread-count"],
+    queryFn: () => api.get<{ count: number }>("/notifications/unread-count"),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post("/notifications/mark-all-read", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
+export function useNotificationPreferences() {
+  return useQuery({
+    queryKey: ["notification-preferences"],
+    queryFn: () => api.get<{ preferences: Record<string, boolean> }>("/notifications/preferences"),
+  });
+}
+
+export function useSaveNotificationPreferences() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (preferences: Record<string, boolean>) =>
+      api.put<{ ok: boolean; preferences: Record<string, boolean> }>("/notifications/preferences", preferences),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notification-preferences"] });
+    },
+  });
+}
+
+export function useReconcileEvents() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ ok: boolean; summary: { scannedLeads: number; eventsCreated: number; notificationsCreated: number; duplicatesSkipped: number; durationMs: number } }>("/events/reconcile", {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["domain-events"] });
+    },
+  });
+}
+
+export function useDomainEvents(page = 1, limit = 50) {
+  return useQuery({
+    queryKey: ["domain-events", page, limit],
+    queryFn: () =>
+      api.get<{
+        rows: { id: string; type: string; entityType: string; entityId: string; occurredAt: string; deduplicationKey: string; processedAt: string | null; payload: Record<string, unknown> | null }[];
+        total: number;
+      }>(`/events/domain?page=${page}&limit=${limit}`),
   });
 }
 export function useErpSync() {

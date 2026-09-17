@@ -37,6 +37,7 @@ model Organization {
   incomingMessages     IncomingMessage[]
   webhookLogs           WebhookLog[]
   notifications         Notification[]
+  domainEvents         DomainEvent[]
   customFields         CustomField[]
   scoringConfigs       ScoringConfig[]
   settings             Setting[]
@@ -524,21 +525,77 @@ model LostReason {
 }
 
 model Notification {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   userId         String?
+  /** Source DomainEvent (projector idempotency: unique(eventId, userId)). */
+  eventId        String?
   leadId         String?
   type           String
+  /** i18n template key (Section 47 — structured localization, not a frozen string). */
+  templateKey    String?
+  /** Structured payload rendered with the template at display time. */
+  payload        Json?
+  /** INFO | WARNING | CRITICAL */
+  severity       String    @default("INFO")
+  /** lead | task — entity the deepLink points at. */
+  entityType     String?
+  entityId       String?
+  /** Hash-route deep link, e.g. "lead/<id>?focus=stage". */
+  deepLink       String?
   title          String
   message        String
-  read           Boolean  @default(false)
-  createdAt      DateTime @default(now())
+  /** Legacy mirror of readAt (kept in sync for backward compatibility). */
+  read           Boolean   @default(false)
+  readAt         DateTime?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  event        DomainEvent?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
-  @@index([organizationId, userId, read])
+  @@unique([eventId, userId])
+  @@index([organizationId, userId, readAt])
+  @@index([organizationId, userId, createdAt])
+  @@index([organizationId, resolvedAt])
+  @@index([organizationId, eventId])
+}
+
+// ---------------------------------------------------------------------------
+// DOMAIN EVENTS (v0.14 Event Engine)
+// Machine-readable business facts (NOT the Activity timeline): a durable
+// event store that the notification projector — and later the Automation
+// Engine — subscribe to. Immutable once written; only processedAt may change.
+// ---------------------------------------------------------------------------
+
+model DomainEvent {
+  id               String    @id @default(cuid())
+  organizationId   String
+  /** DOMAIN_EVENT type (FIRST_RESPONSE_BREACHED, STAGE_BECAME_STALE, ...) */
+  type             String
+  /** lead | task */
+  entityType       String
+  entityId         String
+  actorUserId      String?
+  /** When the business fact became true (e.g. breachAt / staleAt / dueAt). */
+  occurredAt       DateTime
+  /** Minimal structured payload — notification, audit, future automation. */
+  payload          Json?
+  /** Deterministic idempotency key, e.g. "STAGE_BECAME_STALE:<leadId>:<stageEnteredAt>". */
+  deduplicationKey String
+  /** Set by the projector after notifications were created (crash recovery). */
+  processedAt      DateTime?
+  createdAt        DateTime  @default(now())
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@unique([organizationId, deduplicationKey])
+  @@index([organizationId, type])
+  @@index([organizationId, processedAt])
+  @@index([organizationId, entityType, entityId])
 }
 
 model CustomField {

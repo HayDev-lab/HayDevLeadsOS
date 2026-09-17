@@ -5,6 +5,13 @@ import { ok, serverError, validate, parseJson, badRequest } from "@/lib/leados/a
 import { TaskCreate } from "@/lib/schemas/lead";
 import { LEAD_EVENT, TASK_TYPE } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
+import {
+  DOMAIN_EVENT,
+  ENTITY_TYPE,
+  displayName,
+  taskAssignedDedupKey,
+} from "@/lib/domain-events";
+import { publishDomainEvent } from "@/lib/leados/domain-event-service";
 
 export async function GET(req: Request) {
   try {
@@ -58,6 +65,30 @@ export async function POST(req: Request) {
         userId: session.userId,
         type: LEAD_EVENT.TASK_CREATED,
         payload: { taskId: task.id, title: task.title } as never,
+      });
+    }
+
+    // EVENT ENGINE: assigning a generic task notifies its assignee (Section 51).
+    if (task.type === TASK_TYPE.TASK && task.assignedTo && task.assignedTo !== session.userId) {
+      const lead = task.leadId
+        ? await db.lead.findUnique({ where: { id: task.leadId }, select: { firstName: true, lastName: true, company: true } })
+        : null;
+      const assignedAt = new Date();
+      await publishDomainEvent(session.orgId, {
+        type: DOMAIN_EVENT.TASK_ASSIGNED,
+        entityType: ENTITY_TYPE.TASK,
+        entityId: task.id,
+        actorUserId: session.userId,
+        occurredAt: assignedAt,
+        deduplicationKey: taskAssignedDedupKey(task.id, task.assignedTo, assignedAt),
+        payload: {
+          taskId: task.id,
+          taskTitle: task.title,
+          assigneeId: task.assignedTo,
+          leadId: task.leadId,
+          leadName: lead ? displayName(lead) : null,
+          ownerId: null,
+        },
       });
     }
     return ok({ task });

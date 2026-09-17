@@ -23,6 +23,7 @@ import {
 import { QUALIFYING_ACTIVITY_TYPES } from "@/lib/sla";
 import { ACTIVITY_TYPE, LEAD_EVENT } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
+import { resolveFollowUpNotifications } from "@/lib/leados/notification-service";
 
 export const FOLLOWUP_SETTING_KEY = "followup_sla";
 
@@ -492,6 +493,9 @@ export async function completeFollowUp(
     dueAt: task.dueAt,
     completedAt,
   });
+  // EVENT ENGINE (Sections 29/40): completing the cycle resolves every active
+  // follow-up problem notification for this task (history is kept).
+  await resolveFollowUpNotifications(orgId, task.id);
   return task;
 }
 
@@ -522,6 +526,10 @@ export async function rescheduleFollowUp(
     previousDueAt,
     note: input.note ?? null,
   });
+  // EVENT ENGINE (Section 29): a successful reschedule resolves the active
+  // overdue notification; when the NEW dueAt passes, a fresh event is created
+  // under a new dedup key (taskId + new dueAt).
+  await resolveFollowUpNotifications(orgId, task.id);
   return task;
 }
 
@@ -538,6 +546,7 @@ export async function cancelFollowUp(orgId: string, leadId: string, userId: stri
 
   const task = await db.task.update({ where: { id: target.id }, data: { status: "CANCELLED" } });
   await logFollowUpActivity(orgId, leadId, userId, "CANCELLED", { taskId: task.id, dueAt: task.dueAt });
+  await resolveFollowUpNotifications(orgId, task.id);
   return task;
 }
 
@@ -557,6 +566,7 @@ export async function cancelFollowUpsForFinalStage(
   for (const t of open) {
     await db.task.update({ where: { id: t.id }, data: { status: "CANCELLED" } });
     await logFollowUpActivity(orgId, leadId, userId, "CANCELLED", { taskId: t.id, dueAt: t.dueAt });
+    await resolveFollowUpNotifications(orgId, t.id);
   }
   return open.length;
 }

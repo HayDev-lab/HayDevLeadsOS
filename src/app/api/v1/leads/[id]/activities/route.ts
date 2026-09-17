@@ -12,6 +12,7 @@ import {
   getFollowUpConfig,
   scheduleFollowUp,
 } from "@/lib/leados/followup-sla-service";
+import { resolveFirstResponseNotifications } from "@/lib/leados/notification-service";
 import { Prisma } from "@prisma/client";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -95,6 +96,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       type: LEAD_EVENT.ACTIVITY_LOGGED,
       payload: { type: v.value.type, title: v.value.title } as never,
     });
+
+    // EVENT ENGINE (Sections 40/66): a qualifying response moves First Response
+    // to RESPONDED — every active breach notification for this lead resolves.
+    if (QUALIFYING_ACTIVITY_TYPES.includes(v.value.type)) {
+      await resolveFirstResponseNotifications(session.orgId, id);
+    }
     return ok({ activity });
   } catch (e) {
     return serverError("activity-create-failed", e);

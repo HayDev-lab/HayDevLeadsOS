@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { useLocale } from "@/lib/leados/locale";
-import { useLostDetector, useSession, useSeed } from "@/hooks/leados/use-api";
+import { useLostDetector, useSession, useSeed, useReconcileEvents } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -20,6 +20,7 @@ import { SettingsView } from "./settings-view";
 import { InboxView } from "./inbox/inbox-view";
 import { AnalyticsView } from "./analytics/analytics-view";
 import { TeamView } from "./team/team-view";
+import { NotificationsView } from "./notifications/notifications-view";
 import { useInboxStats } from "@/hooks/leados/use-api";
 
 const NAV = [
@@ -33,6 +34,32 @@ const NAV = [
   { view: "settings", icon: Settings, key: "nav.settings" as const },
 ];
 
+/**
+ * EVENT ENGINE background trigger (spec Sections 23–24): no production
+ * scheduler exists in this deployment, so the app reconciles on mount and
+ * then every 5 minutes while open (paused when the tab is hidden). The
+ * endpoint is idempotent — concurrent triggers can never duplicate events.
+ */
+function useEventReconciliationTick() {
+  const reconcile = useReconcileEvents();
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    const run = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      reconcile.mutate(undefined, {
+        onError: () => {
+          /* silent — the bell stays usable; next tick retries (Section 82) */
+        },
+      });
+    };
+    run();
+    const id = setInterval(run, 5 * 60_000);
+    return () => clearInterval(id);
+  }, []);
+}
+
 export function LeadOSApp() {
   const [route, navigate] = useHashRoute();
   const { t } = useLocale();
@@ -41,12 +68,8 @@ export function LeadOSApp() {
   const inboxStats = useInboxStats();
   const seed = useSeed();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  const org = session.data?.session?.organization;
-  const needsSeed = session.isError && !session.data;
-
-  const attentionCount = lost.data?.leadsNeedingAttention ?? 0;
-  const inboxUnassigned = inboxStats.data?.unassigned ?? 0;
+  const [mounted, setMounted] = useState(false);
+  useEventReconciliationTick();
 
   useEffect(() => {
     // auto-seed on very first load if there is no org
@@ -61,6 +84,33 @@ export function LeadOSApp() {
       });
     }
   }, [session.isError, session.isFetching, seed]);
+
+  // HYDRATION-SAFE MOUNT GATE: the active view lives in the URL HASH, which
+  // the server never sees — so the server always renders the dashboard shell
+  // while a client loading #/notifications (or any hash route) would render a
+  // different tree (React hydration error + full client re-render). We render
+  // a neutral skeleton until mount, exactly like the theme toggle does.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+          <div className="flex h-14 items-center gap-2 px-3 md:px-5" />
+        </header>
+        <div className="flex flex-1 min-h-0">
+          <aside className="hidden md:flex w-60 shrink-0 flex-col border-r bg-card/30" />
+        </div>
+      </div>
+    );
+  }
+
+  const org = session.data?.session?.organization;
+  const needsSeed = session.isError && !session.data;
+
+  const attentionCount = lost.data?.leadsNeedingAttention ?? 0;
+  const inboxUnassigned = inboxStats.data?.unassigned ?? 0;
 
   if (needsSeed) {
     return (
@@ -78,7 +128,14 @@ export function LeadOSApp() {
     );
   }
 
-  const currentView = route.view === "lead" ? "lead" : NAV.some((n) => n.view === route.view) ? route.view : "dashboard";
+  // Hash-route views beyond the sidebar NAV (notifications = bell → "View all").
+  const EXTRA_VIEWS = ["notifications", "lead"];
+  const currentView =
+    route.view === "lead"
+      ? "lead"
+      : NAV.some((n) => n.view === route.view) || EXTRA_VIEWS.includes(route.view)
+      ? route.view
+      : "dashboard";
 
   const renderView = () => {
     switch (currentView) {
@@ -96,6 +153,8 @@ export function LeadOSApp() {
         return <AnalyticsView />;
       case "team":
         return <TeamView />;
+      case "notifications":
+        return <NotificationsView />;
       case "settings":
         return <SettingsView />;
       default:

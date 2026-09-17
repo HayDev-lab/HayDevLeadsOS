@@ -8,10 +8,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Moon, Sun, Languages, Search, Bell, User as UserIcon, Check, ChevronDown, Command } from "lucide-react";
 import { useLocale } from "@/lib/leados/locale";
-import { useNotifications, useSearch, useSession, useSwitchUser } from "@/hooks/leados/use-api";
+import { useSearch, useSession, useSwitchUser } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { LeadAvatar } from "./primitives";
+import { NotificationsBell as NotificationsBellV14 } from "./notifications/notifications-bell";
+
+/** v0.14 Event Engine bell — popover (desktop) / drawer (mobile) + unread badge. */
+export const NotificationsBell = NotificationsBellV14;
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -188,61 +192,3 @@ export function SearchTrigger() {
   );
 }
 
-export function NotificationsBell() {
-  const { data } = useNotifications();
-  const qc = useQueryClient();
-  const [, navigate] = useHashRoute();
-  const unread = data?.unread ?? 0;
-  const markAllRead = async () => {
-    await fetch("/api/v1/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ all: true }) });
-    qc.invalidateQueries({ queryKey: ["notifications"] });
-  };
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 relative">
-          <Bell className="h-4 w-4" />
-          {unread > 0 && <span className="absolute top-1 right-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-96">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Notifications</span>
-          {unread > 0 && (
-            <button onClick={markAllRead} className="text-xs font-normal text-primary hover:underline">Mark all read</button>
-          )}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <div className="max-h-96 overflow-y-auto">
-          {(data?.rows ?? []).length === 0 && (
-            <div className="p-8 text-center">
-              <Bell className="h-6 w-6 text-muted-foreground/30 mx-auto mb-2" />
-              <p className="text-xs text-muted-foreground">No notifications</p>
-            </div>
-          )}
-          {(data?.rows ?? []).slice(0, 20).map((n: any) => (
-            <DropdownMenuItem key={n.id} className={cn("flex flex-col items-start gap-0.5 py-2.5 px-3 cursor-pointer", !n.read && "bg-primary/5")} onClick={() => n.lead?.id && navigate("lead", { id: n.lead.id })}>
-              <div className="flex items-center gap-2 w-full">
-                {!n.read && <span className="h-1.5 w-1.5 rounded-full bg-sky-500 shrink-0" />}
-                <span className="text-xs font-medium flex-1 truncate">{n.title}</span>
-                <span className="text-[10px] text-muted-foreground shrink-0">{timeAgoShort(n.createdAt)}</span>
-              </div>
-              <span className="text-xs text-muted-foreground pl-3.5">{n.message}</span>
-            </DropdownMenuItem>
-          ))}
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function timeAgoShort(d?: Date | string | null): string {
-  if (!d) return "";
-  const diff = Date.now() - new Date(d).getTime();
-  const abs = Math.abs(diff);
-  const min = 60_000, hr = 3_600_000, day = 86_400_000;
-  if (abs < min) return "now";
-  if (abs < hr) return `${Math.round(abs / min)}m`;
-  if (abs < day) return `${Math.round(abs / hr)}h`;
-  return `${Math.round(abs / day)}d`;
-}

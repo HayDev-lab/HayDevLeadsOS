@@ -20,6 +20,15 @@ import { normalizeEmail, normalizePhone } from "./normalize";
 import { computeScore } from "./scoring";
 import { suggestNextAction } from "./followup";
 import { publishEvent } from "./events";
+import {
+  DOMAIN_EVENT,
+  ENTITY_TYPE,
+  displayName,
+  followUpOverdueDedupKey,
+  leadAssignedDedupKey,
+} from "@/lib/domain-events";
+import { publishDomainEvent } from "./domain-event-service";
+import { runEventReconciliation } from "./event-reconciler";
 
 const ORG_SLUG = "haydev-demo";
 
@@ -608,6 +617,117 @@ export async function seed(): Promise<{ orgId: string }> {
           lastSyncAt: new Date(),
           attempts: 1,
           response: { mode: "local-mock" } as Prisma.InputJsonValue,
+        },
+      });
+    }
+  }
+
+  // EVENT ENGINE DEMO (v0.14) ------------------------------------------------
+
+  // Generic (type = TASK) demo coverage: one overdue, one due soon — so
+  // TASK_OVERDUE / TASK_DUE_SOON notifications exist alongside the follow-up
+  // engine's (FOLLOW_UP tasks never double-notify, spec Section 6).
+  {
+    const withOwner = await db.lead.findMany({
+      where: { organizationId: orgId, status: { notIn: ["WON", "LOST", "ARCHIVED"] }, ownerId: { not: null } },
+      take: 4,
+      orderBy: { createdAt: "asc" },
+    });
+    if (withOwner.length >= 2) {
+      const t1 = withOwner[1];
+      await db.task.create({
+        data: {
+          organizationId: orgId,
+          leadId: t1.id,
+          assignedTo: t1.ownerId,
+          title: `Prepare proposal for ${t1.company ?? "client"}`,
+          status: "TODO",
+          priority: "HIGH",
+          dueAt: new Date(Date.now() - 30 * 3_600_000), // overdue by 30h
+          type: "TASK",
+        },
+      });
+      const t2 = withOwner[2] ?? withOwner[1];
+      await db.task.create({
+        data: {
+          organizationId: orgId,
+          leadId: t2.id,
+          assignedTo: t2.ownerId,
+          title: `Send contract draft to ${t2.company ?? "client"}`,
+          status: "TODO",
+          priority: "MEDIUM",
+          dueAt: new Date(Date.now() + 2 * 3_600_000), // due in 2h → due soon
+          type: "TASK",
+        },
+      });
+    }
+  }
+
+  // Reconciliation creates every time-based event + notification idempotently
+  // (Section 84): re-running after a demo reset restores the expected state
+  // without duplicates.
+  await runEventReconciliation(orgId);
+
+  // Synthetic notification states (Section 83): an INFO read assignment
+  // notification and a resolved historical overdue — realistic history, not
+  // a fake metric in sight.
+  {
+    const assignedLead = await db.lead.findFirst({
+      where: { organizationId: orgId, ownerId: { not: null } },
+      orderBy: { createdAt: "asc" },
+    });
+    if (assignedLead && assignedLead.ownerId) {
+      const occurredAt = new Date(Date.now() - 48 * 3_600_000);
+      const { event } = await publishDomainEvent(orgId, {
+        type: DOMAIN_EVENT.LEAD_ASSIGNED,
+        entityType: ENTITY_TYPE.LEAD,
+        entityId: assignedLead.id,
+        occurredAt,
+        deduplicationKey: leadAssignedDedupKey(assignedLead.id, assignedLead.ownerId, occurredAt),
+        payload: {
+          leadId: assignedLead.id,
+          leadName: displayName(assignedLead),
+          assigneeId: assignedLead.ownerId,
+          ownerId: assignedLead.ownerId,
+        },
+      });
+      // mark the assignment notification READ (informational, already seen)
+      await db.notification.updateMany({
+        where: { eventId: event.id },
+        data: { readAt: new Date(occurredAt.getTime() + 3_600_000), read: true },
+      });
+    }
+
+    // A RESOLVED historical follow-up overdue (problem was fixed long ago).
+    const doneFu = await db.task.findFirst({
+      where: { organizationId: orgId, type: "FOLLOW_UP", status: "DONE", lead: { isNot: null } },
+      include: { lead: true },
+    });
+    if (doneFu && doneFu.lead) {
+      const dueAt = new Date(Date.now() - 72 * 3_600_000);
+      const { event } = await publishDomainEvent(orgId, {
+        type: DOMAIN_EVENT.FOLLOW_UP_OVERDUE,
+        entityType: ENTITY_TYPE.TASK,
+        entityId: doneFu.id,
+        occurredAt: dueAt,
+        deduplicationKey: followUpOverdueDedupKey(doneFu.id, dueAt),
+        payload: {
+          leadId: doneFu.leadId,
+          leadName: displayName(doneFu.lead),
+          taskId: doneFu.id,
+          taskTitle: doneFu.title,
+          dueAt: dueAt.toISOString(),
+          overdueMinutes: 60,
+          assigneeId: doneFu.assignedTo,
+          ownerId: doneFu.lead.ownerId,
+        },
+      });
+      await db.notification.updateMany({
+        where: { eventId: event.id },
+        data: {
+          readAt: new Date(dueAt.getTime() + 2 * 3_600_000),
+          read: true,
+          resolvedAt: new Date(dueAt.getTime() + 20 * 3_600_000),
         },
       });
     }

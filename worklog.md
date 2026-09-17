@@ -879,3 +879,78 @@ Verification: TS clean, ESLint exit 0, production build PASS (§151), 109/109 un
 
 Stage Summary:
 - STAGE INACTIVITY delivered as the third independent SLA layer: persisted stageEnteredAt source of truth (reset only on real transitions), per-stage thresholds from Settings keyed by stage ID, final stages excluded, ON_TRACK/AGING/STALE/NOT_APPLICABLE engine, Lead List/Detail/Kanban/Dashboard/Export surfaces, server-side stageHealth filter + urgency sort, NEEDS ATTENTION presentation layer over the three engines (issues ≠ leads), future automation contract (transition detection, no worker). First-response (28) and follow-up (31) regression green. VERIFIED_COMPLETE.
+
+---
+Task ID: 4-1
+Agent: main
+Task: STAGE 4 (v0.14) EVENT ENGINE + NOTIFICATION CENTER — INSPECT
+
+Work Log:
+- Read full spec upload (2640 lines, 120 sections).
+- Inspected: prisma/schema.prisma, context.ts (session/auth), events.ts (LeadEvent/IntegrationEvent publisher), constants.ts, sla.ts + sla-followup.ts + sla-stage-inactivity.ts (pure engines), sla-service.ts / followup-sla-service.ts / stage-inactivity-service.ts (server services with globalThis config caches), lead-service.ts (createLead/updateLead/changeStage/assignLead/archiveLead), activities route (qualifying types + auto-followup policy), tasks routes (POST/PATCH/DELETE), followup route (complete/reschedule/cancel), settings route (key-validated upserts), app-shell.tsx + header-controls.tsx (existing simple bell), hash-route.ts, i18n.ts (t() with {var} interpolation), seed.ts (30 leads + 1 legacy notification), use-api.ts hooks, tests (bun:test, 109 tests PASS), scripts/ (scale-test pattern with direct PrismaClient).
+- DB state: 1 org, 30 leads, 1 notification. Clean.
+
+INSPECT ANSWERS (spec Section 3):
+1. Recipient today: Notification.userId (nullable = org broadcast); session = cookie leados_uid, fallback = org OWNER.
+2. Persistent User model: YES (id, organizationId, role OWNER/ADMIN/MANAGER/SALES_MANAGER/VIEWER, status).
+3. Organization membership: YES (User.organizationId; every route scoped via getSession()).
+4. Real background worker: NO (Next.js app only, no cron). Choice: Option B+C hybrid — protected org-scoped reconcile API + client 5-min tick + manual script. Reconciler is idempotent so concurrent triggers are safe. Documented limitation.
+5. Time-based transitions: deterministic deduplication keys + DB unique(organizationId, deduplicationKey) + reconciler calling the 3 EXISTING engines (computeFirstResponseSla / computeFollowUpSla / computeStageInactivity). No SLA logic reimplementation.
+
+Stage Summary:
+- Task model supports assignee/dueAt/status → TASK_ASSIGNED, TASK_DUE_SOON, TASK_OVERDUE implementable (Task.type = TASK only; FOLLOW_UP tasks belong to the Follow-up engine — prevents double notifications).
+- Existing Notification model will be EXTENDED additively (eventId, severity, templateKey, payload, entityType, entityId, deepLink, readAt, resolvedAt); legacy `read` Boolean kept in sync.
+- New DomainEvent model (org-scoped, dedup unique, processedAt for projector crash recovery).
+- Emission points identified: assignment (lead-service create/update/assign), stage change (resolution hook), qualifying activity (FR resolution), followup mutations (resolution), task mutations (TASK_ASSIGNED + resolutions), seed (reconciliation run + synthetic states).
+- Plan: MODEL → pure lib/domain-events.ts (types, dedup keys, planner) → services (publish/projector/recipients/resolution/reconciler) → API routes → UI (bell popover + full view + settings tab + deep links) → i18n → tests → QA.
+
+---
+Task ID: 4-2..4-8
+Agent: main
+Task: MODEL + IMPLEMENT + RECONCILER + API + UI + CONNECT + TEST for the Event Engine v0.14
+
+Work Log:
+- MODEL: Prisma DomainEvent (org-scoped, unique(organizationId, deduplicationKey), processedAt recovery, indexes) + Notification extended additively (eventId, severity, templateKey, payload, entityType, entityId, deepLink, readAt, resolvedAt, unique(eventId, userId); legacy `read` Boolean kept in sync). db push OK.
+- PURE ENGINE src/lib/domain-events.ts: DOMAIN_EVENT (9 types), SEVERITY map (CRITICAL: FR breach/FU overdue/stale/task overdue; WARNING: due soon/aging; INFO: assignments), deterministic dedup key builders (stage/FU/task cycles anchored to stageEnteredAt/dueAt; assignments to the action instant), NOTIFICATION_TEMPLATES (titleKey/messageKey per type), deep links (lead/<id>?focus=..., tasks?task=...), preferences (per-user, defaults ON, parse/validate), task event config (warningBeforeHours, default 4), planLeadEvents() + planTaskEvents() consuming REAL engine results (no SLA reimplementation; TASK_* only for type=TASK — follow-ups never double-notify), renderEnglishSnapshot() fallback.
+- SERVICES: domain-event-service.ts (publishDomainEvent idempotent via P2002 catch, projectEventToNotifications with prefs filter + unique(eventId,userId) catch, resolveNotificationRecipients — Section 17 fallback CHAINS first-non-null, getOrgFallbackRecipient OWNER→ADMIN→any, getPreferencesFor batch cache, reprocessUnprocessedEvents crash recovery, listDomainEvents dev inspector). notification-service.ts (list server-paginated + filters all/unread/critical/resolved, server-side unread count, markRead/markAllRead recipient-scoped, resolveNotificationsForEntity + convenience resolvers, user-scoped preferences Setting key notification_preferences:<uid>). event-reconciler.ts (runEventReconciliation: recovery → configs once → active leads batch → first-response groupBy + FU task map → pure planners → chunked dedup-key lookups → idempotent creates + projections; summary log; task_events Setting key).
+- HOOKS: lead-service (LEAD_ASSIGNED on create/update/assign with same-owner guard; resolveStageNotifications on real changeStage; resolveAllLeadProblems on archive), activities route (qualifying response resolves FR breach), followup-sla-service (complete/cancel/reschedule/final-stage cancel resolve FU notifications task-scoped), tasks routes (TASK_ASSIGNED on create + assignee change; resolution on DONE/CANCELLED/dueAt change/DELETE).
+- API: GET /notifications (filters+pagination+recent), GET /notifications/unread-count, POST /notifications/mark-all-read, PATCH /notifications/:id/read, GET/PUT /notifications/preferences, POST /events/reconcile (org-scoped idempotent trigger), GET /events/domain (dev inspector), settings POST task_events key (validated). Legacy PATCH /notifications kept as compat.
+- UI: notifications/notification-card.tsx (localized render templateKey+payload, severity chips icon+label never color-only, unread dot, resolved badge, parseDeepLink), notifications-bell.tsx (badge 1–99/99+, Popover desktop / full-width Sheet mobile, skeleton/loading/error-retry, empty state), notifications-view.tsx (full center: filters, server pagination, deep links, mark all read, reconcile refresh), settings-notifications-tab.tsx (per-type toggles + task window + dev event inspector), app-shell (notifications route + useEventReconciliationTick 5-min idempotent client tick), lead-detail focus params (activity/followup→tasks tab, stage→changer), tasks-view task highlight ring. i18n: 54 keys × hy/ru/en.
+- SEED: generic TASK demo (overdue 30h + due soon 2h), runEventReconciliation at seed end (Section 84 restore-without-duplicates), synthetic states: LEAD_ASSIGNED info READ (48h ago) + FOLLOW_UP_OVERDUE resolved historical (72h ago).
+- TESTS: tests/domain-events.test.ts (32 pure) + tests/event-engine.test.ts (19 integration, throwaway org with cascade cleanup). Fixed during test runs: recipient chain must be first-non-null (Section 17 fallback), task payload missing assigneeId/ownerId hints, floating timestamp in a test.
+
+Stage Summary:
+- FULL SUITE: 160/160 PASS (109 existing: 28 FR + 31 FU + 50 stage + new 51).
+- Scale: 500-lead reconcile run1 = 272 events/408 notifications in ~930ms; run2 = 0/0 in ~23ms; zero duplicate keys, zero duplicate (eventId,userId) pairs.
+- Architecture: BUSINESS STATE → engines → planner → DEDUP-PROTECTED EVENT STORE → projector → in-app notification → read/resolved → deep link. No notifications from React; no SLA reimplementation; additive layer.
+- Remaining: ESLint, production build, demo reseed, browser QA (desktop/mobile/dark), final report + commit.
+
+---
+Task ID: 4-9..4-10
+Agent: main
+Task: VERIFY (browser QA, repair loops, scale) + final delivery
+
+Work Log:
+- Demo reseed with the new event-engine seeding: 30 leads → 20 reconciled events (5 STAGE_AGING, 3 STALE, 2 FR_BREACHED, 4 FU_OVERDUE, 1 FU_DUE_SOON, 5 TASK_OVERDUE, 1 TASK_DUE_SOON) + synthetic states (LEAD_ASSIGNED info READ, FOLLOW_UP_OVERDUE resolved historical).
+- Browser QA (agent-browser, 1440×900 + 390×844 + dark mode):
+  * Bell popover: localized cards, honest occurredAt-based relative times, severity chips + labels (never color-only), legacy-row English fallback, mark all read, View all. Badge 1–99 style (David: 9, Aram: 2 → empty after mark-all-read).
+  * Deep links: FR notification → lead/<id>?focus=activity (tab switched, hash cleaned); STAGE stale notification → focus=stage (stage changer scrolled); task notification → tasks?task=<id> highlight ring.
+  * E2E Scenario A (FR): MESSAGE logged via UI → RESPONDED → notification RESOLVED → unread 3→2 → Needs Attention KPI drops.
+  * E2E Scenario C (STALE): Dmitry Proposal→Meeting via UI → stale notification resolved, stageInactivity ON_TRACK.
+  * Filters: All / Unread (2 for Aram, 9 for David) / Critical / Resolved (only Robert's fixed breach).
+  * Settings → Notifications: 9 localized toggles (severity-letter chips), task window input, save persists user-scoped prefs (verified in DB), dev event inspector table.
+  * Mobile 390×844: bell opens FULL-WIDTH (390px) Sheet drawer, cards clickable, deep links work, notifications view no overflow, settings toggles 9 + spinbutton, no horizontal scroll anywhere.
+  * Dark mode: notifications view + bell popover verified.
+  * Locales: HY (default) + RU + EN fully localized titles/messages.
+- Repair loops:
+  1. {stage} placeholder not interpolated in the stage-stale TITLE → fixed (title now renders with vars).
+  2. Latent HYDRATION BUG (pre-existing): reloading any non-dashboard hash route (e.g. #/notifications) → server rendered Dashboard, client rendered the hash view → React hydration error. FIXED with an SSR-safe mount gate (neutral skeleton until mount, same pattern as ThemeToggle). Fresh-session verification: 0 page errors on #/notifications, #/leads, #/settings, #/pipeline, #/tasks.
+  3. Recurrence × 5 via API: 0 new events / 0 new notifications every run (18 duplicates skipped) — Section 104 PASS.
+  4. READ ≠ RESOLVED browser proof: mark-all-read clears the badge; Needs Attention block remains (1 SLA / 3 FU / 2 stale) — Section 50 PASS.
+- Final gates: bun test 160/160 PASS; ESLint 0 problems; tsc src/ clean; production build PASS (standalone).
+- Screenshots: download/events-qa/01..25 (dashboard+bell, popover, deep links, resolution flows, filters, settings, mobile, dark, RU/EN).
+
+Stage Summary:
+- FINAL VERDICT: VERIFIED_COMPLETE — see final report in the conversation.
+- Key numbers: 51 new tests (160 total), 9 event types, 500-lead reconciliation ~930ms first run / ~23ms steady-state, zero duplicates by construction (DB unique constraints).
+- Limitations (documented): background execution is client-tick + API trigger (no production scheduler in this deployment); TASK events cover type=TASK only (FOLLOW_UP belongs to the follow-up engine — no double notifications); preferences are per-user Setting rows (real User model exists, so user-scoped).

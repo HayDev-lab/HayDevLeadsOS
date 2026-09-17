@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTasks, useUpdateTask, useDeleteTask, useCreateTask, useUsers } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
@@ -19,11 +19,20 @@ import { toast } from "sonner";
 
 export function TasksView() {
   const { t } = useLocale();
-  const [, navigate] = useHashRoute();
+  const [route, navigate] = useHashRoute();
   const [filter, setFilter] = useState<"todo" | "overdue" | "done">("todo");
   const tasks = useTasks(filter === "done" ? ["DONE"] : filter === "overdue" ? ["TODO", "IN_PROGRESS"] : ["TODO", "IN_PROGRESS"]);
   const update = useUpdateTask();
   const del = useDeleteTask();
+
+  // DEEP LINK FOCUS (event engine): `#/tasks?task=<id>` — highlight the row.
+  const focusTaskId = route.params.task ?? null;
+  useEffect(() => {
+    if (focusTaskId) {
+      const el = document.getElementById(`task-${focusTaskId}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [focusTaskId, tasks.data]);
 
   const rows = tasks.data?.rows ?? [];
   const now = Date.now();
@@ -63,7 +72,7 @@ export function TasksView() {
         {filtered.map((task: any) => {
           const overdue = task.status !== "DONE" && task.dueAt && new Date(task.dueAt).getTime() < now;
           return (
-            <div key={task.id} className="flex items-start gap-3 px-3 py-3 hover:bg-accent/40 transition">
+            <div key={task.id} id={`task-${task.id}`} className={cn("flex items-start gap-3 px-3 py-3 hover:bg-accent/40 transition", focusTaskId === task.id && "ring-2 ring-primary ring-inset rounded-md bg-primary/5")}>
               <button onClick={() => toggle(task)} className="mt-0.5 shrink-0">
                 {task.status === "DONE" ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <Circle className="h-5 w-5 text-muted-foreground hover:text-primary" />}
               </button>

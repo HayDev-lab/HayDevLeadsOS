@@ -12,6 +12,8 @@ import {
 import { validateSlaThresholds } from "@/lib/sla";
 import { validateFollowUpConfig } from "@/lib/sla-followup";
 import { validateStageInactivityConfig } from "@/lib/sla-stage-inactivity";
+import { validateTaskEventConfig } from "@/lib/domain-events";
+import { TASK_EVENT_SETTING_KEY } from "@/lib/leados/event-reconciler";
 
 export async function GET() {
   try {
@@ -88,6 +90,14 @@ export async function POST(req: Request) {
         if (!v.ok) return badRequest(v.errors.join(" "), v.errors);
         await upsertSetting(session.orgId, STAGE_INACTIVITY_SETTING_KEY, v.config);
         invalidateStageInactivityConfigCache(session.orgId);
+        return ok({ ok: true, value: v.config });
+      }
+      if (body.key === TASK_EVENT_SETTING_KEY) {
+        // EVENT ENGINE — task due-soon window (Section 53): one centralized
+        // value, server-validated.
+        const v = validateTaskEventConfig(body.value);
+        if (!v.ok) return badRequest(v.errors.join(" "), v.errors);
+        await upsertSetting(session.orgId, TASK_EVENT_SETTING_KEY, v.config);
         return ok({ ok: true, value: v.config });
       }
       await upsertSetting(session.orgId, body.key, body.value);

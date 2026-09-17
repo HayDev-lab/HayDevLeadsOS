@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLead, useLeadActivities, useLeadNotes, useLeadEvents, useLeadDuplicate, useLeadTasks, useUsers, useUpdateLead, useAssignLead, useArchiveLead, useChangeStage, useLogActivity, useAddNote, useCreateTask, useSyncErp, useMergeLead, useRecalcScore, usePipeline } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
@@ -33,10 +33,36 @@ import { ActivityTimeline } from "./activity-timeline";
 
 export function LeadDetailView({ leadId }: { leadId: string | null }) {
   const { t } = useLocale();
-  const [, navigate] = useHashRoute();
+  const [route, navigate] = useHashRoute();
   const lead = useLead(leadId);
   const [tab, setTab] = useState("activity");
   const [editOpen, setEditOpen] = useState(false);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const activityRef = useRef<HTMLDivElement>(null);
+
+  // DEEP LINK FOCUS (event engine, Section 32): notification links arrive as
+  // `#/lead/<id>?focus=activity|followup|stage`. The tab adjusts during render
+  // (React-sanctioned derived-state pattern); the effect below only touches
+  // the DOM (scroll) and clears the param.
+  const [prevFocus, setPrevFocus] = useState<string | undefined>(route.params.focus);
+  if (route.params.focus !== prevFocus) {
+    setPrevFocus(route.params.focus);
+    const f = route.params.focus;
+    if (f === "activity") setTab("activity");
+    else if (f === "tasks" || f === "followup") setTab("tasks");
+  }
+
+  useEffect(() => {
+    const focus = route.params.focus;
+    if (!focus || !leadId) return;
+    if (focus === "stage") {
+      stageRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      activityRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    // drop the focus param so reloads/normal navigation don't re-scroll
+    navigate("lead", { id: leadId });
+  }, [route.params.focus, leadId, navigate]);
 
   if (!leadId) {
     return <div className="p-6 text-sm text-muted-foreground">No lead selected.</div>;
@@ -133,7 +159,8 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
           <CustomFieldsPanel leadId={l.id} values={l.customValues ?? []} />
 
           {/* tabs: activity / tasks / notes / events */}
-          <Tabs value={tab} onValueChange={setTab}>
+          <div ref={activityRef}>
+            <Tabs value={tab} onValueChange={setTab}>
             <TabsList>
               <TabsTrigger value="activity">{t("common.activity")}</TabsTrigger>
               <TabsTrigger value="notes">{t("common.notes")}</TabsTrigger>
@@ -144,7 +171,8 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
             <TabsContent value="notes" className="mt-3"><NotesTab leadId={l.id} /></TabsContent>
             <TabsContent value="tasks" className="mt-3"><TasksTab leadId={l.id} /></TabsContent>
             <TabsContent value="events" className="mt-3"><EventsTab leadId={l.id} /></TabsContent>
-          </Tabs>
+            </Tabs>
+          </div>
         </div>
 
         {/* right panel */}
@@ -162,7 +190,9 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
             config={lead.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG}
           />
           <RightPanel lead={l} />
-          <StageChanger lead={l} />
+          <div ref={stageRef}>
+            <StageChanger lead={l} />
+          </div>
         </div>
       </div>
     </div>

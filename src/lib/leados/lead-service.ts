@@ -18,6 +18,17 @@ import { detectDuplicates, type DuplicateCheckResult } from "./duplicate";
 import { publishEvent } from "./events";
 import { recordAttribution } from "./attribution";
 import { cancelFollowUpsForFinalStage } from "./followup-sla-service";
+import {
+  DOMAIN_EVENT,
+  ENTITY_TYPE,
+  displayName,
+  leadAssignedDedupKey,
+} from "@/lib/domain-events";
+import { publishDomainEvent } from "./domain-event-service";
+import {
+  resolveAllLeadProblems,
+  resolveStageNotifications,
+} from "./notification-service";
 import type { LeadCreateT, LeadUpdateT } from "@/lib/schemas/lead";
 
 export interface CreateLeadInput extends LeadCreateT {
@@ -62,6 +73,31 @@ async function recomputeScore(
     await db.leadScoreComponent.create({ data: { leadId: lead.id, reason: c.reason, key: c.key, delta: c.delta } });
   }
   return result;
+}
+
+/** Emit a LEAD_ASSIGNED domain event (durable + projected notification).
+ *  Same-assignee assignments never emit (spec Section 98). */
+async function emitLeadAssigned(
+  orgId: string,
+  lead: { id: string; createdAt: Date; ownerId: string | null; firstName?: string | null; lastName?: string | null; company?: string | null },
+  actorUserId: string | null
+): Promise<void> {
+  if (!lead.ownerId) return;
+  const assignedAt = new Date();
+  await publishDomainEvent(orgId, {
+    type: DOMAIN_EVENT.LEAD_ASSIGNED,
+    entityType: ENTITY_TYPE.LEAD,
+    entityId: lead.id,
+    actorUserId,
+    occurredAt: assignedAt,
+    deduplicationKey: leadAssignedDedupKey(lead.id, lead.ownerId, assignedAt),
+    payload: {
+      leadId: lead.id,
+      leadName: displayName(lead),
+      assigneeId: lead.ownerId,
+      ownerId: lead.ownerId,
+    },
+  });
 }
 
 export async function createLead(
@@ -214,6 +250,11 @@ export async function createLead(
     });
   }
 
+  // EVENT ENGINE: initial assignment is a business fact — notify the new owner.
+  if (lead.ownerId) {
+    await emitLeadAssigned(orgId, lead, userId);
+  }
+
   const full = await db.lead.findUniqueOrThrow({ where: { id: lead.id }, include: { stage: true, source: true, owner: true } });
   return { lead: full, duplicate, created: true };
 }
@@ -304,6 +345,11 @@ export async function updateLead(
     await changeStage(orgId, leadId, userId, input.stageId!);
   }
 
+  // EVENT ENGINE: owner changes emit LEAD_ASSIGNED (same owner → no event).
+  if (input.ownerId != null && input.ownerId !== lead.ownerId) {
+    await emitLeadAssigned(orgId, updated, userId);
+  }
+
   return db.lead.findUniqueOrThrow({ where: { id: leadId }, include: { stage: true, source: true, owner: true, leadTags: { include: { tag: true } } } });
 }
 
@@ -391,6 +437,11 @@ export async function changeStage(
     payload: { fromStageId: prevStageId, toStageId: stage.id, stageName: stage.name } as Prisma.InputJsonValue,
   });
 
+  // EVENT ENGINE (Sections 40/65): a REAL stage transition (or entering a
+  // final stage) resolves every active stage problem notification for this
+  // lead — the deal moved, the stale/aging alert is no longer actual.
+  await resolveStageNotifications(orgId, leadId);
+
   return db.lead.findUniqueOrThrow({ where: { id: leadId }, include: { stage: true } });
 }
 
@@ -425,6 +476,11 @@ export async function assignLead(
     type: LEAD_EVENT.LEAD_ASSIGNED,
     payload: { ownerId, ownerName: owner.name } as Prisma.InputJsonValue,
   });
+  // EVENT ENGINE: real owner change → LEAD_ASSIGNED (recipient = new owner).
+  // Re-assigning the SAME owner emits nothing (Section 98).
+  if (lead.ownerId !== ownerId) {
+    await emitLeadAssigned(orgId, updated, userId);
+  }
   return updated;
 }
 
@@ -451,6 +507,9 @@ export async function archiveLead(orgId: string, leadId: string, userId: string 
     type: LEAD_EVENT.LEAD_ARCHIVED,
     payload: {} as Prisma.InputJsonValue,
   });
+  // EVENT ENGINE: an archived lead is not monitored by any engine — every
+  // active problem notification for it resolves (history is kept).
+  await resolveAllLeadProblems(orgId, leadId);
   return updated;
 }
 
