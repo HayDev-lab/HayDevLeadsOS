@@ -10,6 +10,10 @@ import {
   getFollowUpConfig,
   getFollowUpTaskMap,
 } from "@/lib/leados/followup-sla-service";
+import {
+  attachStageInactivityToLeads,
+  getStageInactivityConfig,
+} from "@/lib/leados/stage-inactivity-service";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -31,14 +35,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       },
     });
     if (!lead || lead.organizationId !== session.orgId) return notFound("lead");
-    // Both SLA layers (single engines, grouped queries, settings read once)
+    // All three SLA layers (single engines, grouped queries, settings read once)
     const slaThresholds = await getSlaThresholds(session.orgId);
     const followUpConfig = await getFollowUpConfig(session.orgId);
+    const stageInactivityConfig = await getStageInactivityConfig(session.orgId);
     const firstResponseMap = await getFirstResponseMap(session.orgId, [lead.id]);
     const taskMap = await getFollowUpTaskMap(session.orgId, [lead.id]);
     const [withSla] = attachSlaToLeads([lead], slaThresholds, firstResponseMap);
     const [withFollowUp] = attachFollowUpToLeads([withSla], followUpConfig, taskMap, firstResponseMap);
-    return ok({ lead: withFollowUp, slaConfig: slaThresholds, followUpConfig });
+    const [withStage] = attachStageInactivityToLeads([withFollowUp], stageInactivityConfig);
+    return ok({ lead: withStage, slaConfig: slaThresholds, followUpConfig, stageInactivityConfig });
   } catch (e) {
     return serverError("lead-get-failed", e);
   }
@@ -55,7 +61,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const updated = await updateLead(session.orgId, id, session.userId, v.value);
     return ok({ lead: updated });
   } catch (e) {
-    if ((e as Error).message === "LEAD_NOT_FOUND") return notFound("lead");
+    const m = (e as Error).message;
+    if (m === "LEAD_NOT_FOUND") return notFound("lead");
+    if (m === "STAGE_NOT_FOUND") return notFound("stage");
     return serverError("lead-update-failed", e);
   }
 }

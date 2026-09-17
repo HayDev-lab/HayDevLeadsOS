@@ -7,12 +7,17 @@ import { normalizePhone, normalizeEmail } from "@/lib/leados/normalize";
 import { SLA_STATUS, computeFirstResponseSla, type SlaStatus } from "@/lib/sla";
 import { getFirstResponseMap, getSlaThresholds, slaFilterWhere } from "@/lib/leados/sla-service";
 import { FOLLOWUP_SLA_STATUS, computeFollowUpSla, type FollowUpSlaStatus } from "@/lib/sla-followup";
+import { STAGE_INACTIVITY_STATUS, computeStageInactivity, humanizeDuration, type StageInactivityStatus } from "@/lib/sla-stage-inactivity";
 import {
   followUpFilterWhere,
   followUpTodayFilterWhere,
   getFollowUpConfig,
   getFollowUpTaskMap,
 } from "@/lib/leados/followup-sla-service";
+import {
+  getStageInactivityConfig,
+  stageHealthFilterWhere,
+} from "@/lib/leados/stage-inactivity-service";
 
 export async function GET(req: Request) {
   try {
@@ -50,6 +55,17 @@ export async function GET(req: Request) {
           ? followUpFilterWhere(upper as FollowUpSlaStatus | "NONE", followUpConfig.warningBeforeHours)
           : null;
       if (frag) {
+        where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
+      }
+    }
+    // Server-side STAGE HEALTH filter (same engine as the lead list — export
+    // consistency: rows here always equal the Lead List count).
+    const stageHealth = p.get("stageHealth");
+    const stageInactivityConfig = await getStageInactivityConfig(session.orgId);
+    if (stageHealth) {
+      const upper = stageHealth.toUpperCase();
+      if (upper in STAGE_INACTIVITY_STATUS) {
+        const frag = stageHealthFilterWhere(upper as StageInactivityStatus, stageInactivityConfig);
         where.AND = [...((where.AND as unknown[]) ?? []), ...(Array.isArray(frag.AND) ? frag.AND : [frag])] as never;
       }
     }
@@ -93,6 +109,22 @@ export async function GET(req: Request) {
         followUpConfig,
         now
       );
+      const si = computeStageInactivity(
+        {
+          leadStatus: l.status,
+          stageId: l.stageId,
+          stageType: l.stage?.type ?? null,
+          stageEnteredAt: l.stageEnteredAt ?? null,
+          createdAt: l.createdAt,
+        },
+        {
+          warningBeforeHours: stageInactivityConfig.warningBeforeHours,
+          stages: Object.fromEntries(
+            Object.entries(stageInactivityConfig.thresholds).map(([id, h]) => [id, { thresholdHours: h }])
+          ),
+        },
+        now
+      );
       const base: Record<string, unknown> = {
         firstName: l.firstName ?? "",
         lastName: l.lastName ?? "",
@@ -121,6 +153,10 @@ export async function GET(req: Request) {
       followUpDueAt: fu.dueAt ? new Date(fu.dueAt).toISOString() : "",
       followUpOverdueMinutes: fu.overdueMinutes ?? "",
       followUpCompletedAt: fu.completedAt ? new Date(fu.completedAt).toISOString() : "",
+      stageEnteredAt: new Date(si.stageEnteredAt).toISOString(),
+      stageAge: si.status === "NOT_APPLICABLE" ? "" : humanizeDuration(si.stageAgeMinutes),
+      stageHealth: si.status,
+      stageStaleBy: si.overdueMinutes != null ? humanizeDuration(si.overdueMinutes) : "",
       };
       // append custom field values as columns
       for (const cv of l.customValues) {

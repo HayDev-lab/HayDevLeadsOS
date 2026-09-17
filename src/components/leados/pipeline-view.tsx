@@ -12,6 +12,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { LeadAvatar, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, formatMoney, timeAgo, EmptyState } from "./primitives";
 import { SlaBadge } from "./sla/sla-badge";
 import { FollowUpBadge } from "./sla/followup-badge";
+import { StageHealthBadge } from "./sla/stage-health-badge";
 import { DEFAULT_SLA_THRESHOLDS, type SlaThresholds } from "@/lib/sla";
 import { DEFAULT_FOLLOWUP_SLA_CONFIG, type FollowUpSlaConfig } from "@/lib/sla-followup";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export function PipelineView() {
   const kanban = useKanban();
   const slaConfig: SlaThresholds = kanban.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS;
   const followUpConfig: FollowUpSlaConfig = kanban.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG;
+  const stageInactivityConfig = kanban.data?.stageInactivityConfig ?? null;
   const setStage = useSetLeadStage();
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -66,11 +68,11 @@ export function PipelineView() {
         <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setActiveId(null)}>
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 flex-1 min-h-0">
             {columns.map((col: any) => (
-              <Column key={col.id} stage={col} slaConfig={slaConfig} followUpConfig={followUpConfig} onClick={(id) => navigate("lead", { id })} />
+              <Column key={col.id} stage={col} slaConfig={slaConfig} followUpConfig={followUpConfig} stageInactivityConfig={stageInactivityConfig} onClick={(id) => navigate("lead", { id })} />
             ))}
           </div>
           <DragOverlay>
-            {activeLead ? <LeadCard lead={activeLead} dragging onClick={() => {}} slaConfig={slaConfig} followUpConfig={followUpConfig} /> : null}
+            {activeLead ? <LeadCard lead={activeLead} dragging onClick={() => {}} slaConfig={slaConfig} followUpConfig={followUpConfig} stageInactivityConfig={stageInactivityConfig} /> : null}
           </DragOverlay>
         </DndContext>
       )}
@@ -78,7 +80,7 @@ export function PipelineView() {
   );
 }
 
-function Column({ stage, onClick, slaConfig, followUpConfig }: { stage: any; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig }) {
+function Column({ stage, onClick, slaConfig, followUpConfig, stageInactivityConfig }: { stage: any; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig; stageInactivityConfig: { warningBeforeHours: number; thresholds: Record<string, number>; usingDefault: string[] } | null }) {
   const { t } = useLocale();
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   const leads: any[] = stage.leads;
@@ -96,21 +98,21 @@ function Column({ stage, onClick, slaConfig, followUpConfig }: { stage: any; onC
       <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1.5 min-h-[120px]">
         {leads.length === 0 && <div className="text-[10px] text-muted-foreground/60 text-center py-6">{t("common.empty")}</div>}
         {leads.map((l: any) => (
-          <DraggableCard key={l.id} lead={l} onClick={onClick} slaConfig={slaConfig} followUpConfig={followUpConfig} />
+          <DraggableCard key={l.id} lead={l} onClick={onClick} slaConfig={slaConfig} followUpConfig={followUpConfig} stageInactivityConfig={stageInactivityConfig} />
         ))}
       </div>
     </div>
   );
 }
 
-function DraggableCard({ lead, onClick, slaConfig, followUpConfig }: { lead: any; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig }) {
+function DraggableCard({ lead, onClick, slaConfig, followUpConfig, stageInactivityConfig }: { lead: any; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig; stageInactivityConfig: { warningBeforeHours: number; thresholds: Record<string, number>; usingDefault: string[] } | null }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: lead.id });
   return (
     <div ref={setNodeRef} {...attributes} {...listeners} className={cn("touch-none", isDragging && "opacity-30")}>
       <HoverCard openDelay={400} closeDelay={150}>
         <HoverCardTrigger asChild>
           <div>
-            <LeadCard lead={lead} onClick={onClick} slaConfig={slaConfig} followUpConfig={followUpConfig} />
+            <LeadCard lead={lead} onClick={onClick} slaConfig={slaConfig} followUpConfig={followUpConfig} stageInactivityConfig={stageInactivityConfig} />
           </div>
         </HoverCardTrigger>
         <HoverCardContent className="w-80 p-0" side="right" align="start">
@@ -180,7 +182,7 @@ function LeadQuickPreview({ leadId, onOpen }: { leadId: string; onOpen: () => vo
   );
 }
 
-function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig }: { lead: any; dragging?: boolean; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig }) {
+function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig, stageInactivityConfig }: { lead: any; dragging?: boolean; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig; stageInactivityConfig: { warningBeforeHours: number; thresholds: Record<string, number>; usingDefault: string[] } | null }) {
   const assign = useAssignLead(lead.id);
   const setStage = useSetLeadStage();
   const users = useUsers();
@@ -267,6 +269,19 @@ function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig }: { lead
               }
               lastCompletedAt={lead.followUp.completedAt ?? null}
               config={followUpConfig}
+            />
+          )}
+          {lead.stageInactivity && (
+            <StageHealthBadge
+              compact
+              onlyUrgent
+              leadStatus={lead.status}
+              stageId={lead.stageId ?? null}
+              stageName={lead.stage?.name}
+              stageType={lead.stage?.type}
+              stageEnteredAt={lead.stageEnteredAt ?? null}
+              createdAt={lead.createdAt}
+              config={stageInactivityConfig}
             />
           )}
           <ScoreBadge score={lead.leadScore} category={lead.scoreCategory} />

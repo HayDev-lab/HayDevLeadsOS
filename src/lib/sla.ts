@@ -17,6 +17,7 @@ import { ACTIVITY_TYPE } from "./leados/constants";
 export const SLA_KIND = {
   FIRST_RESPONSE: "FIRST_RESPONSE",
   FOLLOW_UP: "FOLLOW_UP",
+  STAGE_INACTIVITY: "STAGE_INACTIVITY",
 } as const;
 export type SlaKind = (typeof SLA_KIND)[keyof typeof SLA_KIND];
 

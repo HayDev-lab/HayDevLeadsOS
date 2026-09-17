@@ -186,6 +186,13 @@ model Lead {
   nextActionAt    DateTime?
   nextActionLabel String?
   archivedAt      DateTime?
+  /**
+   * STAGE INACTIVITY source of truth: when the lead entered its CURRENT stage.
+   * Set on create (= createdAt), reset ONLY on a real stage transition
+   * (same-stage updates never touch it). Never derived from updatedAt.
+   * Nullable for legacy rows; the engine falls back to createdAt when absent.
+   */
+  stageEnteredAt  DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

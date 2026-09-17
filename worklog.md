@@ -812,3 +812,70 @@ Verification: TS PASS, ESLint PASS (0 warnings), production build PASS, 59/59 un
 
 Stage Summary:
 - FOLLOW-UP SLA delivered as an independent second SLA layer: Task-based source of truth (Task.type=FOLLOW_UP, dueAt deadline, DONE=completion), own Setting key with validation, own engine (sla-followup.ts) separate from the untouched first-response engine, repeating cycles, Schedule/Complete/Reschedule/Cancel flows, Lead List/Detail/Kanban/Dashboard/Export surfaces, server-side filters incl. org-timezone TODAY, RU/HY/EN. First-response SLA regression green (28/28). VERIFIED_COMPLETE.
+
+---
+Task ID: stage-1
+Agent: main
+Task: STAGE INACTIVITY (third SLA layer) — INSPECT + DEFINE
+
+Work Log (INSPECT findings):
+- Lead model has NO stageChangedAt/stageEnteredAt → OPTION C required (add nullable stageEnteredAt + backfill: last STAGE_CHANGE activity ?? createdAt, never updatedAt).
+- PipelineStage HAS type ("open"|"won"|"lost") + isWon/isLost → final-stage detection is architectural (Section 9 satisfied).
+- changeStage (lead-service.ts): NO same-stage guard (Proposal→Proposal runs full path incl. STAGE_CHANGE activity); lead update split across 2 sequential db.lead.update calls; creates ACTIVITY_TYPE.STAGE_CHANGE with metadata {from,to,stageName} + LEAD_EVENT (STAGE_CHANGED/LEAD_WON/LEAD_LOST/LEAD_QUALIFIED); on final stage cancels open follow-ups (cancelFollowUpsForFinalStage).
+- HOLE FOUND: updateLead accepts stageId directly (PATCH /api/v1/leads/[id]) — bypasses changeStage (no STAGE_CHANGE activity, no events, would skip stageEnteredAt reset). Must delegate real transitions to changeStage.
+- Settings architecture: org-scoped Setting key/value; keys "sla_thresholds", "followup_sla"; POST /api/v1/settings validates per-key; 15s config caches with invalidation in services.
+- Engine pattern: PURE modules lib/sla.ts (first-response, DO NOT TOUCH beyond SLA_KIND), lib/sla-followup.ts (follow-up). Service pattern: sla-service.ts / followup-sla-service.ts (attach*, where fragments, 2-phase sorts, count* for KPI).
+- useSlaTick: shared 60s singleton timer (reuse for stage age).
+- i18n: flat keys in lib/leados/i18n.ts × hy/ru/en.
+- Seed: LEADS array + stageIndex; settings created BEFORE pipeline stages (stage_inactivity Setting needs stage IDs → must be created after stages); demo reset re-runs seed → timestamps restored.
+- Export: has sla + followUp filters/columns; kanban/dashboard/leads routes attach both SLA layers via attach* helpers.
+- Tests: bun test; tests/sla.test.ts (28), tests/followup-sla.test.ts (31) — 59/59 must stay green.
+
+Stage Summary (DEFINE — design decisions):
+- SOURCE OF TRUTH: OPTION C. Lead.stageEnteredAt DateTime? (nullable, additive, db push). createLead sets = now; changeStage sets = now ONLY on real transition; same-stage PATCH = no-op early return (no activity/no reset). updateLead: stageId stripped from direct update, different stage → delegated to changeStage.
+- ENGINE: src/lib/sla-stage-inactivity.ts (PURE) — STAGE_INACTIVITY_STATUS {ON_TRACK, AGING, STALE, NOT_APPLICABLE}; StageInactivityConfig {warningBeforeHours, stages: {[stageId]: {thresholdHours}}}; DEFAULT_STAGE_INACTIVITY_HOURS = 72 fallback (config layer only); validateStageInactivityConfig (per-stage threshold>0 finite, warning>0, warning<threshold); computeStageInactivity (final stage type won/lost OR status WON/LOST/ARCHIVED OR no stage → NOT_APPLICABLE; future timestamp clamp 0; ON_TRACK age<threshold-warning, AGING in window, STALE age>=threshold); compareLeadsByStageInactivity (STALE most-overdue → AGING closest → ON_TRACK oldest); SLA_KIND.STAGE_INACTIVITY added additively.
+- SERVICE: src/lib/leados/stage-inactivity-service.ts — Setting key "stage_inactivity"; getStageInactivityConfig(orgId) loads Setting + default pipeline stages, drops deleted, falls back default for new stages (15s cache + invalidation); stageHealthFilterWhere(status, config) per-stage OR fragments with stageEnteredAt-null→createdAt fallback (engine parity); attachStageInactivityToLeads; countStaleDeals; sortLeadIdsByStageInactivity (2-phase).
+- FILTER/SORT/API: leads ?stageHealth=STALE|AGING|ON_TRACK|NOT_APPLICABLE + sort=stageinactivity:urgency + rows[].stageInactivity + stageInactivityConfig in responses (leads, detail, kanban); export ?stageHealth= + Stage/StageEnteredAt/StageAge/StageHealth columns; dashboard metrics.staleDeals + NEEDS ATTENTION block (3 engines: FR breach / FU overdue / stale; issues vs distinct leads; top-5 critical preview); settings POST validates stage_inactivity.
+- UI: StageHealthBadge (Hourglass icon family; ON_TRACK muted emerald, AGING amber, STALE red, NOT_APPLICABLE muted; popover: Stage/Entered/Age/Expected max/Stale by — Section 23 tooltip copy); Lead List: stage age line under StageBadge + badge + stageHealth filter select + sort option + route param; Lead Detail: third header badge + attention summary line; Kanban: onlyUrgent (AGING/STALE); Dashboard: Stale deals tile (click → ?stageHealth=STALE) + NEEDS ATTENTION block; Settings: StageInactivityConfigCard (real pipeline stages, final stages "Not monitored", warning input, live badge preview).
+- SEED: stage_inactivity Setting (New 24 / Contacted 48 / Qualified 72 / Meeting 72 / Proposal 120 / Negotiation 120, warning 12h, keyed by stage ID); demo A(New 3h ON_TRACK) B(Contacted 45h AGING) C(Qualified 80h STALE) D(Proposal 7d STALE — §36 drag scenario) E(Won NA) F(Lost NA) + realistic composition (§125).
+- TESTS: tests/stage-inactivity.test.ts (engine states incl. §48-52 matrix, future clamp, config validation, §57 sort C/A/D/E/B, regression guard) — 59 existing stay green.
+- FUTURE-READY (§118): LEAD_EVENT.STAGE_BECAME_STALE + INTEGRATION_EVENTS constants + pure transition helper; NO worker, NO notifications, NO auto-move, NO auto-tasks.
+
+---
+Task ID: stage-2
+Agent: main
+Task: STAGE INACTIVITY — implementation, connection, QA and final verification (third SLA layer)
+
+Work Log:
+- MODEL: Lead.stageEnteredAt DateTime? (nullable, additive) via db push. Backfill script scripts/backfill-stage-entered-at.ts: last STAGE_CHANGE activity ?? createdAt (never updatedAt) — 30 leads: 22 from activity, 8 from createdAt. createLead sets = now; changeStage resets = now ONLY on real transition (same update as stage+status — atomic §82); updateLead stageId path delegated to changeStage (bypass closed); same-stage PATCH = no-op (no activity/reset/events).
+- ENGINE (src/lib/sla-stage-inactivity.ts, PURE): STAGE_INACTIVITY_STATUS {ON_TRACK, AGING, STALE, NOT_APPLICABLE}; StageInactivityConfig {warningBeforeHours, stages: {[stageId]: {thresholdHours}}} keyed by STAGE ID; DEFAULT_STAGE_INACTIVITY_HOURS=72 single fallback; validateStageInactivityConfig (per-stage >0 finite, warning>0, warning<threshold — server 400 + client inline + disabled save); parseStageInactivityConfig (backfills legacy rows); computeStageInactivity (final stage type won/lost OR status WON/LOST/ARCHIVED OR no stage → NOT_APPLICABLE; future timestamp clamps age 0; null stageEnteredAt → createdAt fallback; exact-ms status decisions = filter parity; warningAt/staleAt derived from stageEnteredAt); compareLeadsByStageInactivity (STALE largest-overdue → AGING smallest-remaining → ON_TRACK oldest-entered → N/A newest — cross-stage correct); detectStageInactivityTransition (AGING_STARTED/STALE_STARTED/RECOVERED — future automation contract, no worker). SLA_KIND.STAGE_INACTIVITY added additively to sla.ts.
+- SERVICE (src/lib/leados/stage-inactivity-service.ts): Setting key "stage_inactivity"; getStageInactivityConfig → RESOLVED config (all open stages of ALL org pipelines, new stages fall back 72h "Using default", deleted stages ignored on load, 15s cache + invalidation); attachStageInactivityToLeads (pure per-row compute, no N+1); stageHealthFilterWhere — per-stage OR Prisma fragments with stageEnteredAt-null→createdAt fallback (STALE/AGING/ON_TRACK/NOT_APPLICABLE, full engine parity incl. boundaries); countStaleDeals; sortLeadIdsByStageInactivity (2-phase); asEngineConfig export.
+- APIs: leads ?stageHealth= + sort=stageinactivity:urgency + rows[].stageInactivity + stageInactivityConfig; lead detail + stage PATCH (now returns all three layers); kanban cards + config; export ?stageHealth= + StageEnteredAt/StageAge/StageHealth/StageStaleBy columns; settings POST validates stage_inactivity (400s); dashboard metrics.staleDeals + getAttentionQueue (three engines: FR breach / FU overdue / stale — issues vs distinct leads + top-5 critical preview, severity-ranked).
+- UI: sla/stage-health-badge.tsx (shared badge + popover §23 tooltip copy: Stage/Entered/Age/Expected max ≤Xh/Stale by; compact + onlyUrgent + hideNotApplicable variants; text+color a11y; shared 60s tick); leads-view: Stage column shows StageBadge + "6d on stage" age line, new Stage Health column (badge + hideN/A), stageHealth filter select, stageinactivity:urgency sort option, route param, stale row tint; lead-detail: third header badge + compact ATTENTION strip (§70, only when issues); kanban LeadCard onlyUrgent badge (AGING/STALE only); dashboard: "Stale deals" tile (click → ?stageHealth=STALE) + NEEDS ATTENTION block (3 clickable counts + top-3 leads with issue chips §112/113); settings: StageInactivityConfigCard (real pipeline stages via usePipeline, per-stage inputs stacked §97, final stages "Won · Lost — not monitored", warning input, client validation, shared-badge preview §76, save invalidates leads/lead/kanban/dashboard).
+- i18n: 30 stage.* + attention.* keys × hy/ru/en.
+- SEED: stage_inactivity Setting (New 24/Contacted 48/Qualified 72/Meeting 72/Proposal 120/Negotiation 120, warning 12, stage-ID keyed); stageAgeHours per lead — composition §125: 18 ON_TRACK (60%) / 5 AGING (17%) / 3 STALE (10%) / 4 final; §35 demo: Anna New ~3h ON_TRACK, Sergey Contacted 45h AGING, Vardan Qualified 80h STALE, Dmitry/AquaService Proposal 168h STALE BY 2D (§36 critical scenario, FU overdue too → 2 issues), Won/Lost NOT_APPLICABLE; reseed script scripts/reseed-demo.ts (wipes tenant data + seed — demo reset §84).
+
+QA & REPAIR LOOPS (all PASS):
+- L1 SEMANTICS (§102/103): NOTE → stageAge unchanged (API test); CALL group in unit tests; UI verified.
+- L2 STAGE CHANGE (§104/155): Proposal→Meeting via Lead Detail UI → "On track 0m" LIVE without refresh; timeline "Stage changed to Meeting"; dashboard stale 3→2.
+- L3 SAME-STAGE (§20/50/59): Proposal→Proposal API → age unchanged, no duplicate activity; browser DnD same-column drop → timer NOT reset (0m→1m continuing).
+- L4 SETTINGS RECALC (§105/127/156): Proposal 120→240 via API AND via Settings UI save → Gagik 130h instantly ON_TRACK (no lead change); invalid configs → HTTP 400 (warning≥threshold, threshold 0); client inline error + disabled Save.
+- L5 NEW STAGE (§106): created "Contract Review" → appears in resolved config with 72h fallback + usingDefault=1.
+- L6 RENAME (§107/42): renamed → 96h config survived via stage ID.
+- L7 FINAL STAGE (§108/159): Vardan STALE → Won → NOT_APPLICABLE; dashboard -1; filter drops; FU cancellation policy applied.
+- L8 MULTI-ISSUE (§109/131/132/157): Gagik FU OVERDUE + STALE = 2 issues; stage→Meeting → FU preserved (2→1 issues, still in queue); complete FU → 0 issues, gone from queue. §91 exact: 2 not 1 not 3.
+- L9 MOBILE (§95/96/97): 390×844 dashboard/leads/lead-detail/settings — no document overflow, badges visible, per-stage inputs stacked.
+- L10 DASHBOARD UX (§111): NEEDS ATTENTION block: 3 labeled rows (Unanswered 2 / Overdue follow-ups 3 / Stale deals 3) + "8 issues across 6 leads" — answerable in 5 seconds; top leads with issue chips.
+- §160 REOPEN: Won→Qualified → ON_TRACK age 0, no stale restored.
+- §145/146/147 cross-engine: FU complete / first response / stage change — no engine resets another (unit + API).
+- §60 KANBAN DRAG (real browser DnD): multiple real drags — stage persisted, stageEnteredAt reset (ageMin 0-1), stale badge disappeared, dashboard count decreased, filter updated, timeline recorded.
+- §136 CONSISTENCY @500 leads: list=78 = dashboard=78 = export=78 MATCH.
+- §135 SHAREABLE URL: #/leads?stageHealth=STALE deep-link works (3 stale rows).
+- REPAIRS during QA: (1) threshold minutes were added as ms in staleAt/warningAt — caught by tests, fixed with exact-ms parity; (2) CRITICAL latent defect found: config caches were per-module-instance in dev → cross-route invalidation silently broken for ALL THREE layers → fixed with globalThis singleton caches (same pattern as Prisma client) in sla-service + followup-sla-service + stage-inactivity-service; (3) PATCH /stage returned raw lead → now returns all three SLA layers (§38); (4) sort comparator switched from entered-time to overdue/remaining magnitudes for cross-stage correctness (§57).
+
+PERFORMANCE @500 synthetic leads (§47/100): stageinactivity sort 84ms · STALE filter 71ms · stage+stale 49ms · STALE+sla=BREACH 172ms · STALE+followUp=OVERDUE 30ms · dashboard+attention 57ms · kanban 75ms · export 95ms. No N+1 by construction (1 config read w/ cache, pure per-row compute). Cleanup verified.
+
+Verification: TS clean, ESLint exit 0, production build PASS (§151), 109/109 unit tests (28 FR + 31 FU unchanged + 50 new stage-inactivity; §53/54), fresh browser session page errors 0 / console errors 0 (§152/153), 14 QA screenshots in download/stage-qa/ (§154), dark mode + RU/HY/EN verified.
+
+Stage Summary:
+- STAGE INACTIVITY delivered as the third independent SLA layer: persisted stageEnteredAt source of truth (reset only on real transitions), per-stage thresholds from Settings keyed by stage ID, final stages excluded, ON_TRACK/AGING/STALE/NOT_APPLICABLE engine, Lead List/Detail/Kanban/Dashboard/Export surfaces, server-side stageHealth filter + urgency sort, NEEDS ATTENTION presentation layer over the three engines (issues ≠ leads), future automation contract (transition detection, no worker). First-response (28) and follow-up (31) regression green. VERIFIED_COMPLETE.

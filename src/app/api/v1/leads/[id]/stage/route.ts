@@ -3,6 +3,16 @@ import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, serverError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { StageChange } from "@/lib/schemas/lead";
 import { changeStage } from "@/lib/leados/lead-service";
+import { attachSlaToLeads, getFirstResponseMap, getSlaThresholds } from "@/lib/leados/sla-service";
+import {
+  attachFollowUpToLeads,
+  getFollowUpConfig,
+  getFollowUpTaskMap,
+} from "@/lib/leados/followup-sla-service";
+import {
+  attachStageInactivityToLeads,
+  getStageInactivityConfig,
+} from "@/lib/leados/stage-inactivity-service";
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
@@ -13,7 +23,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const v = validate(StageChange, body);
     if (!v.ok) return v.error;
     const lead = await changeStage(session.orgId, id, session.userId, v.value.stageId);
-    return ok({ lead });
+    // Same SLA layers as the lead detail route (Section 38: the API returns
+    // computed state — the frontend never re-implements business logic).
+    const [withSla] = attachSlaToLeads([lead], await getSlaThresholds(session.orgId), await getFirstResponseMap(session.orgId, [lead.id]));
+    const [withFollowUp] = attachFollowUpToLeads([withSla], await getFollowUpConfig(session.orgId), await getFollowUpTaskMap(session.orgId, [lead.id]), await getFirstResponseMap(session.orgId, [lead.id]));
+    const [withStage] = attachStageInactivityToLeads([withFollowUp], await getStageInactivityConfig(session.orgId));
+    return ok({ lead: withStage });
   } catch (e) {
     const m = (e as Error).message;
     if (m === "LEAD_NOT_FOUND") return notFound("lead");

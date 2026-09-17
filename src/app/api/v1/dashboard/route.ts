@@ -10,12 +10,13 @@ import {
   getActivityStream,
   getAttentionSummary,
   getUrgentUnassigned,
+  getAttentionQueue,
 } from "@/lib/leados/dashboard-service";
 
 export async function GET() {
   try {
     const session = await getSession();
-    const [metrics, bySource, byStage, recent, overdueTasks, activity, attention, urgentUnassigned] = await Promise.all([
+    const [metrics, bySource, byStage, recent, overdueTasks, activity, attention, urgentUnassigned, slaAttention] = await Promise.all([
       getDashboardMetrics(session.orgId, session.organization.timezone),
       getLeadsBySource(session.orgId),
       getConversionByStage(session.orgId),
@@ -24,8 +25,9 @@ export async function GET() {
       getActivityStream(session.orgId, 14),
       getAttentionSummary(session.orgId, 10),
       getUrgentUnassigned(session.orgId),
+      getAttentionQueue(session.orgId),
     ]);
-    return ok({ metrics, bySource, byStage, recent, overdueTasks, activity, attention, urgentUnassigned });
+    return ok({ metrics, bySource, byStage, recent, overdueTasks, activity, attention, urgentUnassigned, slaAttention });
   } catch (e) {
     return serverError("dashboard-failed", e);
   }

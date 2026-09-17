@@ -18,9 +18,15 @@ import {
 
 export const SLA_SETTING_KEY = "sla_thresholds";
 
-/** In-memory cache of parsed thresholds per org (short TTL to keep reads cheap). */
+/** In-memory cache of parsed thresholds per org (short TTL to keep reads cheap).
+ *  Stored on globalThis so every route handler shares ONE cache instance —
+ *  dev-mode module duplication must never fork the cache or invalidation
+ *  between routes would silently break (same pattern as the Prisma client). */
 const CACHE_TTL_MS = 15_000;
-const thresholdsCache = new Map<string, { value: SlaThresholds; at: number; fromDb: boolean }>();
+const globalForSlaCache = globalThis as unknown as {
+  __slaThresholdsCache?: Map<string, { value: SlaThresholds; at: number; fromDb: boolean }>;
+};
+const thresholdsCache = (globalForSlaCache.__slaThresholdsCache ??= new Map<string, { value: SlaThresholds; at: number; fromDb: boolean }>());
 
 /**
  * Resolve SLA thresholds for an organization.

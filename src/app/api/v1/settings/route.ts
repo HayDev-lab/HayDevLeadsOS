@@ -5,8 +5,13 @@ import { ok, badRequest, serverError, parseJson } from "@/lib/leados/api";
 import { DEFAULT_SCORING_RULES } from "@/lib/leados/constants";
 import { SLA_SETTING_KEY, invalidateSlaThresholdsCache } from "@/lib/leados/sla-service";
 import { FOLLOWUP_SETTING_KEY, invalidateFollowUpConfigCache } from "@/lib/leados/followup-sla-service";
+import {
+  STAGE_INACTIVITY_SETTING_KEY,
+  invalidateStageInactivityConfigCache,
+} from "@/lib/leados/stage-inactivity-service";
 import { validateSlaThresholds } from "@/lib/sla";
 import { validateFollowUpConfig } from "@/lib/sla-followup";
+import { validateStageInactivityConfig } from "@/lib/sla-stage-inactivity";
 
 export async function GET() {
   try {
@@ -74,6 +79,15 @@ export async function POST(req: Request) {
         if (!v.ok) return badRequest(v.errors.join(" "), v.errors);
         await upsertSetting(session.orgId, FOLLOWUP_SETTING_KEY, v.config);
         invalidateFollowUpConfigCache(session.orgId);
+        return ok({ ok: true, value: v.config });
+      }
+      if (body.key === STAGE_INACTIVITY_SETTING_KEY) {
+        // SERVER-SIDE VALIDATION (Section 15) — every per-stage threshold > 0,
+        // finite; warning > 0; warning < threshold for EVERY configured stage.
+        const v = validateStageInactivityConfig(body.value);
+        if (!v.ok) return badRequest(v.errors.join(" "), v.errors);
+        await upsertSetting(session.orgId, STAGE_INACTIVITY_SETTING_KEY, v.config);
+        invalidateStageInactivityConfigCache(session.orgId);
         return ok({ ok: true, value: v.config });
       }
       await upsertSetting(session.orgId, body.key, body.value);

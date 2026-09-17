@@ -26,9 +26,14 @@ import { publishEvent } from "@/lib/leados/events";
 
 export const FOLLOWUP_SETTING_KEY = "followup_sla";
 
-/** In-memory cache of parsed config per org (short TTL, same pattern as SLA thresholds). */
+/** In-memory cache of parsed config per org (short TTL, same pattern as SLA
+ *  thresholds). Stored on globalThis so every route handler shares ONE cache
+ *  instance — dev-mode module duplication must never fork the cache. */
 const CACHE_TTL_MS = 15_000;
-const configCache = new Map<string, { value: FollowUpSlaConfig; at: number }>();
+const globalForFuCache = globalThis as unknown as {
+  __followUpConfigCache?: Map<string, { value: FollowUpSlaConfig; at: number }>;
+};
+const configCache = (globalForFuCache.__followUpConfigCache ??= new Map<string, { value: FollowUpSlaConfig; at: number }>());
 
 /**
  * Resolve the follow-up SLA config for an organization.

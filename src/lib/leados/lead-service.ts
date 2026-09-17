@@ -150,6 +150,8 @@ export async function createLead(
       requirements: input.requirements ?? null,
       nextActionAt,
       nextActionLabel,
+      // STAGE INACTIVITY: entering the initial stage counts from creation.
+      stageEnteredAt: new Date(),
     },
   });
 
@@ -225,6 +227,16 @@ export async function updateLead(
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead || lead.organizationId !== orgId) throw new Error("LEAD_NOT_FOUND");
 
+  // STAGE INACTIVITY: stage changes NEVER go through the generic update —
+  // real transitions are delegated to changeStage (STAGE_CHANGE activity,
+  // events, follow-up cancellation policy, stageEnteredAt reset). A stageId
+  // equal to the current one is a no-op (timer must NOT reset, Section 20/50).
+  const wantsStageChange = input.stageId != null && input.stageId !== lead.stageId;
+  if (wantsStageChange) {
+    const stage = await db.pipelineStage.findUnique({ where: { id: input.stageId! } });
+    if (!stage) throw new Error("STAGE_NOT_FOUND");
+  }
+
   const data: Prisma.LeadUpdateInput = {};
   if (input.firstName !== undefined) data.firstName = input.firstName ?? null;
   if (input.lastName !== undefined) data.lastName = input.lastName ?? null;
@@ -252,14 +264,7 @@ export async function updateLead(
   if (input.nextActionAt !== undefined) data.nextActionAt = input.nextActionAt ? new Date(input.nextActionAt) : null;
   if (input.ownerId !== undefined) data.owner = input.ownerId ? { connect: { id: input.ownerId } } : { disconnect: true };
   if (input.sourceId !== undefined) data.source = input.sourceId ? { connect: { id: input.sourceId } } : { disconnect: true };
-  if (input.stageId !== undefined) {
-    // stage change handled separately to emit events; but allow here as a no-op set if same
-    const stage = await db.pipelineStage.findUnique({ where: { id: input.stageId } });
-    if (stage) {
-      data.stage = { connect: { id: stage.id } };
-      data.pipeline = stage.pipelineId ? { connect: { id: stage.pipelineId } } : data.pipeline;
-    }
-  }
+  // NOTE: stageId intentionally absent here — handled via changeStage below.
 
   const updated = await db.lead.update({ where: { id: leadId }, data });
 
@@ -292,6 +297,13 @@ export async function updateLead(
     },
   });
 
+  // Real stage transitions run the FULL pipeline (activity, events, timer
+  // reset, final-stage follow-up cancellation) — one code path for stage
+  // changes, no silent bypasses.
+  if (wantsStageChange) {
+    await changeStage(orgId, leadId, userId, input.stageId!);
+  }
+
   return db.lead.findUniqueOrThrow({ where: { id: leadId }, include: { stage: true, source: true, owner: true, leadTags: { include: { tag: true } } } });
 }
 
@@ -306,7 +318,16 @@ export async function changeStage(
   const stage = await db.pipelineStage.findUnique({ where: { id: stageId } });
   if (!stage) throw new Error("STAGE_NOT_FOUND");
 
+  // SAME-STAGE GUARD (Section 20/50/59): Proposal → Proposal is a no-op —
+  // stageEnteredAt is NOT reset (managers must not be able to refresh a
+  // stale timer), no duplicate STAGE_CHANGE activity, no events.
+  if (lead.stageId === stage.id) {
+    return db.lead.findUniqueOrThrow({ where: { id: leadId }, include: { stage: true } });
+  }
+
   const prevStageId = lead.stageId;
+  // ONE atomic update: stage + status + stageEnteredAt together (Section 82 —
+  // the lead can never end up with a changed stage but a stale timer).
   const updated = await db.lead.update({
     where: { id: leadId },
     data: {
@@ -324,6 +345,8 @@ export async function changeStage(
           : stage.name === "Qualified"
           ? LEAD_STATUS.QUALIFIED
           : LEAD_STATUS.OPEN,
+      // STAGE INACTIVITY: a REAL transition restarts the stage timer.
+      stageEnteredAt: new Date(),
     },
   });
 

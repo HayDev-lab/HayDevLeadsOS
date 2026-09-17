@@ -3,8 +3,23 @@
 
 import { db } from "@/lib/db";
 import { PRIORITY } from "./constants";
-import { countSlaBreached } from "./sla-service";
-import { countFollowUpsDueToday, countFollowUpsOverdue } from "./followup-sla-service";
+import { countSlaBreached, getSlaThresholds, getFirstResponseMap, slaFilterWhere } from "./sla-service";
+import {
+  countFollowUpsDueToday,
+  countFollowUpsOverdue,
+  followUpFilterWhere,
+  getFollowUpConfig,
+  getFollowUpTaskMap,
+} from "./followup-sla-service";
+import {
+  asEngineConfig,
+  countStaleDeals,
+  getStageInactivityConfig,
+  stageHealthFilterWhere,
+} from "./stage-inactivity-service";
+import { SLA_STATUS, computeFirstResponseSla } from "@/lib/sla";
+import { FOLLOWUP_SLA_STATUS, computeFollowUpSla } from "@/lib/sla-followup";
+import { STAGE_INACTIVITY_STATUS, computeStageInactivity } from "@/lib/sla-stage-inactivity";
 
 export interface DashboardMetrics {
   newLeads: number;
@@ -23,6 +38,8 @@ export interface DashboardMetrics {
   tasksDueToday: number;
   /** Meetings logged today. */
   meetingsToday: number;
+  /** STAGE INACTIVITY: deals whose current-stage age passed the stage threshold. */
+  staleDeals: number;
 }
 
 export async function getDashboardMetrics(orgId: string, timezone = "Asia/Yerevan"): Promise<DashboardMetrics> {
@@ -47,6 +64,7 @@ export async function getDashboardMetrics(orgId: string, timezone = "Asia/Yereva
     followUpsDueToday,
     tasksDueToday,
     meetingsToday,
+    staleDeals,
   ] = await Promise.all([
     db.lead.count({ where: { ...where, status: "NEW" } }),
     db.lead.count({ where: { ...where, ownerId: null, status: { notIn: ["WON", "LOST", "ARCHIVED"] } } }),
@@ -64,6 +82,8 @@ export async function getDashboardMetrics(orgId: string, timezone = "Asia/Yereva
       where: { organizationId: orgId, status: { in: ["TODO", "IN_PROGRESS"] }, dueAt: { gte: dayStartUtc, lt: dayEndUtc } },
     }),
     db.activity.count({ where: { organizationId: orgId, type: "MEETING", createdAt: { gte: dayStartUtc, lt: dayEndUtc } } }),
+    // REAL stage inactivity count (KPI click == ?stageHealth=STALE filter count).
+    countStaleDeals(orgId),
   ]);
 
   return {
@@ -81,7 +101,156 @@ export async function getDashboardMetrics(orgId: string, timezone = "Asia/Yereva
     followUpsDueToday,
     tasksDueToday,
     meetingsToday,
+    staleDeals,
   };
+}
+
+// ---------------------------------------------------------------------------
+// NEEDS ATTENTION — shared PRESENTATION layer over the three INDEPENDENT
+// engines (Sections 61-67). Counts issues, not leads: one lead may carry two
+// or three problems at once. Never merges engine business logic.
+// ---------------------------------------------------------------------------
+
+export type AttentionIssueKind = "FIRST_RESPONSE" | "FOLLOW_UP" | "STAGE_INACTIVITY";
+export type AttentionSeverity = "CRITICAL" | "WARNING";
+
+export interface AttentionIssue {
+  kind: AttentionIssueKind;
+  severity: AttentionSeverity;
+  /** Minutes over/past the deadline (magnitude, used for ordering). */
+  overdueMinutes: number | null;
+}
+
+export interface AttentionQueueItem {
+  leadId: string;
+  leadName: string;
+  issues: AttentionIssue[];
+}
+
+export interface AttentionQueue {
+  counts: {
+    /** Leads with first-response BREACH (unanswered too long). */
+    firstResponseBreached: number;
+    /** Leads with follow-up OVERDUE. */
+    followUpsOverdue: number;
+    /** Leads with STALE stage health. */
+    staleDeals: number;
+    /** Sum of the three (a lead with 2 problems counts twice). */
+    totalIssues: number;
+    /** DISTINCT leads carrying at least one issue. */
+    leadsWithIssues: number;
+  };
+  /** Top critical leads for the dashboard preview (max 5). */
+  items: AttentionQueueItem[];
+}
+
+/**
+ * Aggregate the three SLA layers into the Needs-Attention work queue.
+ * Counts are computed with the same server-side filters the Lead List uses
+ * (KPI click == filter count by construction), then the top leads are ranked
+ * by issue count and magnitude for the compact preview.
+ */
+export async function getAttentionQueue(orgId: string): Promise<AttentionQueue> {
+  const slaThresholds = await getSlaThresholds(orgId);
+  const followUpConfig = await getFollowUpConfig(orgId);
+  const stageConfig = await getStageInactivityConfig(orgId);
+
+  const [frRows, fuRows, staleRows] = await Promise.all([
+    db.lead.findMany({
+      where: { organizationId: orgId, ...slaFilterWhere(SLA_STATUS.BREACH, slaThresholds) },
+      select: { id: true },
+    }),
+    db.lead.findMany({
+      where: { organizationId: orgId, ...followUpFilterWhere(FOLLOWUP_SLA_STATUS.OVERDUE, followUpConfig.warningBeforeHours) },
+      select: { id: true },
+    }),
+    db.lead.findMany({
+      where: { organizationId: orgId, ...stageHealthFilterWhere(STAGE_INACTIVITY_STATUS.STALE, stageConfig) },
+      select: { id: true },
+    }),
+  ]);
+
+  const firstResponse = new Set(frRows.map((l) => l.id));
+  const followUp = new Set(fuRows.map((l) => l.id));
+  const stale = new Set(staleRows.map((l) => l.id));
+  const union = new Set([...firstResponse, ...followUp, ...stale]);
+
+  const counts = {
+    firstResponseBreached: firstResponse.size,
+    followUpsOverdue: followUp.size,
+    staleDeals: stale.size,
+    totalIssues: firstResponse.size + followUp.size + stale.size,
+    leadsWithIssues: union.size,
+  };
+  if (union.size === 0) return { counts, items: [] };
+
+  // Hydrate the affected leads (bounded — only leads with issues) and
+  // compute every layer once with the SAME single engines.
+  const leads = await db.lead.findMany({
+    where: { organizationId: orgId, id: { in: [...union] } },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      company: true,
+      createdAt: true,
+      status: true,
+      stageId: true,
+      stageEnteredAt: true,
+      stage: { select: { type: true } },
+    },
+    take: 100,
+  });
+  const firstResponseMap = await getFirstResponseMap(orgId, leads.map((l) => l.id));
+  const taskMap = await getFollowUpTaskMap(orgId, leads.map((l) => l.id));
+  const engineStageConfig = asEngineConfig(stageConfig);
+  const now = new Date();
+
+  const items: AttentionQueueItem[] = leads
+    .map((l) => {
+      const issues: AttentionIssue[] = [];
+      const responded = firstResponseMap.get(l.id) ?? null;
+      const sla = computeFirstResponseSla({ createdAt: l.createdAt, firstResponseAt: responded }, slaThresholds, now);
+      if (sla.status === SLA_STATUS.BREACH) {
+        issues.push({ kind: "FIRST_RESPONSE", severity: "CRITICAL", overdueMinutes: sla.elapsedMinutes });
+      }
+      const pair = taskMap.get(l.id) ?? { open: null, lastCompleted: null };
+      const fu = computeFollowUpSla(
+        { leadStatus: l.status, firstResponseAt: responded, openTask: pair.open, lastCompleted: pair.lastCompleted },
+        followUpConfig,
+        now
+      );
+      if (fu.status === FOLLOWUP_SLA_STATUS.OVERDUE) {
+        issues.push({ kind: "FOLLOW_UP", severity: "CRITICAL", overdueMinutes: fu.overdueMinutes ?? 0 });
+      }
+      const si = computeStageInactivity(
+        {
+          leadStatus: l.status,
+          stageId: l.stageId,
+          stageType: l.stage?.type ?? null,
+          stageEnteredAt: l.stageEnteredAt,
+          createdAt: l.createdAt,
+        },
+        engineStageConfig,
+        now
+      );
+      if (si.status === STAGE_INACTIVITY_STATUS.STALE) {
+        issues.push({ kind: "STAGE_INACTIVITY", severity: "CRITICAL", overdueMinutes: si.overdueMinutes ?? 0 });
+      }
+      return {
+        leadId: l.id,
+        leadName: l.company || [l.firstName, l.lastName].filter(Boolean).join(" ") || "Lead",
+        issues,
+      };
+    })
+    .filter((l) => l.issues.length > 0);
+
+  // Presentation priority (Section 114): most issues first, then the largest
+  // overdue magnitude. This is NOT a new business priority field.
+  const magnitude = (i: AttentionQueueItem) => Math.max(0, ...i.issues.map((x) => x.overdueMinutes ?? 0));
+  items.sort((a, b) => b.issues.length - a.issues.length || magnitude(b) - magnitude(a));
+
+  return { counts, items: items.slice(0, 5) };
 }
 
 /** Offset of a timezone from UTC in minutes (positive = east of UTC) at `at`. */

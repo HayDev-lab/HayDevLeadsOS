@@ -60,6 +60,12 @@ interface SeedLead {
   followUpHoursFromNow?: number;
   /** Follow-up SLA demo: also create a COMPLETED follow-up task in the past (closed cycle). */
   followUpCompletedHoursAgo?: number;
+  /**
+   * STAGE INACTIVITY demo: hours the lead has been on its CURRENT stage.
+   * Default: createdAt for New-stage leads, createdAt + 2h for others (matches
+   * the seeded STAGE_CHANGE activity) — never updatedAt.
+   */
+  stageAgeHours?: number;
   meetingRequested?: boolean;
   budgetFlag?: boolean;
 }
@@ -69,35 +75,35 @@ const LEADS: SeedLead[] = [
   { first: "Tigran", last: "Petrosyan", company: "Astghik Construction LLC", phone: "+37494123456", email: "tigran@astghik.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, est: 0, summary: "Interested in ERP for construction company", requirements: "CRM + project accounting", createdAtDaysAgo: 0, createdAtMinutesAgo: 35, meetingRequested: true },
   { first: "Anna", last: "Hakobyan", company: "Yerevan Dental Clinic", phone: "+37455112233", email: "anna@ydc.am", sourceType: "instagram", stageIndex: 0, priority: PRIORITY.URGENT, ownerIdx: null, summary: "Wants CRM for clinic + WhatsApp automation", requirements: "CRM + WhatsApp", createdAtDaysAgo: 1, createdAtMinutesAgo: 155, meetingRequested: true },
   { first: "Irina", last: "Safaryan", company: "BookWorld Store", phone: "+37499123411", email: "irina@bookworld.am", sourceType: "instagram", stageIndex: 0, priority: PRIORITY.MEDIUM, ownerIdx: 2, summary: "Inbound inquiry — still waiting for the first response", createdAtDaysAgo: 5, createdAtMinutesAgo: 480 },
-  { first: "Sergey", last: "Ivanov", company: "MosRetail Group", phone: "+79261234567", email: "s.ivanov@mosretail.ru", sourceType: "google_ads", stageIndex: 1, priority: PRIORITY.HIGH, ownerIdx: 2, est: 1800000, summary: "Retail chain, 14 stores, needs POS+CRM sync", requirements: "Inventory + loyalty", createdAtDaysAgo: 3, lastContactHoursAgo: 30, firstResponseAfterMinutes: 130, nextActionHoursFromNow: -5, budgetFlag: true },
-  { first: "Marina", last: "Ovsepyan", company: "Arev Beauty Studio", phone: "+37493677881", email: "arev@beauty.am", sourceType: "instagram", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "Booking automation for beauty studio", createdAtDaysAgo: 4, lastContactHoursAgo: 20, firstResponseAfterMinutes: 25, nextActionHoursFromNow: 4, followUpHoursFromNow: 26 },
-  { first: "Vardan", last: "Sargsyan", company: "Vega Logistics", phone: "+37499887766", email: "vardan@vega.am", sourceType: "referral", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 2, est: 2400000, summary: "Qualified — fleet tracking + CRM integration", requirements: "GPS + dispatch automation", createdAtDaysAgo: 6, lastContactHoursAgo: 12, nextActionHoursFromNow: 36, followUpCompletedHoursAgo: 30, meetingRequested: true, budgetFlag: true, audit: { acquisition: 58, sales: 45, operations: 72, data: 51, automation: 64, aiReadiness: 70 } },
-  { first: "Elena", last: "Poghosyan", company: "Flora Pharmacy Chain", phone: "+37477123400", email: "elena@flora.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 3, est: 3200000, summary: "Audit completed, high automation potential", requirements: "Inventory automation + AI demand forecast", createdAtDaysAgo: 7, lastContactHoursAgo: 16, firstResponseAfterMinutes: 45, responseType: "EMAIL", nextActionHoursFromNow: 20, followUpHoursFromNow: 2, meetingRequested: true, budgetFlag: true, audit: { acquisition: 62, sales: 50, operations: 80, data: 55, automation: 78, aiReadiness: 82 } },
-  { first: "Hovhannes", last: "Ghazaryan", company: "Gyumri Tech Hub", phone: "+37493334455", email: "hoghannes@gytech.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 1200000, summary: "Meeting scheduled for coworking CRM", createdAtDaysAgo: 9, lastContactHoursAgo: 50, nextActionHoursFromNow: 48 },
-  { first: "Karine", last: "Asatryan", company: "Sweet Bakery", phone: "+37498101010", email: "karine@sweetbakery.am", sourceType: "facebook", stageIndex: 3, priority: PRIORITY.LOW, ownerIdx: 3, summary: "Order automation for bakery", createdAtDaysAgo: 10, lastContactHoursAgo: 6 },
-  { first: "Dmitry", last: "Smirnov", company: "AquaService", phone: "+79031122334", email: "d.smirnov@aquaservice.ru", sourceType: "meta_ads", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 2, est: 950000, summary: "Proposal sent — water delivery automation", requirements: "Routing + customer app", createdAtDaysAgo: 12, lastContactHoursAgo: 72, nextActionHoursFromNow: -24, followUpHoursFromNow: -5, budgetFlag: true },
-  { first: "Lusine", last: "Minasyan", company: "Elite Real Estate", phone: "+37495556677", email: "lusine@elite.am", sourceType: "website", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 3, est: 4500000, summary: "Proposal — CRM + agent portal", createdAtDaysAgo: 14, lastContactHoursAgo: 60 },
-  { first: "Arman", last: "Gevorgyan", company: "AutoPro Service", phone: "+37492221100", email: "arman@autopro.am", sourceType: "referral", stageIndex: 5, priority: PRIORITY.URGENT, ownerIdx: 2, est: 2800000, summary: "Negotiating — service center management", createdAtDaysAgo: 18, lastContactHoursAgo: 30, nextActionHoursFromNow: 12, budgetFlag: true },
-  { first: "Sona", last: "Zakaryan", company: "Kidlandia Kindergarten", phone: "+37493445566", email: "sona@kidlandia.am", sourceType: "instagram", stageIndex: 5, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 700000, summary: "Negotiation — parent communication portal", createdAtDaysAgo: 20, lastContactHoursAgo: 24 },
+  { first: "Sergey", last: "Ivanov", company: "MosRetail Group", phone: "+79261234567", email: "s.ivanov@mosretail.ru", sourceType: "google_ads", stageIndex: 1, priority: PRIORITY.HIGH, ownerIdx: 2, est: 1800000, summary: "Retail chain, 14 stores, needs POS+CRM sync", requirements: "Inventory + loyalty", stageAgeHours: 45, createdAtDaysAgo: 3, lastContactHoursAgo: 30, firstResponseAfterMinutes: 130, nextActionHoursFromNow: -5, budgetFlag: true },
+  { first: "Marina", last: "Ovsepyan", company: "Arev Beauty Studio", phone: "+37493677881", email: "arev@beauty.am", sourceType: "instagram", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "Booking automation for beauty studio", stageAgeHours: 3.5, createdAtDaysAgo: 4, lastContactHoursAgo: 20, firstResponseAfterMinutes: 25, nextActionHoursFromNow: 4, followUpHoursFromNow: 26 },
+  { first: "Vardan", last: "Sargsyan", company: "Vega Logistics", phone: "+37499887766", email: "vardan@vega.am", sourceType: "referral", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 2, est: 2400000, summary: "Qualified — fleet tracking + CRM integration", requirements: "GPS + dispatch automation", stageAgeHours: 80, createdAtDaysAgo: 6, lastContactHoursAgo: 12, nextActionHoursFromNow: 36, followUpCompletedHoursAgo: 30, meetingRequested: true, budgetFlag: true, audit: { acquisition: 58, sales: 45, operations: 72, data: 51, automation: 64, aiReadiness: 70 } },
+  { first: "Elena", last: "Poghosyan", company: "Flora Pharmacy Chain", phone: "+37477123400", email: "elena@flora.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.HIGH, ownerIdx: 3, est: 3200000, summary: "Audit completed, high automation potential", requirements: "Inventory automation + AI demand forecast", stageAgeHours: 68, createdAtDaysAgo: 7, lastContactHoursAgo: 16, firstResponseAfterMinutes: 45, responseType: "EMAIL", nextActionHoursFromNow: 20, followUpHoursFromNow: 2, meetingRequested: true, budgetFlag: true, audit: { acquisition: 62, sales: 50, operations: 80, data: 55, automation: 78, aiReadiness: 82 } },
+  { first: "Hovhannes", last: "Ghazaryan", company: "Gyumri Tech Hub", phone: "+37493334455", email: "hoghannes@gytech.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 1200000, summary: "Meeting scheduled for coworking CRM", stageAgeHours: 50, createdAtDaysAgo: 9, lastContactHoursAgo: 50, nextActionHoursFromNow: 48 },
+  { first: "Karine", last: "Asatryan", company: "Sweet Bakery", phone: "+37498101010", email: "karine@sweetbakery.am", sourceType: "facebook", stageIndex: 3, priority: PRIORITY.LOW, ownerIdx: 3, summary: "Order automation for bakery", stageAgeHours: 68, createdAtDaysAgo: 10, lastContactHoursAgo: 6 },
+  { first: "Dmitry", last: "Smirnov", company: "AquaService", phone: "+79031122334", email: "d.smirnov@aquaservice.ru", sourceType: "meta_ads", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 2, est: 950000, summary: "Proposal sent — water delivery automation", requirements: "Routing + customer app", stageAgeHours: 168, createdAtDaysAgo: 12, lastContactHoursAgo: 72, nextActionHoursFromNow: -24, followUpHoursFromNow: -5, budgetFlag: true },
+  { first: "Lusine", last: "Minasyan", company: "Elite Real Estate", phone: "+37495556677", email: "lusine@elite.am", sourceType: "website", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 3, est: 4500000, summary: "Proposal — CRM + agent portal", stageAgeHours: 100, createdAtDaysAgo: 14, lastContactHoursAgo: 60 },
+  { first: "Arman", last: "Gevorgyan", company: "AutoPro Service", phone: "+37492221100", email: "arman@autopro.am", sourceType: "referral", stageIndex: 5, priority: PRIORITY.URGENT, ownerIdx: 2, est: 2800000, summary: "Negotiating — service center management", stageAgeHours: 118, createdAtDaysAgo: 18, lastContactHoursAgo: 30, nextActionHoursFromNow: 12, budgetFlag: true },
+  { first: "Sona", last: "Zakaryan", company: "Kidlandia Kindergarten", phone: "+37493445566", email: "sona@kidlandia.am", sourceType: "instagram", stageIndex: 5, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 700000, summary: "Negotiation — parent communication portal", stageAgeHours: 40, createdAtDaysAgo: 20, lastContactHoursAgo: 24 },
   { first: "Mher", last: "Avetisyan", company: "HayAuto Import", phone: "+37491234599", email: "mher@hayauto.am", sourceType: "website", stageIndex: 6, priority: PRIORITY.HIGH, ownerIdx: 2, est: 3600000, summary: "WON — ERP + inventory + finance, full rollout", requirements: "ERP + CRM + accounting", createdAtDaysAgo: 30, lastContactHoursAgo: 2, audit: { acquisition: 70, sales: 55, operations: 85, data: 60, automation: 80, aiReadiness: 75 }, meetingRequested: true, budgetFlag: true },
   { first: "Gayane", last: "Tadevosyan", company: "Aroma Coffee Roasters", phone: "+37494455667", email: "gayane@aroma.am", sourceType: "business_audit", stageIndex: 6, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 900000, summary: "WON — B2B order automation + CRM", createdAtDaysAgo: 35, lastContactHoursAgo: 48, audit: { acquisition: 50, sales: 40, operations: 65, data: 45, automation: 60, aiReadiness: 55 } },
   { first: "Pavel", last: "Morozov", company: "QuickFix Services", phone: "+79161239876", email: "p.morozov@quickfix.ru", sourceType: "google_ads", stageIndex: 7, priority: PRIORITY.LOW, ownerIdx: 2, summary: "LOST — chose competitor on price", createdAtDaysAgo: 40, lastContactHoursAgo: 200 },
   { first: "Anahit", last: "Hovhannisyan", company: "Sunset Restaurant Group", phone: "+37496554433", email: "anahit@sunset.am", sourceType: "website", stageIndex: 7, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "LOST — timing not right, revisit Q3", createdAtDaysAgo: 45, lastContactHoursAgo: 500 },
   // extra "needs attention" leads
-  { first: "Robert", last: "Mkrtchyan", company: "ExpressDelivery AM", phone: "+37493776655", email: "robert@express.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, summary: "New lead — delivery automation, no contact yet", createdAtDaysAgo: 2, meetingRequested: true, firstNoteAfterMinutes: 90 },
-  { first: "Gagik", last: "Kirakosyan", company: "Mountain Foods", phone: "+37477998800", email: "gagik@mountainfoods.am", sourceType: "referral", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 3, est: 2100000, summary: "Proposal sent 4 days ago, no follow-up", createdAtDaysAgo: 11, lastContactHoursAgo: 96, nextActionHoursFromNow: -72 },
-  { first: "Nina", last: "Babayan", company: "PetVet Clinic", phone: "+37493223344", email: "nina@petvet.am", sourceType: "business_audit", stageIndex: 3, priority: PRIORITY.MEDIUM, ownerIdx: 2, summary: "Meeting done, no next action set", createdAtDaysAgo: 13, lastContactHoursAgo: 80, audit: { acquisition: 55, sales: 35, operations: 60, data: 40, automation: 50, aiReadiness: 60 } },
+  { first: "Robert", last: "Mkrtchyan", company: "ExpressDelivery AM", phone: "+37493776655", email: "robert@express.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, summary: "New lead — delivery automation, no contact yet", stageAgeHours: 10, createdAtDaysAgo: 2, meetingRequested: true, firstNoteAfterMinutes: 90 },
+  { first: "Gagik", last: "Kirakosyan", company: "Mountain Foods", phone: "+37477998800", email: "gagik@mountainfoods.am", sourceType: "referral", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 3, est: 2100000, summary: "Proposal sent 4 days ago, no follow-up", stageAgeHours: 130, createdAtDaysAgo: 11, lastContactHoursAgo: 96, nextActionHoursFromNow: -72 },
+  { first: "Nina", last: "Babayan", company: "PetVet Clinic", phone: "+37493223344", email: "nina@petvet.am", sourceType: "business_audit", stageIndex: 3, priority: PRIORITY.MEDIUM, ownerIdx: 2, summary: "Meeting done, no next action set", stageAgeHours: 30, createdAtDaysAgo: 13, lastContactHoursAgo: 80, audit: { acquisition: 55, sales: 35, operations: 60, data: 40, automation: 50, aiReadiness: 60 } },
   // a few more for volume
-  { first: "Ashot", last: "Danielyan", company: "Garni Stone", phone: "+37494775544", email: "ashot@garnistone.am", sourceType: "phone", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 650000, summary: "Quarry ops tracking", createdAtDaysAgo: 8, lastContactHoursAgo: 40 },
-  { first: "Lyudmila", last: "Arakelyan", company: "Sevan Foods", phone: "+37491234501", email: "luda@sevanfoods.am", sourceType: "email", stageIndex: 2, priority: PRIORITY.LOW, ownerIdx: null, summary: "Inquiry about ERP pricing", createdAtDaysAgo: 9 },
-  { first: "Eduard", last: "Sukiasyan", company: "Vanadzor Textile", phone: "+37491234502", email: "eduard@vztex.am", sourceType: "website", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 1100000, summary: "Production planning + CRM", createdAtDaysAgo: 7, lastContactHoursAgo: 18 },
-  { first: "Tatev", last: "Baghdasaryan", company: "Artashat Agro", phone: "+37491234503", email: "tatev@artagro.am", sourceType: "whatsapp", stageIndex: 1, priority: PRIORITY.LOW, ownerIdx: 3, summary: "WhatsApp inquiry — farm management", createdAtDaysAgo: 6, lastContactHoursAgo: 30 },
-  { first: "Vladimir", last: "Petrov", company: "TechNova Solutions", phone: "+79037778899", email: "v.petrov@technova.ru", sourceType: "referral", stageIndex: 5, priority: PRIORITY.HIGH, ownerIdx: 2, est: 5200000, summary: "Negotiation — full ERP migration", requirements: "Data migration + custom modules", createdAtDaysAgo: 22, lastContactHoursAgo: 36, nextActionHoursFromNow: 24, budgetFlag: true, meetingRequested: true },
-  { first: "Margarita", last: "Sahakyan", company: "Little Stars School", phone: "+37491234504", email: "margo@littlestars.am", sourceType: "instagram", stageIndex: 4, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 540000, summary: "Proposal — parent & grade portal", createdAtDaysAgo: 15, lastContactHoursAgo: 70 },
-  { first: "Boris", last: "Lebedev", company: "CleanPro Services", phone: "+79269990011", email: "b.lebedev@cleanpro.ru", sourceType: "meta_ads", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 780000, summary: "Qualified — cleaning service automation", createdAtDaysAgo: 6, lastContactHoursAgo: 14 },
-  { first: "Arev", last: "Nersisyan", company: "Dilijan Resort", phone: "+37491234505", email: "arev@dilijanresort.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.HIGH, ownerIdx: 3, est: 1900000, summary: "Meeting — booking + CRM", createdAtDaysAgo: 11, lastContactHoursAgo: 44, firstResponseAfterMinutes: 55, responseType: "MEETING" },
-  { first: "Yuri", last: "Barseghyan", company: "Garda Security", phone: "+37491234506", email: "yuri@gardasec.am", sourceType: "phone", stageIndex: 5, priority: PRIORITY.URGENT, ownerIdx: 2, est: 3100000, summary: "Negotiation — guard scheduling + reporting", createdAtDaysAgo: 16, lastContactHoursAgo: 28, nextActionHoursFromNow: 6, budgetFlag: true },
-  { first: "Olga", last: "Karapetyan", company: "Kamaris Winery", phone: "+37491234507", email: "olga@kamaris.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 880000, summary: "Qualified — wine club + e-commerce", createdAtDaysAgo: 8, lastContactHoursAgo: 20, audit: { acquisition: 48, sales: 52, operations: 58, data: 50, automation: 55, aiReadiness: 48 } },
+  { first: "Ashot", last: "Danielyan", company: "Garni Stone", phone: "+37494775544", email: "ashot@garnistone.am", sourceType: "phone", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 650000, summary: "Quarry ops tracking", stageAgeHours: 20, createdAtDaysAgo: 8, lastContactHoursAgo: 40 },
+  { first: "Lyudmila", last: "Arakelyan", company: "Sevan Foods", phone: "+37491234501", email: "luda@sevanfoods.am", sourceType: "email", stageIndex: 2, priority: PRIORITY.LOW, ownerIdx: null, summary: "Inquiry about ERP pricing", stageAgeHours: 5, createdAtDaysAgo: 9 },
+  { first: "Eduard", last: "Sukiasyan", company: "Vanadzor Textile", phone: "+37491234502", email: "eduard@vztex.am", sourceType: "website", stageIndex: 1, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 1100000, summary: "Production planning + CRM", stageAgeHours: 20, createdAtDaysAgo: 7, lastContactHoursAgo: 18 },
+  { first: "Tatev", last: "Baghdasaryan", company: "Artashat Agro", phone: "+37491234503", email: "tatev@artagro.am", sourceType: "whatsapp", stageIndex: 1, priority: PRIORITY.LOW, ownerIdx: 3, summary: "WhatsApp inquiry — farm management", stageAgeHours: 20, createdAtDaysAgo: 6, lastContactHoursAgo: 30 },
+  { first: "Vladimir", last: "Petrov", company: "TechNova Solutions", phone: "+79037778899", email: "v.petrov@technova.ru", sourceType: "referral", stageIndex: 5, priority: PRIORITY.HIGH, ownerIdx: 2, est: 5200000, summary: "Negotiation — full ERP migration", requirements: "Data migration + custom modules", stageAgeHours: 60, createdAtDaysAgo: 22, lastContactHoursAgo: 36, nextActionHoursFromNow: 24, budgetFlag: true, meetingRequested: true },
+  { first: "Margarita", last: "Sahakyan", company: "Little Stars School", phone: "+37491234504", email: "margo@littlestars.am", sourceType: "instagram", stageIndex: 4, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 540000, summary: "Proposal — parent & grade portal", stageAgeHours: 95, createdAtDaysAgo: 15, lastContactHoursAgo: 70 },
+  { first: "Boris", last: "Lebedev", company: "CleanPro Services", phone: "+79269990011", email: "b.lebedev@cleanpro.ru", sourceType: "meta_ads", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 2, est: 780000, summary: "Qualified — cleaning service automation", stageAgeHours: 10, createdAtDaysAgo: 6, lastContactHoursAgo: 14 },
+  { first: "Arev", last: "Nersisyan", company: "Dilijan Resort", phone: "+37491234505", email: "arev@dilijanresort.am", sourceType: "website", stageIndex: 3, priority: PRIORITY.HIGH, ownerIdx: 3, est: 1900000, summary: "Meeting — booking + CRM", stageAgeHours: 40, createdAtDaysAgo: 11, lastContactHoursAgo: 44, firstResponseAfterMinutes: 55, responseType: "MEETING" },
+  { first: "Yuri", last: "Barseghyan", company: "Garda Security", phone: "+37491234506", email: "yuri@gardasec.am", sourceType: "phone", stageIndex: 5, priority: PRIORITY.URGENT, ownerIdx: 2, est: 3100000, summary: "Negotiation — guard scheduling + reporting", stageAgeHours: 114, createdAtDaysAgo: 16, lastContactHoursAgo: 28, nextActionHoursFromNow: 6, budgetFlag: true },
+  { first: "Olga", last: "Karapetyan", company: "Kamaris Winery", phone: "+37491234507", email: "olga@kamaris.am", sourceType: "business_audit", stageIndex: 2, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 880000, summary: "Qualified — wine club + e-commerce", stageAgeHours: 25, createdAtDaysAgo: 8, lastContactHoursAgo: 20, audit: { acquisition: 48, sales: 52, operations: 58, data: 50, automation: 55, aiReadiness: 48 } },
 ];
 
 export async function seedIfEmpty(): Promise<{ seeded: boolean; orgId: string | null }> {
@@ -197,6 +203,28 @@ export async function seed(): Promise<{ orgId: string }> {
     },
   });
 
+  // STAGE INACTIVITY config — per-stage thresholds keyed by STAGE ID (Section 77/78).
+  // Composition targets (Section 125): ~60% ON_TRACK, ~20% AGING, ~15% STALE, rest final.
+  const stageByName = new Map(stages.map((s) => [s.name, s.id] as const));
+  const stageInactivityValue = {
+    warningBeforeHours: 12,
+    stages: {
+      [stageByName.get("New")!]: { thresholdHours: 24 },
+      [stageByName.get("Contacted")!]: { thresholdHours: 48 },
+      [stageByName.get("Qualified")!]: { thresholdHours: 72 },
+      [stageByName.get("Meeting")!]: { thresholdHours: 72 },
+      [stageByName.get("Proposal")!]: { thresholdHours: 120 },
+      [stageByName.get("Negotiation")!]: { thresholdHours: 120 },
+    },
+  };
+  await db.setting.create({
+    data: {
+      organizationId: orgId,
+      key: "stage_inactivity",
+      value: stageInactivityValue as Prisma.InputJsonValue,
+    },
+  });
+
   // lost reasons
   for (let i = 0; i < DEFAULT_LOST_REASONS.length; i++) {
     await db.lostReason.create({
@@ -258,6 +286,15 @@ export async function seed(): Promise<{ orgId: string }> {
     }
     const lastContactAt = l.lastContactHoursAgo != null ? new Date(Date.now() - l.lastContactHoursAgo * 3600000) : null;
 
+    // STAGE INACTIVITY: explicit demo age, or a default consistent with the
+    // seeded STAGE_CHANGE activity (createdAt + 2h for non-New stages).
+    const stageEnteredAt =
+      l.stageAgeHours != null
+        ? new Date(Date.now() - l.stageAgeHours * 3_600_000)
+        : stage.name === "New"
+        ? created
+        : new Date(created.getTime() + 7_200_000);
+
     const status =
       stage.type === "won" ? LEAD_STATUS.WON : stage.type === "lost" ? LEAD_STATUS.LOST : stage.name === "New" ? LEAD_STATUS.NEW : stage.name === "Contacted" ? LEAD_STATUS.CONTACTED : stage.name === "Qualified" ? LEAD_STATUS.QUALIFIED : LEAD_STATUS.OPEN;
 
@@ -286,6 +323,7 @@ export async function seed(): Promise<{ orgId: string }> {
         lastContactAt,
         nextActionAt,
         nextActionLabel,
+        stageEnteredAt,
         createdAt: created,
         updatedAt: created,
       },

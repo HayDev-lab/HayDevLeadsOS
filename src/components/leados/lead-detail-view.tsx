@@ -20,8 +20,10 @@ import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPil
 import { SlaDetail } from "./sla/sla-detail";
 import { FollowUpBadge } from "./sla/followup-badge";
 import { FollowUpCard } from "./sla/followup-detail";
+import { StageHealthBadge } from "./sla/stage-health-badge";
 import { DEFAULT_SLA_THRESHOLDS, type SlaThresholds } from "@/lib/sla";
-import { DEFAULT_FOLLOWUP_SLA_CONFIG, followUpQuickDate, type FollowUpSlaConfig } from "@/lib/sla-followup";
+import { DEFAULT_FOLLOWUP_SLA_CONFIG, FOLLOWUP_SLA_STATUS, followUpQuickDate, humanizeDuration, type FollowUpSlaConfig } from "@/lib/sla-followup";
+import { STAGE_INACTIVITY_STATUS } from "@/lib/sla-stage-inactivity";
 import { useScheduleFollowUp } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -70,6 +72,7 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
         lead={l}
         slaThresholds={lead.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS}
         followUpConfig={lead.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG}
+        stageInactivityConfig={lead.data?.stageInactivityConfig ?? null}
         onEdit={() => setEditOpen(true)}
       />
       <EditLeadDialog lead={l} open={editOpen} onOpenChange={setEditOpen} />
@@ -185,11 +188,13 @@ function LeadHeader({
   lead: l,
   slaThresholds,
   followUpConfig,
+  stageInactivityConfig,
   onEdit,
 }: {
   lead: any;
   slaThresholds: SlaThresholds;
   followUpConfig: FollowUpSlaConfig;
+  stageInactivityConfig: { warningBeforeHours: number; thresholds: Record<string, number>; usingDefault: string[] } | null;
   onEdit: () => void;
 }) {
   const { t } = useLocale();
@@ -242,7 +247,39 @@ function LeadHeader({
               config={followUpConfig}
             />
           )}
+          {l.stageInactivity && (
+            <StageHealthBadge
+              leadStatus={l.status}
+              stageId={l.stageId ?? null}
+              stageName={l.stage?.name}
+              stageType={l.stage?.type}
+              stageEnteredAt={l.stageEnteredAt ?? null}
+              createdAt={l.createdAt}
+              config={stageInactivityConfig}
+              hideNotApplicable
+            />
+          )}
         </div>
+        {/* ATTENTION (Section 70) — compact summary, ONLY when the lead has a
+            problem. Empty block is never rendered. */}
+        {(() => {
+          const issues: string[] = [];
+          if (l.sla?.isBreached) issues.push(t("attention.no_first_response"));
+          if (l.followUp?.status === FOLLOWUP_SLA_STATUS.OVERDUE) {
+            issues.push(`${t("attention.followup_overdue")} · ${humanizeDuration(l.followUp.overdueMinutes ?? 0)}`);
+          }
+          if (l.stageInactivity?.status === STAGE_INACTIVITY_STATUS.STALE) {
+            issues.push(`${t("attention.stage_stale")} · ${humanizeDuration(l.stageInactivity.overdueMinutes ?? 0)}`);
+          }
+          if (!issues.length) return null;
+          return (
+            <div role="status" className="mt-3 rounded-lg border border-red-200 bg-red-50/70 dark:border-red-900 dark:bg-red-950/30 px-3 py-2 text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-semibold">{t("attention.title")}:</span>
+              <span className="flex flex-wrap gap-x-2">{issues.map((s, i) => <span key={i}>{s}</span>)}</span>
+            </div>
+          );
+        })()}
         <div className="flex flex-wrap items-center gap-2 mt-4">
           <Button size="sm" variant="default" onClick={() => quickLog("CALL", "Call logged")} disabled={logActivity.isPending}><Phone className="h-3.5 w-3.5 mr-1.5" />{t("lead.call")}</Button>
           <Button size="sm" variant="outline" onClick={() => quickLog("MESSAGE", "Message sent")} disabled={logActivity.isPending}><MessageSquare className="h-3.5 w-3.5 mr-1.5" />{t("lead.message")}</Button>

@@ -5,7 +5,7 @@ import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Activity, AlertTriangle, ArrowUpRight, CalendarClock, CheckCircle2, ClipboardList, Hourglass, Inbox, Layers, Plus, Sparkles, Timer, Trophy, XCircle, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Bell, CalendarClock, CheckCircle2, ClipboardList, Hourglass, Inbox, Layers, Plus, Sparkles, Timer, Trophy, XCircle, Zap } from "lucide-react";
 import { MiniBar, OwnerChip, ScoreBadge, SourceBadge, StageBadge, timeAgo, EmptyState, formatMoney } from "./primitives";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { LeadFormDialog } from "./lead-form-dialog";
@@ -29,6 +29,7 @@ export function DashboardView() {
     { key: "new", value: m?.newLeads ?? 0, icon: Sparkles, label: t("metric.new_leads"), color: "text-sky-600 bg-sky-50 dark:bg-sky-950/40", view: "leads" },
     { key: "slaBreached", value: m?.slaBreached ?? 0, icon: Hourglass, label: t("sla.breached_leads"), color: "text-red-600 bg-red-50 dark:bg-red-950/40", critical: true, view: "leads", params: { sla: "BREACH" } },
     { key: "overdue", value: m?.overdueFollowups ?? 0, icon: Timer, label: t("followup.queue.overdue"), color: "text-red-600 bg-red-50 dark:bg-red-950/40", critical: true, view: "leads", params: { followUp: "OVERDUE" } },
+    { key: "staleDeals", value: m?.staleDeals ?? 0, icon: Hourglass, label: t("stage.stale_deals"), color: "text-orange-600 bg-orange-50 dark:bg-orange-950/40", critical: true, view: "leads", params: { stageHealth: "STALE" } },
     { key: "unassigned", value: m?.unassigned ?? 0, icon: Inbox, label: t("metric.unassigned"), color: "text-amber-600 bg-amber-50 dark:bg-amber-950/40", view: "leads" },
     { key: "qualified", value: m?.qualified ?? 0, icon: CheckCircle2, label: t("metric.qualified"), color: "text-violet-600 bg-violet-50 dark:bg-violet-950/40", view: "pipeline" },
     { key: "meetings", value: m?.meetings ?? 0, icon: CalendarClock, label: t("metric.meetings"), color: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40", view: "pipeline" },
@@ -86,7 +87,7 @@ export function DashboardView() {
       )}
 
       {/* metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-10 gap-3">
         {metricCards.map((c, i) => (
           <motion.button
             key={c.key}
@@ -110,6 +111,94 @@ export function DashboardView() {
           </motion.button>
         ))}
       </div>
+
+      {/* NEEDS ATTENTION (Sections 65/112/113) — three INDEPENDENT engines,
+          one presentation layer. Issues ≠ leads: one lead may carry 2-3 problems. */}
+      {(dash.data?.slaAttention?.counts?.totalIssues ?? 0) > 0 && (
+        <Card className="border-red-200/70 dark:border-red-900/60 bg-red-50/30 dark:bg-red-950/20">
+          <CardContent className="py-3.5 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {t("attention.needs_attention")}
+                <span className="text-muted-foreground font-normal normal-case">
+                  {t("attention.issues_across", {
+                    issues: dash.data!.slaAttention.counts.totalIssues,
+                    leads: dash.data!.slaAttention.counts.leadsWithIssues,
+                  })}
+                </span>
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                onClick={() => navigate("leads", { sla: "BREACH" })}
+                className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-left hover:bg-accent/60 transition"
+              >
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Hourglass className="h-3.5 w-3.5 text-red-500" />
+                  {t("attention.unanswered_leads")}
+                </span>
+                <span className={cn("text-lg font-bold tabular-nums", (dash.data?.slaAttention.counts.firstResponseBreached ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
+                  {dash.data?.slaAttention.counts.firstResponseBreached ?? 0}
+                </span>
+              </button>
+              <button
+                onClick={() => navigate("leads", { followUp: "OVERDUE" })}
+                className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-left hover:bg-accent/60 transition"
+              >
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Bell className="h-3.5 w-3.5 text-red-500" />
+                  {t("attention.overdue_followups")}
+                </span>
+                <span className={cn("text-lg font-bold tabular-nums", (dash.data?.slaAttention.counts.followUpsOverdue ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground")}>
+                  {dash.data?.slaAttention.counts.followUpsOverdue ?? 0}
+                </span>
+              </button>
+              <button
+                onClick={() => navigate("leads", { stageHealth: "STALE" })}
+                className="flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-left hover:bg-accent/60 transition"
+              >
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Hourglass className="h-3.5 w-3.5 text-orange-500" />
+                  {t("attention.stale_deals")}
+                </span>
+                <span className={cn("text-lg font-bold tabular-nums", (dash.data?.slaAttention.counts.staleDeals ?? 0) > 0 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground")}>
+                  {dash.data?.slaAttention.counts.staleDeals ?? 0}
+                </span>
+              </button>
+            </div>
+            {/* Top critical leads (Section 113) — a few items only, never a full list */}
+            {(dash.data?.slaAttention?.items ?? []).length > 0 && (
+              <div className="space-y-1.5 pt-1 border-t border-red-100 dark:border-red-900/50">
+                {dash.data!.slaAttention.items.slice(0, 3).map((item: any) => (
+                  <button
+                    key={item.leadId}
+                    onClick={() => navigate("lead", { id: item.leadId })}
+                    className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-accent/60 transition"
+                  >
+                    <span className="text-xs font-medium truncate min-w-0 flex-1">{item.leadName}</span>
+                    <span className="flex items-center gap-1 shrink-0">
+                      {item.issues.map((issue: any, i: number) => (
+                        <span
+                          key={i}
+                          className={cn(
+                            "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium",
+                            issue.kind === "FIRST_RESPONSE" && "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300",
+                            issue.kind === "FOLLOW_UP" && "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+                            issue.kind === "STAGE_INACTIVITY" && "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300"
+                          )}
+                        >
+                          {issue.kind === "FIRST_RESPONSE" ? t("attention.no_first_response") : issue.kind === "FOLLOW_UP" ? t("attention.followup_overdue") : t("attention.stage_stale")}
+                        </span>
+                      ))}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* TODAY — my work queue (Section 28: more useful than another KPI tile) */}
       <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">

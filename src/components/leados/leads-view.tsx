@@ -17,10 +17,12 @@ import { ImportDialog } from "./import-dialog";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, SourceBadge, StageBadge, timeAgo } from "./primitives";
 import { SlaBadge } from "./sla/sla-badge";
 import { FollowUpBadge } from "./sla/followup-badge";
+import { StageHealthBadge } from "./sla/stage-health-badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { DEFAULT_SLA_THRESHOLDS, SLA_STATUS, type SlaThresholds } from "@/lib/sla";
 import { DEFAULT_FOLLOWUP_SLA_CONFIG, FOLLOWUP_SLA_STATUS, type FollowUpSlaConfig } from "@/lib/sla-followup";
+import { STAGE_INACTIVITY_STATUS, humanizeDuration } from "@/lib/sla-stage-inactivity";
 
 const SLA_SORT_DEFAULT = "sla:priority";
 
@@ -37,6 +39,9 @@ export function LeadsView() {
   const [slaFilter, setSlaFilter] = useState(route.params.sla === "BREACH" ? "BREACH" : "");
   const [followUpFilter, setFollowUpFilter] = useState(
     route.params.followUp ? String(route.params.followUp).toUpperCase() : ""
+  );
+  const [stageHealthFilter, setStageHealthFilter] = useState(
+    route.params.stageHealth ? String(route.params.stageHealth).toUpperCase() : ""
   );
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState(SLA_SORT_DEFAULT);
@@ -67,20 +72,22 @@ export function LeadsView() {
     archived: showArchived || undefined,
     sla: slaFilter || undefined,
     followUp: followUpFilter || undefined,
+    stageHealth: stageHealthFilter || undefined,
     page,
     limit,
     sort,
-  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, showArchived, slaFilter, followUpFilter, page, sort]);
+  }), [q, sourceId, ownerId, stageId, priority, overdue, unassigned, showArchived, slaFilter, followUpFilter, stageHealthFilter, page, sort]);
 
   const leads = useLeads(query);
   const slaConfig: SlaThresholds = leads.data?.slaConfig ?? DEFAULT_SLA_THRESHOLDS;
   const followUpConfig: FollowUpSlaConfig = leads.data?.followUpConfig ?? DEFAULT_FOLLOWUP_SLA_CONFIG;
+  const stageInactivityConfig = leads.data?.stageInactivityConfig ?? null;
 
   const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
 
   const togglePriority = (p: string) => setPriority((cur) => cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]);
-  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setSlaFilter(""); setFollowUpFilter(""); setPage(1); };
-  const hasFilters = q || sourceId || ownerId || stageId || priority.length || overdue || unassigned || slaFilter || followUpFilter;
+  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setSlaFilter(""); setFollowUpFilter(""); setStageHealthFilter(""); setPage(1); };
+  const hasFilters = q || sourceId || ownerId || stageId || priority.length || overdue || unassigned || slaFilter || followUpFilter || stageHealthFilter;
 
   const toggleSelect = (id: string) => setSelected((cur) => {
     const n = new Set(cur);
@@ -131,6 +138,7 @@ export function LeadsView() {
     if (overdue) params.set("overdue", "1");
     if (slaFilter) params.set("sla", slaFilter);
     if (followUpFilter) params.set("followUp", followUpFilter);
+    if (stageHealthFilter) params.set("stageHealth", stageHealthFilter);
     window.open(`/api/v1/export?${params.toString()}`, "_blank");
   };
 
@@ -213,6 +221,20 @@ export function LeadsView() {
               <SelectItem value="NONE">{t("followup.filter.none")}</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={stageHealthFilter || "__all"} onValueChange={(v) => { setStageHealthFilter(v === "__all" ? "" : v); setPage(1); }}>
+            <SelectTrigger
+              className={cn("w-40 h-9 text-xs", stageHealthFilter && stageHealthFilter === STAGE_INACTIVITY_STATUS.STALE && "border-red-300 dark:border-red-800 font-medium")}
+              aria-label={t("stage.filter.label")}
+            >
+              <SelectValue placeholder={t("stage.filter.label")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all">{t("stage.filter.all")}</SelectItem>
+              <SelectItem value={STAGE_INACTIVITY_STATUS.STALE}>{t("stage.stale")}</SelectItem>
+              <SelectItem value={STAGE_INACTIVITY_STATUS.AGING}>{t("stage.aging")}</SelectItem>
+              <SelectItem value={STAGE_INACTIVITY_STATUS.ON_TRACK}>{t("stage.on_track")}</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
             <SelectTrigger className="w-40 h-9 text-xs" aria-label="Sort">
               <SelectValue placeholder={t("sla.sort.priority")} />
@@ -220,6 +242,7 @@ export function LeadsView() {
             <SelectContent>
               <SelectItem value={SLA_SORT_DEFAULT}>{t("sla.sort.priority")}</SelectItem>
               <SelectItem value="followup:urgency">{t("followup.sort.urgency")}</SelectItem>
+              <SelectItem value="stageinactivity:urgency">{t("stage.sort.urgency")}</SelectItem>
               <SelectItem value="createdAt:desc">{t("common.sort.newest")}</SelectItem>
               <SelectItem value="createdAt:asc">{t("common.sort.oldest")}</SelectItem>
               <SelectItem value="leadScore:desc">{t("common.sort.score")}</SelectItem>
@@ -341,6 +364,7 @@ export function LeadsView() {
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.source")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.stage")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.sla")}</th>
+                <th className="text-left font-medium px-3 py-2.5">{t("stage.stage_health")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.score")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.priority")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.owner")}</th>
@@ -351,12 +375,12 @@ export function LeadsView() {
             </thead>
             <tbody>
               {leads.isLoading && Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b last:border-0"><td colSpan={11} className="px-3"><Skeleton className="h-9 w-full my-1" /></td></tr>
+                <tr key={i} className="border-b last:border-0"><td colSpan={12} className="px-3"><Skeleton className="h-9 w-full my-1" /></td></tr>
               ))}
               {(leads.data?.rows ?? []).map((l: any) => {
                 const overdueAction = l.nextActionAt && new Date(l.nextActionAt).getTime() < Date.now();
                 return (
-                  <tr key={l.id} className={cn("border-b last:border-0 hover:bg-accent/50 transition cursor-pointer", selected.has(l.id) && "bg-primary/5", l.sla?.isBreached && "bg-red-50/70 dark:bg-red-950/30 hover:bg-red-50 dark:hover:bg-red-950/50")} onClick={() => navigate("lead", { id: l.id })}>
+                  <tr key={l.id} className={cn("border-b last:border-0 hover:bg-accent/50 transition cursor-pointer", selected.has(l.id) && "bg-primary/5", l.sla?.isBreached && "bg-red-50/70 dark:bg-red-950/30 hover:bg-red-50 dark:hover:bg-red-950/50", l.stageInactivity?.isStale && !l.sla?.isBreached && "bg-orange-50/60 dark:bg-orange-950/20 hover:bg-orange-50 dark:hover:bg-orange-950/40")} onClick={() => navigate("lead", { id: l.id })}>
                     <td className="px-3 py-2.5" onClick={(e) => { e.stopPropagation(); toggleSelect(l.id); }}><input type="checkbox" checked={selected.has(l.id)} readOnly className="accent-primary" /></td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2.5">
@@ -369,9 +393,30 @@ export function LeadsView() {
                     </td>
                     <td className="px-3 py-2.5 truncate max-w-[160px]">{l.company || "—"}</td>
                     <td className="px-3 py-2.5"><SourceBadge name={l.source?.name} type={l.source?.type} /></td>
-                    <td className="px-3 py-2.5"><StageBadge name={l.stage?.name} color={l.stage?.color} type={l.stage?.type} /></td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-col gap-0.5">
+                        <StageBadge name={l.stage?.name} color={l.stage?.color} type={l.stage?.type} />
+                        {l.stageInactivity && l.stageInactivity.status !== "NOT_APPLICABLE" && (
+                          <span className="text-[10px] text-muted-foreground tabular-nums">
+                            {humanizeDuration(l.stageInactivity.stageAgeMinutes)} {t("stage.on_stage")}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-3 py-2.5">
                       <SlaBadge createdAt={l.createdAt} firstResponseAt={l.sla?.firstResponseAt ?? null} thresholds={slaConfig} />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <StageHealthBadge
+                        leadStatus={l.status}
+                        stageId={l.stageId ?? null}
+                        stageName={l.stage?.name}
+                        stageType={l.stage?.type}
+                        stageEnteredAt={l.stageEnteredAt ?? null}
+                        createdAt={l.createdAt}
+                        config={stageInactivityConfig}
+                        hideNotApplicable
+                      />
                     </td>
                     <td className="px-3 py-2.5">
                       <ScoreBadge score={l.leadScore} category={l.scoreCategory} />
@@ -411,7 +456,7 @@ export function LeadsView() {
                 );
               })}
               {!leads.isLoading && (leads.data?.rows ?? []).length === 0 && (
-                <tr><td colSpan={showArchived ? 12 : 11} className="px-6 py-12 text-center text-sm text-muted-foreground">{hasFilters ? "No leads match your filters." : "No leads yet. Create one or import a CSV."}</td></tr>
+                <tr><td colSpan={showArchived ? 13 : 12} className="px-6 py-12 text-center text-sm text-muted-foreground">{hasFilters ? "No leads match your filters." : "No leads yet. Create one or import a CSV."}</td></tr>
               )}
             </tbody>
           </table>
