@@ -191,7 +191,17 @@ export function ExecutionDetailDialog({
                       <span className="flex-1 min-w-0">
                         <span className="font-medium">{i + 1}. {tr(`auto.action.${a.type}`)}</span>
                         <span className="text-muted-foreground"> — {a.status}</span>
-                        {a.error && <p className="text-red-600 dark:text-red-400 mt-0.5">{a.error}</p>}
+                        {/* v0.16 (spec 19): effect trace — REUSED proves idempotency. */}
+                        {a.effect && a.effect !== "NO_CHANGE" && (
+                          <Badge variant="outline" className="ml-1.5 h-4 px-1 text-[9px]">{tr(`auto.exec.effect.${a.effect}`)}</Badge>
+                        )}
+                        {/* v0.16 (spec 68): localized error codes — never stack traces. */}
+                        {a.errorCode && (
+                          <p className="text-red-600 dark:text-red-400 mt-0.5">
+                            {tr(`errors.${a.errorCode}`) !== `errors.${a.errorCode}` ? tr(`errors.${a.errorCode}`) : (a.error ?? a.errorCode)}
+                          </p>
+                        )}
+                        {!a.errorCode && a.error && <p className="text-red-600 dark:text-red-400 mt-0.5">{a.error}</p>}
                       </span>
                     </div>
                   ))}
@@ -200,12 +210,16 @@ export function ExecutionDetailDialog({
             )}
 
             {/* Error + duration */}
-            {(execution.error || result.durationMs != null) && (
+            {(execution.error || execution.errorCode || result.durationMs != null) && (
               <section className="space-y-1.5">
-                {execution.error && (
+                {(execution.error || execution.errorCode) && (
                   <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900" role="alert">
                     <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                    <span>{execution.error}</span>
+                    <span>
+                      {execution.errorCode && tr(`errors.${execution.errorCode}`) !== `errors.${execution.errorCode}`
+                        ? tr(`errors.${execution.errorCode}`)
+                        : (execution.error ?? execution.errorCode)}
+                    </span>
                   </div>
                 )}
                 {result.durationMs != null && (

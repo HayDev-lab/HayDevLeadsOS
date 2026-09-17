@@ -241,14 +241,39 @@ describe("action validation (spec 86, 67)", () => {
     expect(r.errors[0].toLowerCase()).toContain("at least one action");
   });
 
-  test("unknown action type FAILS (whitelist, spec 16)", () => {
-    const r = validateAutomationActions([{ type: "SEND_EMAIL", params: {} }], ctx);
+  test("unknown action type FAILS (whitelist)", () => {
+    const r = validateAutomationActions([{ type: "SEND_SMS", params: {} }], ctx);
     expect(r.ok).toBe(false);
     expect(r.errors[0]).toContain("unknown action type");
   });
 
-  test("SEND_TELEGRAM / webhooks / custom JS are impossible", () => {
-    for (const t of ["SEND_TELEGRAM", "SEND_WHATSAPP", "SMS", "WEBHOOK", "RUN_JAVASCRIPT", "AI_ACTION"]) {
+  test("v0.16: external delivery actions are whitelisted but VALIDATED (spec 64-66)", () => {
+    // SEND_EMAIL/SEND_TELEGRAM/SEND_WEBHOOK exist since the delivery layer
+    // landed — but they demand structured params (missing subject → 400).
+    for (const t of ["SEND_EMAIL", "SEND_TELEGRAM", "SEND_WEBHOOK"]) {
+      const r = validateAutomationActions([{ type: t, params: {} }], ctx);
+      expect(r.ok).toBe(false);
+    }
+    const okEmail = validateAutomationActions(
+      [{ type: "SEND_EMAIL", params: { subject: "Hello", body: "World", recipient: "LEAD_OWNER" } }], ctx);
+    expect(okEmail.ok).toBe(true);
+    // Arbitrary recipient strings are impossible (spec 65).
+    const badRecipient = validateAutomationActions(
+      [{ type: "SEND_EMAIL", params: { subject: "H", body: "W", recipient: "ANYONE" } }], ctx);
+    expect(badRecipient.ok).toBe(false);
+    // Webhook must reference an org endpoint (spec 66) — an arbitrary URL
+    // inside the rule is impossible.
+    const endpointCtx = { ...ctx, webhookEndpointIds: ["ep-1"] };
+    const badWebhook = validateAutomationActions(
+      [{ type: "SEND_WEBHOOK", params: { endpointId: "https://evil.example/x" } }], endpointCtx);
+    expect(badWebhook.ok).toBe(false);
+    const okWebhook = validateAutomationActions(
+      [{ type: "SEND_WEBHOOK", params: { endpointId: "ep-1" } }], endpointCtx);
+    expect(okWebhook.ok).toBe(true);
+  });
+
+  test("custom JS / SMS / stage transition remain impossible", () => {
+    for (const t of ["SEND_WHATSAPP", "SMS", "RUN_JAVASCRIPT", "AI_ACTION", "TRANSITION_STAGE", "SEND_SMS"]) {
       const r = validateAutomationActions([{ type: t, params: {} }], ctx);
       expect(r.ok).toBe(false);
     }

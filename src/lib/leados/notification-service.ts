@@ -21,14 +21,28 @@ import {
   type DomainEventType,
   type NotificationPreferences,
 } from "@/lib/domain-events";
+import {
+  parseChannelPreferences,
+  validateChannelPreferences,
+  type ChannelPreferences,
+} from "./delivery/channels";
 
 // ---------------------------------------------------------------------------
 // Preferences storage (Section 55): a real persistent User model exists, so
 // preferences are USER-SCOPED Setting rows keyed "notification_preferences:<userId>".
+// v0.16: the SAME row carries the event × channel matrix under `.channels`
+// (external channels default OFF — spec 98). Backward compatible: legacy rows
+// without `.channels` parse to all-OFF.
 // ---------------------------------------------------------------------------
 
 export function notificationPreferencesSettingKey(userId: string): string {
   return `notification_preferences:${userId}`;
+}
+
+/** Combined read model: in-app toggles + external channel matrix (spec 38–40). */
+export interface FullNotificationPreferences {
+  types: NotificationPreferences;
+  channels: ChannelPreferences;
 }
 
 export async function getNotificationPreferences(orgId: string, userId: string): Promise<NotificationPreferences> {
@@ -38,22 +52,47 @@ export async function getNotificationPreferences(orgId: string, userId: string):
   return parseNotificationPreferences(row?.value ?? null);
 }
 
+export async function getChannelPreferences(orgId: string, userId: string): Promise<ChannelPreferences> {
+  const row = await db.setting.findUnique({
+    where: { organizationId_key: { organizationId: orgId, key: notificationPreferencesSettingKey(userId) } },
+  });
+  return parseChannelPreferences(row?.value ?? null);
+}
+
+/** Save types and/or channels ATOMICALLY into the single preference row. */
 export async function setNotificationPreferences(
   orgId: string,
   userId: string,
-  prefs: NotificationPreferences
-): Promise<NotificationPreferences> {
+  prefs: NotificationPreferences,
+  channels?: ChannelPreferences
+): Promise<FullNotificationPreferences> {
   const key = notificationPreferencesSettingKey(userId);
+  const existing = await db.setting.findUnique({
+    where: { organizationId_key: { organizationId: orgId, key } },
+    select: { value: true },
+  });
+  const storedChannels = parseChannelPreferences(existing?.value ?? null);
+  const value = {
+    ...(existing?.value != null && typeof existing.value === "object" && !Array.isArray(existing.value)
+      ? (existing.value as Record<string, unknown>)
+      : {}),
+    ...prefs,
+    channels: channels ?? storedChannels,
+  };
   await db.setting.upsert({
     where: { organizationId_key: { organizationId: orgId, key } },
-    create: { organizationId: orgId, key, value: prefs as Prisma.InputJsonValue },
-    update: { value: prefs as Prisma.InputJsonValue },
+    create: { organizationId: orgId, key, value: value as unknown as Prisma.InputJsonValue },
+    update: { value: value as unknown as Prisma.InputJsonValue },
   });
-  return prefs;
+  return { types: parseNotificationPreferences(value), channels: parseChannelPreferences(value) };
 }
 
 export function isValidPreferenceInput(raw: unknown) {
   return validateNotificationPreferences(raw);
+}
+
+export function isValidChannelPreferenceInput(raw: unknown) {
+  return validateChannelPreferences(raw);
 }
 
 // ---------------------------------------------------------------------------

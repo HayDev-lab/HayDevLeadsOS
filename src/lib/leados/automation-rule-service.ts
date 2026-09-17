@@ -102,8 +102,14 @@ export async function validateRuleInput(
     if (input.actions === undefined || input.actions === null) {
       errors.push("At least one action is required.");
     } else {
-      const users = await db.user.findMany({ where: { organizationId: orgId }, select: { id: true } });
-      const actionValidation = validateAutomationActions(input.actions, { userIds: users.map((u) => u.id) });
+      const [users, endpoints] = await Promise.all([
+        db.user.findMany({ where: { organizationId: orgId }, select: { id: true } }),
+        db.webhookEndpoint.findMany({ where: { organizationId: orgId, enabled: true }, select: { id: true } }),
+      ]);
+      const actionValidation = validateAutomationActions(input.actions, {
+        userIds: users.map((u) => u.id),
+        webhookEndpointIds: endpoints.map((e) => e.id),
+      });
       if (!actionValidation.ok) errors.push(...actionValidation.errors);
       actions = input.actions as AutomationAction[];
     }

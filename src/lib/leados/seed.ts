@@ -825,6 +825,91 @@ export async function seed(): Promise<{ orgId: string }> {
     await runAutomationProcessor(orgId);
   }
 
+  // v0.16 DEMO DELIVERY LAYER:
+  //  1. backfill fanoutAt for every pre-existing notification so the demo
+  //     never "emails history" — only notifications created from here on fan
+  //     out (the production rollout does the same, spec 98);
+  //  2. demo webhook endpoint (public URL, HMAC-signed — the delivery worker
+  //     sends to it in demo mode only via the DemoWebhookProvider);
+  //  3. the demo user's channel preferences: Email ON for the two critical
+  //     event types (everything else stays OFF — spec 98 defaults);
+  //  4. connect Telegram for the demo user (demo provider simulates sends);
+  //  5. run the full worker chain once more: fan-out creates delivery rows
+  //     for the notifications above + the delivery worker SIMULATES the
+  //     external sends (LEADOS_DEMO) → honest SENT demo history.
+  {
+    await db.notification.updateMany({ where: { organizationId: orgId, fanoutAt: null }, data: { fanoutAt: new Date() } });
+    await db.webhookEndpoint.create({
+      data: {
+        organizationId: orgId,
+        name: "HayDev Integration (demo)",
+        url: "https://example.com/webhooks/leados",
+        secret: "demo-signing-secret-do-not-use-in-production",
+        events: "FOLLOW_UP_OVERDUE,FIRST_RESPONSE_BREACHED",
+        enabled: true,
+      },
+    });
+    await db.setting.upsert({
+      where: { organizationId_key: { organizationId: orgId, key: `notification_preferences:${users[0].id}` } },
+      create: {
+        organizationId: orgId,
+        key: `notification_preferences:${users[0].id}`,
+        value: {
+          FIRST_RESPONSE_BREACHED: true,
+          FOLLOW_UP_DUE_SOON: true,
+          FOLLOW_UP_OVERDUE: true,
+          STAGE_AGING: true,
+          STAGE_BECAME_STALE: true,
+          LEAD_ASSIGNED: true,
+          TASK_ASSIGNED: true,
+          TASK_DUE_SOON: true,
+          TASK_OVERDUE: true,
+          channels: {
+            FIRST_RESPONSE_BREACHED: { email: true, telegram: true },
+            FOLLOW_UP_OVERDUE: { email: true, telegram: false },
+          },
+        } as Prisma.InputJsonValue,
+      },
+      update: {},
+    });
+    await db.user.update({
+      where: { id: users[0].id },
+      data: { telegramChatId: "100200300", telegramConnectedAt: new Date() },
+    });
+    // A fresh event-projected notification (eventId set!) so the fan-out step
+    // derives real delivery rows; then the delivery worker simulates the
+    // external sends (demo providers, spec 99).
+    const fuEvent = await db.domainEvent.findFirst({
+      where: { organizationId: orgId, type: "FOLLOW_UP_OVERDUE" },
+      orderBy: { occurredAt: "desc" },
+    });
+    if (fuEvent) {
+      const leadId = typeof (fuEvent.payload as Record<string, unknown> | null)?.leadId === "string"
+        ? ((fuEvent.payload as Record<string, unknown>).leadId as string)
+        : null;
+      const payload = (fuEvent.payload ?? {}) as Record<string, unknown>;
+      await db.notification
+        .create({
+          data: {
+            organizationId: orgId,
+            userId: users[0].id,
+            eventId: fuEvent.id,
+            leadId,
+            type: fuEvent.type,
+            templateKey: "notif.fu_overdue.title",
+            payload: payload as Prisma.InputJsonValue,
+            severity: "CRITICAL",
+            deepLink: leadId ? `lead/${leadId}?focus=followup` : "leads",
+            title: "Follow-up overdue",
+            message: "AquaService: follow-up overdue by 5h.",
+          },
+        })
+        .catch(() => null); // unique(eventId,userId) — a projection already made one
+    }
+    const { runAllLeadOSWorkers } = await import("./leados-workers");
+    await runAllLeadOSWorkers({ orgIds: [orgId], trigger: "internal" });
+  }
+
   // a notification for the owner about a new unassigned urgent lead
   await db.notification.create({
     data: {

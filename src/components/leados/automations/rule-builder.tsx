@@ -23,6 +23,7 @@ import {
   useUsers,
   useSources,
   usePipeline,
+  useWebhookEndpoints,
   useCreateAutomation,
   useUpdateAutomation,
   type AutomationRuleRow,
@@ -30,7 +31,6 @@ import {
 import { DOMAIN_EVENT_TYPES } from "@/lib/domain-events";
 import { CONDITION_FIELDS, type ConditionItem, type ConditionOperator } from "@/lib/automation-conditions";
 import { AUTOMATION_ACTION_TYPES, ACTION_ASSIGNEE, type AutomationActionType } from "@/lib/automation-actions";
-
 export interface BuilderDraft {
   name: string;
   description: string;
@@ -93,6 +93,12 @@ function defaultParamsFor(type: AutomationActionType): Record<string, unknown> {
       return { assignTo: ACTION_ASSIGNEE.SPECIFIC_USER };
     case "ADD_NOTE":
       return { content: "" };
+    case "SEND_EMAIL":
+      return { subject: "", body: "", recipient: ACTION_ASSIGNEE.LEAD_OWNER };
+    case "SEND_TELEGRAM":
+      return { message: "", recipient: ACTION_ASSIGNEE.LEAD_OWNER };
+    case "SEND_WEBHOOK":
+      return { endpointId: "" };
     default:
       return {};
   }
@@ -125,6 +131,7 @@ export function RuleBuilderDialog({
   const users = useUsers();
   const sources = useSources();
   const pipeline = usePipeline();
+  const webhookEndpoints = useWebhookEndpoints();
   const createRule = useCreateAutomation();
   const updateRule = useUpdateAutomation();
 
@@ -142,6 +149,10 @@ export function RuleBuilderDialog({
   const userRows: { id: string; name: string }[] = useMemo(
     () => ((users.data?.rows ?? []) as { id: string; name: string }[]),
     [users.data]
+  );
+  const endpointRows: { id: string; name: string }[] = useMemo(
+    () => ((webhookEndpoints.data?.rows ?? []) as { id: string; name: string }[]).filter((ep) => ep.name !== undefined),
+    [webhookEndpoints.data]
   );
   const sourceRows: { id: string; name: string }[] = useMemo(
     () => ((sources.data?.rows ?? []) as { id: string; name: string }[]),
@@ -419,6 +430,7 @@ export function RuleBuilderDialog({
                   <ActionParams
                     action={a}
                     users={userRows}
+                    endpoints={endpointRows}
                     onParam={(key, value) => updateActionParam(i, key, value)}
                     t={tr}
                   />
@@ -554,11 +566,14 @@ function ConditionValueInput({
 function ActionParams({
   action,
   users,
+  endpoints,
   onParam,
   t,
 }: {
   action: { type: string; params: Record<string, unknown> };
   users: { id: string; name: string }[];
+  /** Org-configured webhook endpoints (spec 66 — no arbitrary URLs). */
+  endpoints: { id: string; name: string }[];
   onParam: (key: string, value: unknown) => void;
   t: (key: string) => string;
 }) {
@@ -689,6 +704,77 @@ function ActionParams({
             onChange={(e) => onParam("content", e.target.value)}
             maxLength={2000}
           />
+        </div>
+      );
+
+    // v0.16: external delivery actions — SAFE recipients only (spec 65-66):
+    // users resolved by role, webhooks only from org-configured endpoints.
+    case "SEND_EMAIL":
+      return (
+        <div className="grid sm:grid-cols-2 gap-2.5">
+          <div className="grid gap-1 sm:col-span-2">
+            <Label className="text-[11px] text-muted-foreground">{t("auto.action.subject")} *</Label>
+            <Input
+              className="h-8 text-xs"
+              value={String(p.subject ?? "")}
+              onChange={(e) => onParam("subject", e.target.value)}
+              placeholder="…{leadName}"
+              maxLength={200}
+            />
+          </div>
+          <div className="grid gap-1 sm:col-span-2">
+            <Label className="text-[11px] text-muted-foreground">{t("auto.action.body")} *</Label>
+            <Textarea
+              className="min-h-[52px] text-xs"
+              value={String(p.body ?? "")}
+              onChange={(e) => onParam("body", e.target.value)}
+              placeholder="…{leadName}"
+              maxLength={2000}
+            />
+          </div>
+          {assigneeSelect("recipient", ["LEAD_OWNER", "TASK_ASSIGNEE", "EVENT_RECIPIENT", "SPECIFIC_USER"], t("auto.action.recipient"))}
+          {p.recipient === "SPECIFIC_USER" ? userSelect() : null}
+        </div>
+      );
+
+    case "SEND_TELEGRAM":
+      return (
+        <div className="grid sm:grid-cols-2 gap-2.5">
+          <div className="grid gap-1 sm:col-span-2">
+            <Label className="text-[11px] text-muted-foreground">{t("auto.action.message")} *</Label>
+            <Textarea
+              className="min-h-[52px] text-xs"
+              value={String(p.message ?? "")}
+              onChange={(e) => onParam("message", e.target.value)}
+              placeholder="…{leadName}"
+              maxLength={900}
+            />
+          </div>
+          {assigneeSelect("recipient", ["LEAD_OWNER", "TASK_ASSIGNEE", "EVENT_RECIPIENT", "SPECIFIC_USER"], t("auto.action.recipient"))}
+          {p.recipient === "SPECIFIC_USER" ? userSelect() : null}
+        </div>
+      );
+
+    case "SEND_WEBHOOK":
+      return (
+        <div className="grid gap-1">
+          <Label className="text-[11px] text-muted-foreground">{t("auto.action.endpoint")} *</Label>
+          {endpoints.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground border rounded-md p-2 bg-muted/40">
+              {t("auto.action.no_endpoints")}
+            </p>
+          ) : (
+            <Select value={String(p.endpointId ?? "")} onValueChange={(v) => onParam("endpointId", v)}>
+              <SelectTrigger className="h-8 text-xs" aria-label={t("auto.action.endpoint")}>
+                <SelectValue placeholder={t("auto.action.endpoint")} />
+              </SelectTrigger>
+              <SelectContent>
+                {endpoints.map((ep) => (
+                  <SelectItem key={ep.id} value={ep.id}>{ep.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       );
 

@@ -9,6 +9,12 @@ const db = new PrismaClient();
 
 async function main() {
   // Wipe tenant data (order irrelevant — cascade handles it, but be explicit).
+  await db.notificationDelivery.deleteMany();
+  await db.automationExecution.deleteMany();
+  await db.automationRule.deleteMany();
+  await db.domainEvent.deleteMany();
+  await db.workerLease.deleteMany();
+  await db.workerRun.deleteMany();
   await db.webhookLog.deleteMany();
   await db.integrationEvent.deleteMany();
   await db.integrationSync.deleteMany();

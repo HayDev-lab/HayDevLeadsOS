@@ -25,57 +25,61 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                User[]
-  leads                Lead[]
-  pipelines            Pipeline[]
-  leadSources          LeadSource[]
-  tags                 Tag[]
-  lostReasons          LostReason[]
-  businessAudits       BusinessAudit[]
-  integrationSyncs     IntegrationSync[]
-  integrationEvents    IntegrationEvent[]
-  incomingMessages     IncomingMessage[]
-  webhookLogs           WebhookLog[]
-  notifications         Notification[]
-  domainEvents         DomainEvent[]
-  automationRules       AutomationRule[]
-  automationExecutions  AutomationExecution[]
-  customFields         CustomField[]
-  scoringConfigs       ScoringConfig[]
-  settings             Setting[]
-  savedFilters         SavedFilter[]
-  assignmentRules      AssignmentRule[]
-  webhookEndpoints     WebhookEndpoint[]
-  activities           Activity[]
-  tasks                Task[]
-  notes                Note[]
-  leadEvents           LeadEvent[]
-  lostLeadFlags        LostLeadFlag[]
+  users                  User[]
+  leads                  Lead[]
+  pipelines              Pipeline[]
+  leadSources            LeadSource[]
+  tags                   Tag[]
+  lostReasons            LostReason[]
+  businessAudits         BusinessAudit[]
+  integrationSyncs       IntegrationSync[]
+  integrationEvents      IntegrationEvent[]
+  incomingMessages       IncomingMessage[]
+  webhookLogs            WebhookLog[]
+  notifications          Notification[]
+  domainEvents           DomainEvent[]
+  automationRules        AutomationRule[]
+  automationExecutions   AutomationExecution[]
+  customFields           CustomField[]
+  scoringConfigs         ScoringConfig[]
+  settings               Setting[]
+  savedFilters           SavedFilter[]
+  assignmentRules        AssignmentRule[]
+  webhookEndpoints       WebhookEndpoint[]
+  activities             Activity[]
+  tasks                  Task[]
+  notificationDeliveries NotificationDelivery[]
+  notes                  Note[]
+  leadEvents             LeadEvent[]
+  lostLeadFlags          LostLeadFlag[]
 }
 
-
-
 model User {
-  id             String       @id @default(cuid())
-  organizationId String
-  name           String
-  email          String
-  role           String       @default("MANAGER") // UserRole
-  status         String       @default("ACTIVE") // UserStatus
-  title          String?
-  phone          String?
-  avatarColor    String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                  String    @id @default(cuid())
+  organizationId      String
+  name                String
+  email               String
+  role                String    @default("MANAGER") // UserRole
+  status              String    @default("ACTIVE") // UserStatus
+  title               String?
+  phone               String?
+  avatarColor         String?
+  /// TELEGRAM channel (v0.16 spec 47): validated chat id, set only via the
+  /// connect flow (bot code exchange or admin-verified dev flow). Never a
+  /// bare @username — delivery requires a real chat id.
+  telegramChatId      String?
+  telegramConnectedAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  ownedLeads         Lead[]             @relation("OwnedLeads")
-  assignedTasks      Task[]             @relation("AssignedTasks")
-  assignmentRules    AssignmentRule[]   @relation("AssignmentRuleAssignee")
-  activities         Activity[]
-  notes              Note[]
-  events             LeadEvent[]
-  notifications      Notification[]
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownedLeads      Lead[]           @relation("OwnedLeads")
+  assignedTasks   Task[]           @relation("AssignedTasks")
+  assignmentRules AssignmentRule[] @relation("AssignmentRuleAssignee")
+  activities      Activity[]
+  notes           Note[]
+  events          LeadEvent[]
+  notifications   Notification[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -86,14 +90,14 @@ model User {
 // ---------------------------------------------------------------------------
 
 model LeadSource {
-  id             String       @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
   name           String
-  type           String       @default("manual") // website | business_audit | instagram | facebook | whatsapp | telegram | google_ads | meta_ads | referral | manual | api | email | phone | other
-  position       Int          @default(0)
-  isSystem       Boolean      @default(false)
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
+  type           String   @default("manual") // website | business_audit | instagram | facebook | whatsapp | telegram | google_ads | meta_ads | referral | manual | api | email | phone | other
+  position       Int      @default(0)
+  isSystem       Boolean  @default(false)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leads        Lead[]
@@ -110,23 +114,23 @@ model Pipeline {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   stages       PipelineStage[]
-  leads       Lead[]
+  leads        Lead[]
 
   @@index([organizationId])
 }
 
 model PipelineStage {
-  id          String   @id @default(cuid())
-  pipelineId  String
-  name        String
-  position    Int
-  type        String   @default("open") // open | won | lost
-  color       String?
-  isWon       Boolean  @default(false)
-  isLost      Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  pipelineId String
+  name       String
+  position   Int
+  type       String   @default("open") // open | won | lost
+  color      String?
+  isWon      Boolean  @default(false)
+  isLost     Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   leads    Lead[]
@@ -142,7 +146,7 @@ model Tag {
   createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  leadTags      LeadTag[]
+  leadTags     LeadTag[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -152,73 +156,69 @@ model Tag {
 // LEAD (core)
 // ---------------------------------------------------------------------------
 
-
-
-
-
 model Lead {
-  id              String   @id @default(cuid())
-  organizationId  String
-  externalId      String?
-  sourceId        String?
-  sourceDetail    String?  // e.g. landing page name, campaign, form id
-  firstName       String?
-  lastName        String?
-  company         String?
-  position        String?  // job title
-  phone           String?
-  normalizedPhone String?
-  email           String?
-  normalizedEmail String?
+  id               String    @id @default(cuid())
+  organizationId   String
+  externalId       String?
+  sourceId         String?
+  sourceDetail     String? // e.g. landing page name, campaign, form id
+  firstName        String?
+  lastName         String?
+  company          String?
+  position         String? // job title
+  phone            String?
+  normalizedPhone  String?
+  email            String?
+  normalizedEmail  String?
   preferredChannel String? // PreferredChannel
-  locale          String?
-  status          String   @default("NEW") // LeadStatus
-  pipelineId      String?
-  stageId         String?
-  ownerId         String?
-  priority        String   @default("MEDIUM") // Priority
-  leadScore       Int      @default(0)
-  scoreCategory   String   @default("LOW") // ScoreCategory
-  estimatedValue  Int?
-  currency        String?
-  summary         String?
-  requirements    String?
-  lostReason      String?
-  lostNotes       String?
-  lastContactAt   DateTime?
-  nextActionAt    DateTime?
-  nextActionLabel String?
-  archivedAt      DateTime?
+  locale           String?
+  status           String    @default("NEW") // LeadStatus
+  pipelineId       String?
+  stageId          String?
+  ownerId          String?
+  priority         String    @default("MEDIUM") // Priority
+  leadScore        Int       @default(0)
+  scoreCategory    String    @default("LOW") // ScoreCategory
+  estimatedValue   Int?
+  currency         String?
+  summary          String?
+  requirements     String?
+  lostReason       String?
+  lostNotes        String?
+  lastContactAt    DateTime?
+  nextActionAt     DateTime?
+  nextActionLabel  String?
+  archivedAt       DateTime?
   /**
    * STAGE INACTIVITY source of truth: when the lead entered its CURRENT stage.
    * Set on create (= createdAt), reset ONLY on a real stage transition
    * (same-stage updates never touch it). Never derived from updatedAt.
    * Nullable for legacy rows; the engine falls back to createdAt when absent.
    */
-  stageEnteredAt  DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  stageEnteredAt   DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  source          LeadSource?      @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  pipeline        Pipeline?        @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
-  stage           PipelineStage?   @relation(fields: [stageId], references: [id], onDelete: SetNull)
-  owner           User?            @relation("OwnedLeads", fields: [ownerId], references: [id], onDelete: SetNull)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       LeadSource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  pipeline     Pipeline?      @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
+  stage        PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  owner        User?          @relation("OwnedLeads", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  activities      Activity[]
-  tasks           Task[]
-  notes           Note[]
-  events          LeadEvent[]
-  scoreComponents LeadScoreComponent[]
-  leadTags        LeadTag[]
-  audits          BusinessAudit[]
-  customValues    CustomFieldValue[]
-  flags           LostLeadFlag[]
-  attributions    SourceAttribution[]
-  incomingMessages IncomingMessage[]
-  integrationSyncs IntegrationSync[]
+  activities        Activity[]
+  tasks             Task[]
+  notes             Note[]
+  events            LeadEvent[]
+  scoreComponents   LeadScoreComponent[]
+  leadTags          LeadTag[]
+  audits            BusinessAudit[]
+  customValues      CustomFieldValue[]
+  flags             LostLeadFlag[]
+  attributions      SourceAttribution[]
+  incomingMessages  IncomingMessage[]
+  integrationSyncs  IntegrationSync[]
   integrationEvents IntegrationEvent[]
-  notifications   Notification[]
+  notifications     Notification[]
 
   @@index([organizationId])
   @@index([organizationId, createdAt])
@@ -232,7 +232,7 @@ model Lead {
 }
 
 model LeadTag {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   leadId    String
   tagId     String
   createdAt DateTime @default(now())
@@ -247,9 +247,9 @@ model LeadTag {
 model LeadScoreComponent {
   id        String   @id @default(cuid())
   leadId    String
-  reason    String   // human readable reason
-  key       String   // machine key: audit_completed, budget_indicated, ...
-  delta     Int      // signed points
+  reason    String // human readable reason
+  key       String // machine key: audit_completed, budget_indicated, ...
+  delta     Int // signed points
   createdAt DateTime @default(now())
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -261,7 +261,7 @@ model LostLeadFlag {
   id             String    @id @default(cuid())
   organizationId String
   leadId         String
-  reason         String    // no_contact | overdue_followup | no_activity | proposal_no_followup | meeting_no_next | unassigned
+  reason         String // no_contact | overdue_followup | no_activity | proposal_no_followup | meeting_no_next | unassigned
   message        String
   severity       String    @default("warning") // info | warning | critical
   detectedAt     DateTime  @default(now())
@@ -279,17 +279,16 @@ model LostLeadFlag {
 // ACTIVITIES, TASKS, NOTES, EVENTS (timeline + audit)
 // ---------------------------------------------------------------------------
 
-
 model Activity {
-  id          String   @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
-  leadId      String
-  userId      String?
-  type        String   // ActivityType
-  title       String
-  description String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  leadId         String
+  userId         String?
+  type           String // ActivityType
+  title          String
+  description    String?
+  metadata       Json?
+  createdAt      DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -299,30 +298,39 @@ model Activity {
   @@index([organizationId])
 }
 
-
 model Task {
-  id             String    @id @default(cuid())
-  organizationId String
-  leadId         String?
-  assignedTo     String?
-  title          String
-  description    String?
-  dueAt          DateTime?
-  status         String    @default("TODO") // TaskStatus
-  priority       String    @default("MEDIUM") // Priority
-  /** Task discriminator: TASK (generic) | FOLLOW_UP (drives Follow-up SLA). */
-  type           String    @default("TASK") // TaskType
-  completedAt    DateTime?
-  /** Automation attribution (spec 61/64): set when the task was created by the Automation Engine. */
+  id                    String    @id @default(cuid())
+  organizationId        String
+  leadId                String?
+  assignedTo            String?
+  title                 String
+  description           String?
+  dueAt                 DateTime?
+  status                String    @default("TODO") // TaskStatus
+  priority              String    @default("MEDIUM") // Priority
+  /**
+   * Task discriminator: TASK (generic) | FOLLOW_UP (drives Follow-up SLA).
+   */
+  type                  String    @default("TASK") // TaskType
+  completedAt           DateTime?
+  /**
+   * Automation attribution (spec 61/64): set when the task was created by the Automation Engine.
+   */
   automationRuleId      String?
   automationExecutionId String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  /// ACTION-LEVEL IDEMPOTENCY (v0.16 spec 15-16): which action inside the
+  /// execution created this task — a retry after a crash finds and REUSES it
+  /// instead of creating a duplicate (unique below; NULLs are distinct in
+  /// SQLite so manual tasks never collide).
+  automationActionIndex Int?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  assignee     User?         @relation("AssignedTasks", fields: [assignedTo], references: [id], onDelete: SetNull)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  assignee     User?        @relation("AssignedTasks", fields: [assignedTo], references: [id], onDelete: SetNull)
 
+  @@unique([automationExecutionId, automationActionIndex])
   @@index([organizationId, status])
   @@index([organizationId, assignedTo])
   @@index([organizationId, dueAt])
@@ -331,28 +339,32 @@ model Task {
 }
 
 model Note {
-  id             String   @id @default(cuid())
-  organizationId String
-  leadId         String
-  userId         String?
-  content        String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  organizationId        String
+  leadId                String
+  userId                String?
+  content               String
+  /// ACTION-LEVEL IDEMPOTENCY (v0.16 spec 15): same pattern as Task — a
+  /// retry after a crash reuses the existing note instead of duplicating it.
+  automationExecutionId String?
+  automationActionIndex Int?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@unique([automationExecutionId, automationActionIndex])
   @@index([leadId, createdAt])
 }
-
 
 model LeadEvent {
   id             String   @id @default(cuid())
   organizationId String
   leadId         String
   userId         String?
-  type           String   // LeadEventType
+  type           String // LeadEventType
   payload        Json?
   createdAt      DateTime @default(now())
 
@@ -369,27 +381,27 @@ model LeadEvent {
 // ---------------------------------------------------------------------------
 
 model BusinessAudit {
-  id             String   @id @default(cuid())
-  organizationId String
-  leadId         String?
-  externalId     String?
-  companyName    String?
-  contactName    String?
-  contactEmail   String?
-  contactPhone   String?
-  locale         String?
-  acquisition    Int      @default(0)
-  sales          Int      @default(0)
-  operations     Int      @default(0)
-  data           Int      @default(0)
-  automation     Int      @default(0)
-  aiReadiness    Int      @default(0)
-  automationMap  Json?
+  id                  String   @id @default(cuid())
+  organizationId      String
+  leadId              String?
+  externalId          String?
+  companyName         String?
+  contactName         String?
+  contactEmail        String?
+  contactPhone        String?
+  locale              String?
+  acquisition         Int      @default(0)
+  sales               Int      @default(0)
+  operations          Int      @default(0)
+  data                Int      @default(0)
+  automation          Int      @default(0)
+  aiReadiness         Int      @default(0)
+  automationMap       Json?
   priorityAutomations Json?
-  recommendations Json?
-  reportSummary  String?
-  payload        Json?
-  createdAt      DateTime @default(now())
+  recommendations     Json?
+  reportSummary       String?
+  payload             Json?
+  createdAt           DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
@@ -401,7 +413,6 @@ model BusinessAudit {
 // ---------------------------------------------------------------------------
 // INTEGRATION LAYER (ERP/CRM + Events for Automation Engine)
 // ---------------------------------------------------------------------------
-
 
 model IntegrationSync {
   id             String    @id @default(cuid())
@@ -428,14 +439,14 @@ model IntegrationSync {
 }
 
 model IntegrationEvent {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   leadId         String?
-  event          String   // lead.created | lead.assigned | lead.stage_changed | ...
+  event          String // lead.created | lead.assigned | lead.stage_changed | ...
   payload        Json?
-  published      Boolean  @default(false)
+  published      Boolean   @default(false)
   publishedAt    DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
@@ -467,20 +478,20 @@ model WebhookLog {
 model IncomingMessage {
   id                String   @id @default(cuid())
   organizationId    String
-  source            String   // instagram | facebook | whatsapp | telegram | email | website | api
+  source            String // instagram | facebook | whatsapp | telegram | email | website | api
   externalMessageId String?
   leadId            String?
   conversationId    String?
   direction         String   @default("inbound") // inbound | outbound
   content           String
-  channel           String?  // dm | comment | form | email | ...
+  channel           String? // dm | comment | form | email | ...
   fromHandle        String?
   metadata          Json?
   timestamp         DateTime @default(now())
   createdAt         DateTime @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  lead         Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, source])
   @@index([leadId])
@@ -530,36 +541,59 @@ model LostReason {
 }
 
 model Notification {
-  id             String    @id @default(cuid())
-  organizationId String
-  userId         String?
-  /** Source DomainEvent (projector idempotency: unique(eventId, userId)). */
-  eventId        String?
-  leadId         String?
-  type           String
-  /** i18n template key (Section 47 — structured localization, not a frozen string). */
-  templateKey    String?
-  /** Structured payload rendered with the template at display time. */
-  payload        Json?
-  /** INFO | WARNING | CRITICAL */
-  severity       String    @default("INFO")
-  /** lead | task — entity the deepLink points at. */
-  entityType     String?
-  entityId       String?
-  /** Hash-route deep link, e.g. "lead/<id>?focus=stage". */
-  deepLink       String?
-  title          String
-  message        String
-  /** Legacy mirror of readAt (kept in sync for backward compatibility). */
-  read           Boolean   @default(false)
-  readAt         DateTime?
-  resolvedAt     DateTime?
-  createdAt      DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  organizationId      String
+  userId              String?
+  /**
+   * Source DomainEvent (projector idempotency: unique(eventId, userId)).
+   */
+  eventId             String?
+  leadId              String?
+  type                String
+  /**
+   * i18n template key (Section 47 — structured localization, not a frozen string).
+   */
+  templateKey         String?
+  /**
+   * Structured payload rendered with the template at display time.
+   */
+  payload             Json?
+  /**
+   * INFO | WARNING | CRITICAL
+   */
+  severity            String    @default("INFO")
+  /**
+   * lead | task — entity the deepLink points at.
+   */
+  entityType          String?
+  entityId            String?
+  /**
+   * Hash-route deep link, e.g. "lead/<id>?focus=stage".
+   */
+  deepLink            String?
+  title               String
+  message             String
+  /**
+   * Legacy mirror of readAt (kept in sync for backward compatibility).
+   */
+  read                Boolean   @default(false)
+  readAt              DateTime?
+  resolvedAt          DateTime?
+  /// ACTION-LEVEL IDEMPOTENCY (v0.16 spec 17): "<executionId>:<actionIndex>"
+  /// for notifications created by the CREATE_NOTIFICATION automation action —
+  /// a retry after a crash reuses the existing notification row.
+  automationActionKey String?   @unique
+  /// DELIVERY FAN-OUT marker (v0.16): stamped after external-channel delivery
+  /// rows were derived from this notification. NULL = not yet fanned out.
+  /// Existing rows are backfilled once so old notifications are never emailed.
+  fanoutAt            DateTime?
+  createdAt           DateTime  @default(now())
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  event        DomainEvent?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                   User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lead                   Lead?                  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  event                  DomainEvent?           @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  notificationDeliveries NotificationDelivery[]
 
   @@unique([eventId, userId])
   @@index([organizationId, userId, readAt])
@@ -576,29 +610,43 @@ model Notification {
 // ---------------------------------------------------------------------------
 
 model DomainEvent {
-  id               String    @id @default(cuid())
-  organizationId   String
-  /** DOMAIN_EVENT type (FIRST_RESPONSE_BREACHED, STAGE_BECAME_STALE, ...) */
-  type             String
-  /** lead | task */
-  entityType       String
-  entityId         String
-  actorUserId      String?
-  /** When the business fact became true (e.g. breachAt / staleAt / dueAt). */
-  occurredAt       DateTime
-  /** Minimal structured payload — notification, audit, future automation. */
-  payload          Json?
-  /** Deterministic idempotency key, e.g. "STAGE_BECAME_STALE:<leadId>:<stageEnteredAt>". */
-  deduplicationKey String
-  /** Set by the projector after notifications were created (crash recovery). */
-  processedAt      DateTime?
-  /** CAUSATION (v0.15 spec 29): the AutomationExecution whose action created this
-   *  event — makes automation chains auditable and enables loop protection.
-   *  NEVER used as a "processed" flag (processedAt belongs to the projector). */
+  id                    String    @id @default(cuid())
+  organizationId        String
+  /**
+   * DOMAIN_EVENT type (FIRST_RESPONSE_BREACHED, STAGE_BECAME_STALE, ...)
+   */
+  type                  String
+  /**
+   * lead | task
+   */
+  entityType            String
+  entityId              String
+  actorUserId           String?
+  /**
+   * When the business fact became true (e.g. breachAt / staleAt / dueAt).
+   */
+  occurredAt            DateTime
+  /**
+   * Minimal structured payload — notification, audit, future automation.
+   */
+  payload               Json?
+  /**
+   * Deterministic idempotency key, e.g. "STAGE_BECAME_STALE:<leadId>:<stageEnteredAt>".
+   */
+  deduplicationKey      String
+  /**
+   * Set by the projector after notifications were created (crash recovery).
+   */
+  processedAt           DateTime?
+  /**
+   * CAUSATION (v0.15 spec 29): the AutomationExecution whose action created this
+   * event — makes automation chains auditable and enables loop protection.
+   * NEVER used as a "processed" flag (processedAt belongs to the projector).
+   */
   automationExecutionId String?
-  createdAt        DateTime  @default(now())
+  createdAt             DateTime  @default(now())
 
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   notifications Notification[]
 
   @@unique([organizationId, deduplicationKey])
@@ -630,12 +678,12 @@ model CustomFieldValue {
   leadId      String
   fieldId     String
   valueText   String?
-  valueNumber  Float?
+  valueNumber Float?
   valueBool   Boolean?
   valueDate   DateTime?
 
-  lead  Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  field CustomField  @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  lead  Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  field CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
 
   @@unique([leadId, fieldId])
   @@index([fieldId])
@@ -644,7 +692,7 @@ model CustomFieldValue {
 model ScoringConfig {
   id             String   @id @default(cuid())
   organizationId String
-  key            String   // audit_completed | budget_indicated | urgency_high | ...
+  key            String // audit_completed | budget_indicated | urgency_high | ...
   label          String
   points         Int      @default(0)
   enabled        Boolean  @default(true)
@@ -699,24 +747,24 @@ model AssignmentRule {
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignee     User          @relation("AssignmentRuleAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+  assignee     User         @relation("AssignmentRuleAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, enabled])
 }
 
 model WebhookEndpoint {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   name           String
   url            String
   secret         String?
-  events         String   // comma-separated event names, or "*" for all
-  enabled        Boolean  @default(true)
+  events         String // comma-separated event names, or "*" for all
+  enabled        Boolean   @default(true)
   lastDeliveryAt DateTime?
-  lastStatus     String?  // OK | FAILED
-  failCount      Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  lastStatus     String? // OK | FAILED
+  failCount      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -738,24 +786,36 @@ model AutomationRule {
   name           String
   description    String?
   enabled        Boolean   @default(false)
-  /** DomainEventType trigger (existing event types only — no second trigger system). */
+  /**
+   * DomainEventType trigger (existing event types only — no second trigger system).
+   */
   triggerType    String
-  /** Structured condition DSL: { all: [item, ...] } | { any: [...] } | null = always. */
+  /**
+   * Structured condition DSL: { all: [item, ...] } | { any: [...] } | null = always.
+   */
   conditions     Json?
-  /** Ordered action list: [ { type, params } ] — validated against the action whitelist. */
+  /**
+   * Ordered action list: [ { type, params } ] — validated against the action whitelist.
+   */
   actions        Json
-  /** Bumped on significant edits (trigger/conditions/actions); executions store ruleVersion (spec 69-72). */
+  /**
+   * Bumped on significant edits (trigger/conditions/actions); executions store ruleVersion (spec 69-72).
+   */
   version        Int       @default(1)
-  /** BACKLOG GUARD (spec 92-93): only events with occurredAt >= enabledAt are processed. */
+  /**
+   * BACKLOG GUARD (spec 92-93): only events with occurredAt >= enabledAt are processed.
+   */
   enabledAt      DateTime?
-  /** Soft delete (spec 68): history stays readable, the rule stops matching. */
+  /**
+   * Soft delete (spec 68): history stays readable, the rule stops matching.
+   */
   deletedAt      DateTime?
   createdBy      String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  executions    AutomationExecution[]
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  executions   AutomationExecution[]
 
   @@index([organizationId, enabled])
   @@index([organizationId, triggerType])
@@ -766,26 +826,207 @@ model AutomationExecution {
   organizationId String
   ruleId         String
   eventId        String
-  /** PENDING | RUNNING | SUCCESS | SKIPPED | FAILED (spec 20). */
+  /**
+   * PENDING | RUNNING | SUCCESS | SKIPPED | FAILED | FAILED_RETRYABLE (v0.16 spec 13/36).
+   */
   status         String
-  /** Rule version at execution time (spec 69). */
+  /**
+   * Rule version at execution time (spec 69).
+   */
   ruleVersion    Int       @default(1)
   startedAt      DateTime?
   completedAt    DateTime?
-  /** Human-readable failure cause (spec 52 — no stack traces in the UI). */
+  /**
+   * EXECUTION LEASE (v0.16 spec 12): set when RUNNING; a crashed worker is
+   * detected by an expired lock and RECOVERED with a trace (never silently
+   * flipped back — the recovery writes errorCode WORKER_CRASHED).
+   */
+  lockedAt       DateTime?
+  lockExpiresAt  DateTime?
+  /**
+   * RETRY POLICY (v0.16 spec 20-21): bounded attempts (max 3) with backoff
+   * 1m/5m/15m; after maxAttempts → FAILED (permanent, manual action).
+   */
+  attemptCount   Int       @default(0)
+  nextAttemptAt  DateTime?
+  /**
+   * Human-readable failure cause (spec 52 — no stack traces in the UI).
+   */
   error          String?
-  /** SKIPPED cause: CONDITIONS_NOT_MATCHED | EVENT_NO_LONGER_ACTIONABLE | AUTOMATION_DEPTH_EXCEEDED. */
+  /**
+   * LOCALIZED ERROR MODEL (v0.16 spec 68-69): the UI renders from the code +
+   * params in the viewer's locale; `error` keeps an English snapshot only.
+   */
+  errorCode      String?
+  errorParams    Json?
+  /**
+   * SKIPPED cause: CONDITIONS_NOT_MATCHED | EVENT_NO_LONGER_ACTIONABLE | AUTOMATION_DEPTH_EXCEEDED.
+   */
   skipReason     String?
-  /** { trigger, conditions: [trace], actions: [ { type, status, entityId?, error? } ] } (spec 21/53). */
+  /**
+   * { trigger, conditions: [trace], actions: [ { type, status, entityId?, effect?, errorCode? } ] } (spec 21/53).
+   */
   result         Json?
   createdAt      DateTime  @default(now())
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   rule         AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
 
-  /** ONE EVENT + ONE RULE = max ONE automatic execution (spec 25). */
+  /**
+   * ONE EVENT + ONE RULE = max ONE automatic execution (spec 25).
+   */
   @@unique([ruleId, eventId])
   @@index([organizationId, createdAt])
   @@index([ruleId, createdAt])
   @@index([eventId])
+  /**
+   * Retry sweep (v0.16): pick up FAILED_RETRYABLE rows whose backoff elapsed.
+   */
+  @@index([organizationId, status, nextAttemptAt])
+  /**
+   * Stale-RUNNING recovery sweep (v0.16 spec 11-13).
+   */
+  @@index([organizationId, status, lockExpiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// WORKER INFRASTRUCTURE (v0.16) — production-reliable event processing.
+// WorkerRun = durable audit of every orchestrator/delivery run; WorkerLease =
+// DB-backed distributed lock so two schedulers can never process the same
+// batch concurrently (spec 8-10). Heartbeats extend the lease on long runs;
+// an expired lease is safe to take over — every step is idempotent anyway.
+// ---------------------------------------------------------------------------
+
+model WorkerRun {
+  id          String    @id @default(cuid())
+  /**
+   * LEADOS_WORKERS | NOTIFICATION_DELIVERY (spec 7).
+   */
+  type        String
+  /**
+   * RUNNING | SUCCESS | PARTIAL | FAILED (spec 7). PARTIAL = time budget
+   * exhausted or a step failed while others succeeded — the next scheduled
+   * run continues from DB state (spec 27, no lost events).
+   */
+  status      String
+  /**
+   * scheduler | manual-api | client-tick | delivery-worker.
+   */
+  trigger     String?
+  startedAt   DateTime  @default(now())
+  /**
+   * Extended between batches on long runs (spec 10).
+   */
+  heartbeatAt DateTime?
+  finishedAt  DateTime?
+  /**
+   * { per-org + aggregate stats: eventsScanned, projected, executions,
+   * actions, deliveries, retries, remaining, durationMs, stepErrors } (spec 29).
+   */
+  stats       Json?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  @@index([type, startedAt])
+  @@index([status])
+}
+
+model WorkerLease {
+  id          String   @id @default(cuid())
+  /**
+   * One active lease per worker type (unique below).
+   */
+  type        String   @unique
+  /**
+   * The WorkerRun holding the lease.
+   */
+  holderRunId String
+  acquiredAt  DateTime @default(now())
+  /**
+   * Lease expiry — heartbeat extends it; after expiry another worker may
+   * take over (spec 9: never a permanent lock).
+   */
+  expiresAt   DateTime
+
+  @@index([type, expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// NOTIFICATION DELIVERY (v0.16) — durable external-channel fan-out.
+//   Notification → Delivery rows (EMAIL / TELEGRAM per user; WEBHOOK per
+//   org endpoint) → delivery worker with bounded retries.
+// IN_APP intentionally has NO delivery row (spec 37): the existing
+// Notification Center remains the in-app source of truth.
+// ---------------------------------------------------------------------------
+
+model NotificationDelivery {
+  id                    String    @id @default(cuid())
+  organizationId        String
+  /**
+   * Fan-out source notification (EMAIL/TELEGRAM rows).
+   */
+  notificationId        String?
+  /**
+   * Source event (WEBHOOK rows + traceability). NULL for automation-created rows.
+   */
+  eventId               String?
+  /**
+   * EMAIL | TELEGRAM | WEBHOOK (spec 35). IN_APP is never stored.
+   */
+  channel               String
+  /**
+   * userId (EMAIL/TELEGRAM) or endpointId (WEBHOOK).
+   */
+  recipient             String
+  /**
+   * PENDING | SENDING | SENT | FAILED_RETRYABLE | FAILED | SKIPPED (spec 36).
+   */
+  status                String    @default("PENDING")
+  attemptCount          Int       @default(0)
+  nextAttemptAt         DateTime?
+  sentAt                DateTime?
+  failedAt              DateTime?
+  /**
+   * Provider id (Resend message id, Telegram message_id, ...) when returned (spec 61).
+   */
+  providerMessageId     String?
+  /**
+   * LOCALIZED ERROR MODEL (spec 68-69): UI renders t("errors.<code>", params).
+   */
+  errorCode             String?
+  errorMessage          String?
+  /**
+   * Rendered content snapshot (subject/text/html or payload) — stable at fan-out time.
+   */
+  payload               Json?
+  /**
+   * AUTOMATION ACTION IDEMPOTENCY (spec 67): one delivery per execution+action.
+   */
+  automationExecutionId String?
+  automationActionIndex Int?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  notification Notification? @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  /// NOTE: `recipient` is POLYMORPHIC (userId for EMAIL/TELEGRAM, endpointId
+  /// for WEBHOOK) — intentionally NOT a foreign key (spec 102-103: org-safety
+  /// is enforced at fan-out/send time by re-validating the recipient's org).
+
+  /**
+   * Fan-out idempotency (spec 60): one delivery per notification×channel×recipient.
+   */
+  @@unique([notificationId, channel, recipient])
+  /**
+   * Webhook fan-out idempotency: one per event×channel×endpoint. NULL eventIds
+   * (automation rows) are distinct in SQLite and never collide.
+   */
+  @@unique([eventId, channel, recipient])
+  /**
+   * Automation action idempotency (spec 67).
+   */
+  @@unique([automationExecutionId, automationActionIndex])
+  @@index([organizationId, status, nextAttemptAt])
+  @@index([notificationId])
+  @@index([organizationId, channel, createdAt])
 }

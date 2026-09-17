@@ -94,11 +94,20 @@ export interface NotificationCardProps {
   t: TFunc;
   onOpen?: (n: NotificationRow) => void;
   compact?: boolean;
+  /** v0.16 (spec 62): external delivery statuses for this notification. */
+  deliveries?: { channel: string; status: string }[] | null;
+}
+
+function deliveryChipClass(status: string): string {
+  if (status === "SENT") return "border-emerald-300 text-emerald-700 dark:text-emerald-300";
+  if (status === "FAILED" || status === "FAILED_RETRYABLE") return "border-red-300 text-red-700 dark:text-red-300";
+  if (status === "PENDING" || status === "SENDING") return "border-sky-300 text-sky-700 dark:text-sky-300";
+  return "border-border text-muted-foreground";
 }
 
 /** One notification row: severity chip, localized title/message, relative
  *  time, unread dot, resolved badge, deep link (Section 36). */
-export function NotificationCard({ n, t, onOpen, compact = false }: NotificationCardProps) {
+export function NotificationCard({ n, t, onOpen, compact = false, deliveries }: NotificationCardProps) {
   const meta = severityMeta(n.severity);
   const { title, message } = renderNotificationText(n, t);
   const Icon = n.resolvedAt ? CheckCircle2 : meta.icon;
@@ -148,6 +157,19 @@ export function NotificationCard({ n, t, onOpen, compact = false }: Notification
               {n.resolvedAt ? <CheckCircle2 className="h-2.5 w-2.5" /> : <BellRing className="h-2.5 w-2.5" />}
               {n.resolvedAt ? t(asKey("notif.resolved_badge")) : t(asKey(meta.labelKey))}
             </span>
+            {/* v0.16 (spec 62): "Notification happened · Email sent · Telegram failed" — no stack traces. */}
+            {(deliveries ?? []).map((d) => (
+              <span
+                key={`${d.channel}-${d.status}`}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded border px-1 py-px text-[9px] font-semibold uppercase tracking-wide",
+                  deliveryChipClass(d.status)
+                )}
+                title={t(asKey(`delivery.status.${d.status}` as never))}
+              >
+                {t(asKey(`delivery.channel.${d.channel}` as never))} · {t(asKey(`delivery.status.${d.status}` as never))}
+              </span>
+            ))}
           </div>
         </div>
       </div>

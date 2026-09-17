@@ -1011,3 +1011,63 @@ Work Log:
 Stage Summary:
 - VERIFIED end-to-end: SLA → DomainEvent → AutomationExecution → Task with zero duplicates; one event + one rule = max one automatic execution — proven by unique constraint, engine tests, ×5 stress and the 500-lead scale test.
 - Remaining (documented): no production cron (client tick 5min + /workers/run with secret header ready); automation action error messages are English human strings; executions stuck in RUNNING from a crash need manual DB fix (documented); processor processes max 1000 candidate events per run.
+
+---
+Task ID: v0.16-1 (INSPECT DEPLOYMENT)
+Agent: main
+Task: Inspect deployment environment, worker infrastructure, and existing engines before production-reliability hardening (v0.16 spec).
+
+Work Log:
+- Deployment: self-hosted standalone Next.js 16 (output: "standalone"), production start = `bun .next/standalone/server.js` — LONG-LIVED process (not serverless). Reverse proxy: Caddy :81 → localhost:3000. Public preview URL exists.
+- Cron: NO Vercel/Supabase/external scheduler configured. PROVIDER-NATIVE OPTION = Next.js `instrumentation.ts` register() hook → in-process setInterval scheduler that starts at server boot, independent of any browser. This is the real production scheduler for this deployment model.
+- DB: SQLite file (db/custom.db), single-writer → DB-backed WorkerLease is correct; no connection-limit issue.
+- Env: only DATABASE_URL set. WORKERS_SECRET supported by /workers/run but not set; secret compare uses plain === (not constant-time); secret path runs FIRST org only; NO lease, NO WorkerRun durability, NO rate limit.
+- Client tick: app-shell useWorkersTick() runs unconditionally every 5 min (currently the ONLY trigger). Gate needed: NEXT_PUBLIC_DEMO_WORKER_TICK (spec 32).
+- Processor limitation confirmed: `take: limit(1000)` on occurredAt ASC — events beyond the first 1000 are NEVER re-queried at a later cursor → permanently unprocessed ("process first 1000 and stop forever" bug, spec 24).
+- AutomationExecution has NO lease columns → RUNNING rows after a crash hang forever (spec 11 confirmed).
+- Action errors: English human strings, no errorCode/errorParams (spec 68 confirmed).
+- Existing assets to REUSE (do not rewrite): event-reconciler (sweep + projection + crash recovery), domain-event-service (projector, prefs cache, getOrgFallbackRecipient), automation-engine (processEventRule, actionability, loop guard, retryAutomationExecution, dryRun), task/note/lead services, WebhookEndpoint model + CRUD (legacy IntegrationEvent delivery stays as-is — separate subsystem), Setting-based per-user prefs (notification_preferences:<userId>).
+- Idempotency gap: Task carries automationRuleId/automationExecutionId; action-level idempotency needs automationActionIndex on Task/Note + uniques; Notification needs automationActionKey unique + fanoutAt.
+- User model: has email, NO telegramChatId → add telegramChatId/telegramConnectedAt.
+- UI: settings-view tabs (add "workers" + "integrations"); notifications settings tab per-event in-app toggles (extend with email/telegram columns); rule-builder action param UI extendable for SEND_EMAIL/SEND_TELEGRAM/SEND_WEBHOOK.
+- i18n: flat dict hy/ru/en in src/lib/leados/i18n.ts; DictKey typing — new keys ×3 locales.
+- Tests: bun test, 229/229 passing (automation-engine.test.ts has DB integration patterns with throwaway org).
+
+Stage Summary:
+- v0.16 implementation plan (order per directive):
+  1) Prisma: WorkerRun, WorkerLease, NotificationDelivery (+uniques), AutomationExecution lease/retry/errorCode columns, Task.automationActionIndex(+unique), Note automation cols(+unique), Notification.automationActionKey(+unique)+fanoutAt, User.telegramChatId/ConnectedAt.
+  2) Worker core: lease acquire/extend/release, WorkerRun lifecycle (RUNNING/SUCCESS/PARTIAL/FAILED), heartbeat, instrumentation.ts scheduler (env-gated, global-guarded), client tick gate NEXT_PUBLIC_DEMO_WORKER_TICK.
+  3) Error model: automation-errors.ts (errorCode taxonomy, classifyAutomationError, backoff 1m/5m/15m, maxAttempts=3).
+  4) Engine hardening: execution lease (lockedAt/lockExpiresAt), FAILED_RETRYABLE, recoverStaleAutomationExecutions (incl. legacy null-lock rows → WORKER_CRASHED with trace), action effect idempotency (CREATED/REUSED/NO_CHANGE), errorCode+errorParams on actions, new actions SEND_EMAIL/SEND_TELEGRAM/SEND_WEBHOOK (create NotificationDelivery rows; org endpoints only, no arbitrary recipients/URLs).
+  5) Processor: cursor batch loop (250/batch, time budget, lease heartbeat), automatic retries of FAILED_RETRYABLE, stats + remaining candidates.
+  6) Delivery layer: prefs v2 (event × channel matrix, external channels default OFF), fan-out (unique(notificationId,channel,recipient); webhook per event+endpoint), providers: Resend-style HTTP email, Telegram Bot API, HMAC-signed webhook with SSRF validation + redirect:manual + timeout; demo providers behind LEADOS_DEMO; delivery worker (own lease, batching, backoff, maxAttempts).
+  7) API: workers/run hardened (timingSafeEqual, ALL orgs, 409 LEASE_BUSY, stats-only), workers/health, integrations status/test/telegram connect+webhook, deliveries list/retry.
+  8) UI: Settings→Workers (Worker Health + Failed Jobs + retry), Settings→Integrations (Email/Telegram/Webhook cards + test buttons), notifications tab channel toggles, rule-builder 3 new actions, localized errorCodes; i18n ×3.
+  9) Seed/demo: backfill fanoutAt (no backlog send), demo channel prefs, demo deliveries via demo providers.
+  10) Tests: critical A–J + unit + regression 229.
+  11) QA: browser/mobile/dark/i18n/clean console + PROOF: scheduler runs with NO browser; load test 500 leads/2500 events.
+
+---
+Task ID: v0.16-2 (IMPLEMENT: worker hardening + delivery layer)
+Agent: main
+Task: Implement production-reliable worker infrastructure + external delivery channels (full v0.16 spec).
+
+Work Log:
+- PRISMA (additive): WorkerRun (RUNNING/SUCCESS/PARTIAL/FAILED + stats + heartbeat), WorkerLease (unique type — one active lease per worker), NotificationDelivery (PENDING/SENDING/SENT/FAILED_RETRYABLE/FAILED/SKIPPED + uniques: (notificationId,channel,recipient), (eventId,channel,recipient), (automationExecutionId,automationActionIndex)), AutomationExecution + lockedAt/lockExpiresAt/attemptCount/nextAttemptAt/errorCode/errorParams, Task/Note + automationActionIndex (+unique(execId,actionIndex)), Notification + automationActionKey(unique)+fanoutAt, User + telegramChatId/telegramConnectedAt.
+- WORKER CORE: worker-lease.ts (acquire/takeover-expired/extend/release, LEASE_BUSY), worker-run-service.ts (durable run lifecycle + 30d trim), scheduler.ts + src/instrumentation.ts (IN-PROCESS production scheduler — Next.js register() hook, env-gated, HMR-safe), client tick now NEXT_PUBLIC_DEMO_WORKER_TICK-gated (demo fallback only).
+- ERROR MODEL: automation-errors.ts — AUTO_ERROR taxonomy (NO_LEAD_OWNER…MAX_ATTEMPTS_EXCEEDED), classifyAutomationError (retryable: timeout/429/5xx/WORKER_CRASHED; non-retryable: business facts), backoff 1m/5m/15m, maxAttempts 3.
+- ENGINE HARDENING: execution lease stamped at RUNNING (lockExpiresAt +120s), FAILED_RETRYABLE + attemptCount + nextAttemptAt; recoverStaleAutomationExecutions (expired lease OR legacy null-lock rows → FAILED_RETRYABLE with WORKER_CRASHED trace — never a silent flip); ACTION-LEVEL IDEMPOTENCY: CREATE_TASK/ADD_NOTE/CREATE_NOTIFICATION/SEND_* look up (executionId, actionIndex) effects → effect=REUSED; SET_LEAD_PRIORITY/ASSIGN_LEAD → NO_CHANGE when already applied; action outcomes carry errorCode; SKIPPED actions (channel not connected) do NOT stop the chain; new actions SEND_EMAIL/SEND_TELEGRAM (recipients LEAD_OWNER/TASK_ASSIGNEE/EVENT_RECIPIENT/SPECIFIC_USER only) + SEND_WEBHOOK (org endpoint only) create ONE durable delivery row each (unique exec+actionIndex, retry-safe).
+- PROCESSOR: cursor batch loop 250/batch — fixed the v0.15 "first 1000 forever" bug; time budget (WORKER_MAX_RUN_MS) → PARTIAL + remaining stats; snapshot bound occurredAt<=runStart keeps automation→automation chains on the NEXT run; retries due FAILED_RETRYABLE; recovery runs first.
+- DELIVERY LAYER: channels.ts (channel/status enums, ChannelPreferences event×channel matrix — defaults OFF, emailHtml, appLink, buildWebhookPayload v1), ssrf.ts (localhost/private IPv4+IPv6/link-local/CGNAT/metadata/userinfo/non-http + DNS-resolved-IP checks, injectable resolve), providers.ts (EmailProvider: Resend HTTP real + demo; TelegramProvider: Bot API real + demo; WebhookProvider: HMAC-SHA256 signed, X-HayDev-Event-Id, redirect:manual, 8s timeout; demo mode LEADOS_DEMO=true OVERRIDES real creds; channel UNAVAILABLE when creds absent), fanout.ts (EMAIL/TELEGRAM per user prefs, WEBHOOK per org endpoint, content rendered at fan-out in org locale, fanoutAt scan marker, row-by-row idempotent inserts), delivery-worker.ts (own lease, stale SENDING recovery → WORKER_CRASHED, batching + budget, backoff, manualRetryDelivery).
+- NOTIFICATION PREFERENCES v2: same Setting row extended with .channels matrix; notification-service gets/sets types+channels atomically; PUT /notifications/preferences accepts both shapes (backward compatible).
+- API: workers/run hardened (timingSafeEqual secret, secret→ALL orgs, 409 LEASE_BUSY, stats-only response); workers/health (scheduler state, runs, leases, org queue depth — OWNER/ADMIN); integrations (status, email/test, telegram connect/connect-demo/disconnect/status/test/webhook secret-token-verified, webhooks CRUD with SSRF validation + auto-generated signing secret + HAYDEV_WEBHOOK_TEST); deliveries list (manager-safe: no errorCode/attempts; technical for OWNER/ADMIN) + [id]/retry; notifications/[id]/deliveries.
+- UI: Settings→Integrations (3 channel cards, mode badges DEMO/REAL/UNAVAILABLE, test buttons, webhook CRUD + SSRF note, demo banner), Settings→Workers (scheduler status + Run now, queue depth, last runs with stats, Failed Jobs: failed automations + failed/retryable/skipped deliveries with manual Retry), notifications settings: 3 channel columns per event type (telegram disabled until connected), notification cards: delivery status chips, rule-builder: SEND_EMAIL/SEND_TELEGRAM/SEND_WEBHOOK params (subject/body/recipient/endpoint select), execution-detail: effect badges (CREATED/REUSED/NO_CHANGE) + localized errorCode; i18n +~110 keys ×3 (hy/ru/en).
+- SEED: fanoutAt backfill (history never emailed), demo webhook endpoint, demo user telegram connected + email/telegram prefs on 2 critical types, full worker chain at seed end → honest SENT demo deliveries.
+- BUGS FOUND & FIXED during development: (1) parseChannelPreferences/validateChannelPreferences shallow-copied DEFAULT_CHANNEL_PREFERENCES → MUTATED the shared nested toggles — one user's prefs leaked ON state into later parses (caught by TEST J, fixed with fresh per-type objects); (2) processor remaining stat was 0 when budget expired before the first batch.
+
+Stage Summary:
+- Tests: 283/283 (230 regression + 53 new: 19 worker-infra incl. CRITICAL A/B/D, 32 delivery-layer incl. CRITICAL E/F/G/H/I/J, 2 batching CRITICAL C). TS PASS, ESLint 0, build PASS.
+- Load test (spec 85): 500 leads/2500 events/3 rules → 10 batches, 2500 executions 0 duplicates, fan-out 1500 rows (500 email+500 telegram+500 webhook), worker 1500 SENT 0 failed, queues drained. VERDICT PASS.
+- PROOF spec 74: scheduler ran trigger=scheduler runs (60s interval) with NO browser — WorkerRun rows verified; UI shows them.
+- Live HTTP: parallel workers/run → 200 SUCCESS + 409 LEASE_BUSY.
+- Browser QA: 17 screenshots (worker health, integrations incl. SSRF-block toast, channel prefs + save verified in DB, notifications delivery chips, failed jobs + manual retry → PENDING → scheduler SENT, rule builder external actions + endpoint picker, execution detail localized error, mobile 390×844 no overflow, dark mode, fresh-session console 0 errors).

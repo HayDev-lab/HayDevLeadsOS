@@ -306,15 +306,22 @@ export function useMarkAllNotificationsRead() {
 export function useNotificationPreferences() {
   return useQuery({
     queryKey: ["notification-preferences"],
-    queryFn: () => api.get<{ preferences: Record<string, boolean> }>("/notifications/preferences"),
+    queryFn: () =>
+      api.get<{
+        preferences: Record<string, boolean>;
+        channels: Record<string, { email: boolean; telegram: boolean }>;
+      }>("/notifications/preferences"),
   });
 }
 
 export function useSaveNotificationPreferences() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (preferences: Record<string, boolean>) =>
-      api.put<{ ok: boolean; preferences: Record<string, boolean> }>("/notifications/preferences", preferences),
+    mutationFn: (body: { types: Record<string, boolean>; channels: Record<string, { email: boolean; telegram: boolean }> }) =>
+      api.put<{ ok: boolean; preferences: Record<string, boolean>; channels: Record<string, { email: boolean; telegram: boolean }> }>(
+        "/notifications/preferences",
+        body
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["notification-preferences"] });
     },
@@ -379,14 +386,21 @@ export interface AutomationExecutionRow {
   startedAt: string | null;
   completedAt: string | null;
   error: string | null;
+  /** v0.16 (spec 68): localized error code — UI renders t("errors.<code>"). */
+  errorCode: string | null;
+  errorParams: Record<string, string | number> | null;
+  /** v0.16 (spec 20): bounded retries. */
+  attemptCount: number;
+  nextAttemptAt: string | null;
   skipReason: string | null;
   result: {
     trigger?: { eventType: string; occurredAt: string };
     conditions?: { field: string; operator: string; expected: unknown; actual: unknown; passed: boolean }[];
     conditionMode?: string;
-    actions?: { type: string; status: string; entityId?: string | null; error?: string | null }[];
+    actions?: { type: string; status: string; effect?: string | null; entityId?: string | null; error?: string | null; errorCode?: string | null }[];
     durationMs?: number;
     notActionableBecause?: string;
+    recoveredAfterCrash?: boolean;
     chainDepth?: number;
   } | null;
   createdAt: string;
@@ -985,5 +999,210 @@ export function useSeed() {
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["kanban"] });
     },
+  });
+}
+
+// ===========================================================================
+// v0.16 — WORKER HEALTH / INTEGRATIONS / DELIVERIES
+// ===========================================================================
+
+export interface WorkerRunRow {
+  id: string;
+  type: string;
+  status: string;
+  trigger: string | null;
+  startedAt: string;
+  heartbeatAt: string | null;
+  finishedAt: string | null;
+  stats: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export function useWorkersHealth() {
+  return useQuery({
+    queryKey: ["workers-health"],
+    queryFn: () =>
+      api.get<{
+        scheduler: { enabled: boolean; intervalMs: number; demoTick: boolean };
+        runs: WorkerRunRow[];
+        staleRunningRuns: number;
+        leases: {
+          workers: { active: boolean; holderRunId?: string; expiresAt?: string };
+          delivery: { active: boolean; holderRunId?: string; expiresAt?: string };
+        };
+        queue: {
+          pendingDeliveries: number;
+          retryDeliveries: number;
+          failedDeliveries: number;
+          failedAutomations: number;
+          retryAutomations: number;
+          pendingFanout: number;
+        };
+      }>("/workers/health"),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useTestEmail() {
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ ok: boolean; mode: string; to?: string; messageId?: string | null; error?: string | null; errorCode?: string | null }>(
+        "/integrations/email/test"
+      ),
+  });
+}
+
+export function useTelegramStatus() {
+  return useQuery({
+    queryKey: ["telegram-status"],
+    queryFn: () => api.get<{ mode: string; connected: boolean; connectedAt: string | null; chatIdMasked: string | null }>("/integrations/telegram/status"),
+  });
+}
+
+export function useTelegramConnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean; code: string; expiresAt: string; instructions: string; botUsername: string | null }>("/integrations/telegram/connect"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["telegram-status"] }),
+  });
+}
+
+export function useTelegramConnectDemo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (chatId: string) => api.post<{ ok: boolean }>("/integrations/telegram/connect-demo", { chatId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["telegram-status"] }),
+  });
+}
+
+export function useTelegramDisconnect() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>("/integrations/telegram/disconnect"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["telegram-status"] }),
+  });
+}
+
+export function useTelegramTest() {
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ ok: boolean; mode: string; messageId?: string | null; error?: string | null; errorCode?: string | null }>(
+        "/integrations/telegram/test"
+      ),
+  });
+}
+
+export function useIntegrationsStatus() {
+  return useQuery({
+    queryKey: ["integrations-status"],
+    queryFn: () =>
+      api.get<{
+        channels: {
+          email: { mode: string; from: string | null };
+          telegram: { mode: string; botConfigured: boolean };
+          webhook: { mode: string };
+        };
+        telegram: { connected: boolean; connectedAt: string | null };
+        user: { email: string | null; id: string };
+        webhookEndpoints: { id: string; name: string; enabled: boolean; events: string; lastDeliveryAt: string | null; lastStatus: string | null }[];
+        appUrl: string | null;
+      }>("/integrations"),
+  });
+}
+
+export function useCreateIntegrationWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; url: string; events?: string; enabled?: boolean }) =>
+      api.post<{ endpoint: { id: string }; secretNote?: string }>("/integrations/webhooks", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["integrations-status"] });
+      qc.invalidateQueries({ queryKey: ["webhook-endpoints"] });
+    },
+  });
+}
+
+export function useUpdateIntegrationWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string; enabled?: boolean; name?: string; url?: string; events?: string }) =>
+      api.patch<{ endpoint: unknown }>(`/integrations/webhooks/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["integrations-status"] });
+      qc.invalidateQueries({ queryKey: ["webhook-endpoints"] });
+    },
+  });
+}
+
+export function useDeleteIntegrationWebhook() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/integrations/webhooks/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["integrations-status"] });
+      qc.invalidateQueries({ queryKey: ["webhook-endpoints"] });
+    },
+  });
+}
+
+export function useTestIntegrationWebhook() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ ok: boolean; mode: string; status: number | null; error: string | null; errorCode: string | null; signaturePreview: string | null }>(
+        `/integrations/webhooks/${id}/test`
+      ),
+  });
+}
+
+export interface DeliveryRow {
+  id: string;
+  channel: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  sentAt: string | null;
+  failedAt: string | null;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  providerMessageId: string | null;
+  notificationId: string | null;
+  eventId: string | null;
+  recipient: string;
+  automationExecutionId: string | null;
+}
+
+export function useDeliveries(status?: string, channel?: string) {
+  const p = new URLSearchParams();
+  if (status) p.set("status", status);
+  if (channel) p.set("channel", channel);
+  const qs = p.toString();
+  return useQuery({
+    queryKey: ["deliveries", status ?? "all", channel ?? "all"],
+    queryFn: () =>
+      api.get<{ rows: DeliveryRow[]; counts: { channel: string; status: string; count: number }[]; technical: boolean }>(
+        `/deliveries${qs ? `?${qs}` : ""}`
+      ),
+    refetchInterval: 20_000,
+  });
+}
+
+export function useRetryDelivery() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ ok: boolean }>(`/deliveries/${id}/retry`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["deliveries"] }),
+  });
+}
+
+export function useNotificationDeliveries(notificationId: string | null) {
+  return useQuery({
+    queryKey: ["notification-deliveries", notificationId],
+    queryFn: () =>
+      api.get<{ rows: { id: string; channel: string; status: string; sentAt: string | null; failedAt: string | null; errorCode: string | null; errorMessage: string | null }[]; technical: boolean }>(
+        `/notifications/${notificationId}/deliveries`
+      ),
+    enabled: Boolean(notificationId),
   });
 }

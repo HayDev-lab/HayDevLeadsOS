@@ -29,6 +29,9 @@ export interface CreateTaskInput {
   type?: string | null;
   /** Who performed the action (null = automation/system). */
   actorUserId?: string | null;
+  /** ACTION-LEVEL IDEMPOTENCY (v0.16 spec 15-16): set for automation-created
+   *  tasks so a retry after a crash reuses the row (Task unique). */
+  actionIndex?: number | null;
 }
 
 export async function createTask(orgId: string, input: CreateTaskInput) {
@@ -52,6 +55,7 @@ export async function createTask(orgId: string, input: CreateTaskInput) {
       type: input.type ?? TASK_TYPE.TASK,
       automationRuleId: autoCtx?.ruleId ?? null,
       automationExecutionId: autoCtx?.executionId ?? null,
+      automationActionIndex: input.actionIndex ?? null,
     },
   });
 

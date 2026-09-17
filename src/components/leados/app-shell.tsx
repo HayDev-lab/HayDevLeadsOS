@@ -37,23 +37,24 @@ const NAV = [
 ];
 
 /**
- * WORKER ORCHESTRATOR background trigger (spec 81–84): no production
- * scheduler exists in this deployment, so the app runs the full worker
- * chain (reconcile → project → automations) on mount and then every 5
- * minutes while open (paused when the tab is hidden). Every step is
- * idempotent — concurrent triggers can never duplicate events or actions.
+ * CLIENT TICK (v0.16 spec 32) — DEV/DEMO FALLBACK ONLY. Production runs
+ * the in-process scheduler started at server boot (src/instrumentation.ts),
+ * so worker correctness never depends on an open browser. The tick is OFF
+ * unless NEXT_PUBLIC_DEMO_WORKER_TICK=true (set in the demo environment;
+ * a real deployment simply leaves it unset).
  */
 function useWorkersTick() {
   const runWorkers = useRunWorkers();
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
+    if (process.env.NEXT_PUBLIC_DEMO_WORKER_TICK !== "true") return;
     started.current = true;
     const run = () => {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       runWorkers.mutate(undefined, {
         onError: () => {
-          /* silent — the bell and automations stay usable; next tick retries (spec 82) */
+          /* silent — the scheduler owns production; this is only the demo fallback (spec 82) */
         },
       });
     };

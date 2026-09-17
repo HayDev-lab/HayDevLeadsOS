@@ -13,6 +13,7 @@ import { useHashRoute } from "@/lib/leados/hash-route";
 import { cn } from "@/lib/utils";
 import {
   useNotificationsList,
+  useDeliveries,
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
   useReconcileEvents,
@@ -27,6 +28,15 @@ export function NotificationsView() {
   const [filter, setFilter] = useState<Filter>("all");
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, refetch, isFetching } = useNotificationsList(filter, page, 20);
+  // v0.16 (spec 62): map deliveries to their notifications for channel chips.
+  const deliveries = useDeliveries();
+  const deliveriesByNotification = new Map<string, { channel: string; status: string }[]>();
+  for (const d of deliveries.data?.rows ?? []) {
+    if (!d.notificationId) continue;
+    const list = deliveriesByNotification.get(d.notificationId) ?? [];
+    list.push({ channel: d.channel, status: d.status });
+    deliveriesByNotification.set(d.notificationId, list);
+  }
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
   const reconcile = useReconcileEvents();
@@ -139,7 +149,15 @@ export function NotificationsView() {
         )}
         {!isLoading &&
           !isError &&
-          rows.map((n) => <NotificationCard key={n.id} n={n} t={t} onOpen={handleOpen} />)}
+          rows.map((n) => (
+            <NotificationCard
+              key={n.id}
+              n={n}
+              t={t}
+              onOpen={handleOpen}
+              deliveries={deliveriesByNotification.get(n.id) ?? []}
+            />
+          ))}
       </div>
 
       {/* pagination */}
