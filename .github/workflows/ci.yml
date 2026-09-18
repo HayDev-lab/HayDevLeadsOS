@@ -1,0 +1,72 @@
+# HAYDEV LEADOS — CI (v0.19.2 hardening §30).
+#
+# Every gate, NO continue-on-error:
+#   install (frozen lockfile) → prisma generate → prisma validate →
+#   isolated migrations (fresh SQLite, never a committed DB) → tests →
+#   typecheck → lint → production build.
+#
+# Isolation: the test DB is a per-run temp file — the committed runtime DB
+# does not exist in a clean clone anyway (untracked since v0.19.2).
+
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: file:/tmp/leados-ci-${{ github.run_id }}.db
+      LEADOS_DEMO: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+
+      - name: Prisma generate
+        run: bunx prisma generate
+
+      - name: Prisma validate
+        run: bunx prisma validate
+
+      - name: Apply migrations to the isolated test DB
+        run: bunx prisma migrate deploy
+
+      - name: Tests
+        run: bun test
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Production build
+        run: bun run build
+
+      - name: Deployment config guards (Caddy / preview-DB / boot policy)
+        run: bun test tests/deployment-config.test.ts
+
+      - name: Clean tree check (no runtime artifacts)
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)" || {
+            echo "::error::Build produced tracked-file changes (runtime artifacts must never be committed)"
+            exit 1
+          }

@@ -62,5 +62,20 @@ test
 prompt
 
 server.log
+
+# ---------------------------------------------------------------------------
+# v0.19.2 §36–38 — RUNTIME / INTERNAL ARTIFACTS ARE NEVER VERSIONED.
+# QA screenshots → CI artifacts (retention), not the repo. The internal
+# worklog lives outside the public source (CHANGELOG.md is the public log).
+# Local files are kept (git rm --cached only).
+# ---------------------------------------------------------------------------
+/download/
+/upload/
+/tool-results/
+vlmqa_*.mjs
+vlmqa_prompt.txt
+/worklog.md
+tests/*.sh
+
 # Skills directory
 /skills/
