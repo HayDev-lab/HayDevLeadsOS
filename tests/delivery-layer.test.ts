@@ -70,7 +70,7 @@ function fakeEmailProvider(behavior: () => { ok: boolean; status?: number; error
 }
 
 async function mkUser(email?: string) {
-  return db.user.create({
+  const u = await db.user.create({
     data: {
       organizationId: orgId,
       name: `U${Math.random().toString(36).slice(2, 6)}`,
@@ -81,6 +81,11 @@ async function mkUser(email?: string) {
       telegramConnectedAt: new Date(),
     },
   });
+  // v0.19.2: real memberships (OrganizationMember = authorization source).
+  await db.organizationMember.create({
+    data: { organizationId: orgId, userId: u.id, role: "MANAGER" },
+  });
+  return u;
 }
 
 /** A projected notification (event + projection) for the fan-out to pick up. */
@@ -148,6 +153,11 @@ async function setChannelPrefs(user: { id: string }, channels: Record<string, { 
 }
 
 beforeAll(async () => {
+  // v0.19.2: hermetic demo-mode env (spec 99). bun test does NOT load
+  // .env.local (and CI clones carry no .env at all) — the demo deployment
+  // sets LEADOS_DEMO=true in its environment; here we make the suite
+  // self-contained instead of depending on ambient env files.
+  process.env.LEADOS_DEMO = "true";
   const org = await db.organization.create({
     data: { name: "Delivery Test", slug: SLUG, locale: "ru", timezone: "Asia/Yerevan", currency: "AMD" },
   });

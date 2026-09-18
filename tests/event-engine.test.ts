@@ -64,6 +64,10 @@ async function mkUser(name: string, email: string, role: string) {
   const u = await db.user.create({
     data: { organizationId: orgId, name, email, role, status: "ACTIVE" },
   });
+  // v0.19.2: real memberships (OrganizationMember = authorization source).
+  await db.organizationMember.create({
+    data: { organizationId: orgId, userId: u.id, role },
+  }).catch(() => {});
   return u.id;
 }
 
@@ -557,7 +561,7 @@ describe("tenant isolation", () => {
 describe("delivery preferences", () => {
   test("disabled STAGE_AGING → the DomainEvent still exists, but NO notification is created", async () => {
     await setNotificationPreferences(managerB, {
-      ...{ FIRST_RESPONSE_BREACHED: true, FOLLOW_UP_DUE_SOON: true, FOLLOW_UP_OVERDUE: true, STAGE_BECAME_STALE: true, LEAD_ASSIGNED: true, TASK_ASSIGNED: true, TASK_DUE_SOON: true, TASK_OVERDUE: true },
+      ...{ FIRST_RESPONSE_BREACHED: true, FOLLOW_UP_DUE_SOON: true, FOLLOW_UP_OVERDUE: true, STAGE_BECAME_STALE: true, LEAD_INGESTED: true, LEAD_ASSIGNED: true, TASK_ASSIGNED: true, TASK_DUE_SOON: true, TASK_OVERDUE: true },
       STAGE_AGING: false,
     });
     const prefs = await getNotificationPreferences(managerB);
@@ -578,7 +582,7 @@ describe("delivery preferences", () => {
     // Restore for later tests.
     await setNotificationPreferences(managerB, {
       FIRST_RESPONSE_BREACHED: true, FOLLOW_UP_DUE_SOON: true, FOLLOW_UP_OVERDUE: true,
-      STAGE_AGING: true, STAGE_BECAME_STALE: true, LEAD_ASSIGNED: true,
+      STAGE_AGING: true, STAGE_BECAME_STALE: true, LEAD_INGESTED: true, LEAD_ASSIGNED: true,
       TASK_ASSIGNED: true, TASK_DUE_SOON: true, TASK_OVERDUE: true,
     });
   });

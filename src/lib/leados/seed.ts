@@ -1007,5 +1007,49 @@ export async function seed(): Promise<{ orgId: string }> {
     });
   }
 
+  // ---------------------------------------------------------------------
+  // v0.19.2 §24 — META DEMO setup (deterministic, zero network by
+  // construction): a CONNECTED demo connection + one page + the three demo
+  // lead forms, mirroring connectDemo() so a clean-clone demo boots with the
+  // full Meta Lead Ads experience (Token OK / Page SUBSCRIBED / forms list).
+  // ---------------------------------------------------------------------
+  if (process.env.LEADOS_DEMO === "true") {
+    const { encryptToken } = await import("@/lib/integrations/meta/encryption");
+    const { DEMO_PAGE_ID, DEMO_PAGE_NAME, DEMO_FORMS } = await import("@/lib/integrations/meta/provider");
+    const conn = await db.metaConnection.create({
+      data: {
+        organizationId: orgId,
+        appMode: "DEMO",
+        status: "CONNECTED",
+        tokenEncrypted: encryptToken("demo-access-token"),
+        displayName: "HayDev Demo Meta App",
+        scopes: null,
+        connectedAt: new Date(),
+        authError: null,
+      },
+    });
+    await db.metaPageConnection.create({
+      data: {
+        organizationId: orgId,
+        connectionId: conn.id,
+        pageId: DEMO_PAGE_ID,
+        pageName: DEMO_PAGE_NAME,
+        subscriptionStatus: "SUBSCRIBED",
+      },
+    });
+    for (const f of DEMO_FORMS) {
+      await db.metaLeadForm.create({
+        data: {
+          organizationId: orgId,
+          pageConnectionId: (await db.metaPageConnection.findUniqueOrThrow({ where: { pageId: DEMO_PAGE_ID } })).id,
+          formId: f.formId,
+          formName: f.name,
+          status: "ACTIVE",
+          active: true,
+        },
+      });
+    }
+  }
+
   return { orgId };
 }

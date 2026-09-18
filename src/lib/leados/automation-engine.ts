@@ -22,6 +22,7 @@
 
 import { db } from "@/lib/db";
 import type { DomainEvent, AutomationRule, AutomationExecution, Lead, Task, PipelineStage, User, NotificationDelivery } from "@prisma/client";
+import { isOrgMember } from "./tenant-guard";
 import {
   DOMAIN_EVENT,
   ENTITY_TYPE,
@@ -489,8 +490,8 @@ async function executeAutomationAction(
     case AUTOMATION_ACTION.SEND_EMAIL: {
       const target = await resolveActionAssignee(ctx, (p.recipient as ActionAssignee) ?? ACTION_ASSIGNEE.LEAD_OWNER, typeof p.userId === "string" ? p.userId : null);
       if (!target.userId) return { status: "FAILED", error: target.failure, errorCode: target.failureCode };
-      const user = await db.user.findUnique({ where: { id: target.userId }, select: { id: true, email: true, organizationId: true } });
-      if (!user || user.organizationId !== ctx.orgId) {
+      const user = await db.user.findUnique({ where: { id: target.userId }, select: { id: true, email: true } });
+      if (!user || !(await isOrgMember(ctx.orgId, user.id))) {
         return { status: "FAILED", error: "Recipient not found in this organization.", errorCode: AUTO_ERROR.INVALID_RECIPIENT };
       }
       if (!user.email) {
@@ -516,8 +517,8 @@ async function executeAutomationAction(
     case AUTOMATION_ACTION.SEND_TELEGRAM: {
       const target = await resolveActionAssignee(ctx, (p.recipient as ActionAssignee) ?? ACTION_ASSIGNEE.LEAD_OWNER, typeof p.userId === "string" ? p.userId : null);
       if (!target.userId) return { status: "FAILED", error: target.failure, errorCode: target.failureCode };
-      const user = await db.user.findUnique({ where: { id: target.userId }, select: { id: true, telegramChatId: true, organizationId: true } });
-      if (!user || user.organizationId !== ctx.orgId) {
+      const user = await db.user.findUnique({ where: { id: target.userId }, select: { id: true, telegramChatId: true } });
+      if (!user || !(await isOrgMember(ctx.orgId, user.id))) {
         return { status: "FAILED", error: "Recipient not found in this organization.", errorCode: AUTO_ERROR.INVALID_RECIPIENT };
       }
       if (!user.telegramChatId) {

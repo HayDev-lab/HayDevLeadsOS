@@ -36,6 +36,26 @@ export const META_EVENT_STATUS = {
   UNMAPPED_FORM: "UNMAPPED_FORM",
 } as const;
 
+// ---------------------------------------------------------------------------
+// v0.19.2 — META PAGE ROUTING (hardening §18–19)
+// ---------------------------------------------------------------------------
+
+/** Deterministic webhook routing: ONE Meta Page ID → ONE LeadOS organization
+ *  (DB unique on MetaPageConnection.pageId — the invariant is enforced at
+ *  the storage layer, verified duplicate-free before it was applied).
+ *
+ *  - exactly ONE route per pageId (findUnique — never findFirst, never a guess);
+ *  - unknown page → null (caller parks UNMAPPED_PAGE — no org leak);
+ *  - the payload NEVER supplies an organizationId as truth.
+ */
+export async function resolveMetaPageRoute(
+  pageId: string
+): Promise<{ organizationId: string; pageConnectionId: string } | null> {
+  const page = await db.metaPageConnection.findUnique({ where: { pageId } });
+  if (!page) return null;
+  return { organizationId: page.organizationId, pageConnectionId: page.id };
+}
+
 const OAUTH_STATE_TTL_MS = 10 * 60_000;
 
 function assertOrgScoped<T extends { organizationId: string | null }>(row: T | null | undefined, orgId: string, what: string): T {
@@ -240,6 +260,17 @@ export async function syncPages(orgId: string, preFetched?: Awaited<ReturnType<M
         subscriptionError,
       },
       update: { pageName: p.pageName, subscriptionStatus, subscriptionError },
+    }).catch((e) => {
+      // v0.19.2 §18 invariant: one Meta page → one org. A P2002 on the
+      // pageId unique means ANOTHER organization already connected this
+      // page — surfaced as a typed, non-retryable error (never silent).
+      if ((e as { code?: string })?.code === "P2002") {
+        throw new MetaError(
+          META_ERROR_CODE.META_PERMISSION_ERROR,
+          "This Meta Page is already connected to another organization (one page → one organization invariant)"
+        );
+      }
+      throw e;
     });
   }
   invalidateOrgCache(orgId);
@@ -389,9 +420,10 @@ export interface PersistResult {
 export async function persistLeadgenEvents(changes: LeadgenChange[], rawPayload: unknown): Promise<PersistResult> {
   const result: PersistResult = { received: changes.length, persisted: 0, duplicates: 0, unmappedPages: 0 };
   for (const change of changes) {
-    // ROUTE: pageId → org. NEVER trust any org id from the payload.
-    const page = await db.metaPageConnection.findFirst({ where: { pageId: change.pageId } });
-    const orgId = page?.organizationId ?? null;
+    // ROUTE (§19): pageId → org via the DETERMINISTIC routing service — never
+    // findFirst, never a guess, never an org id from the payload.
+    const route = await resolveMetaPageRoute(change.pageId);
+    const orgId = route?.organizationId ?? null;
     if (!orgId) result.unmappedPages++;
     const status = orgId ? META_EVENT_STATUS.PENDING : META_EVENT_STATUS.UNMAPPED_PAGE;
     try {
@@ -406,8 +438,8 @@ export async function persistLeadgenEvents(changes: LeadgenChange[], rawPayload:
         },
       });
       result.persisted++;
-      if (page) {
-        await db.metaPageConnection.update({ where: { id: page.id }, data: { lastWebhookAt: new Date() } });
+      if (route) {
+        await db.metaPageConnection.update({ where: { id: route.pageConnectionId }, data: { lastWebhookAt: new Date() } });
       }
     } catch (e) {
       if ((e as { code?: string })?.code === "P2002") {

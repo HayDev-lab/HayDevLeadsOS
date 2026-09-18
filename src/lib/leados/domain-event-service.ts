@@ -28,6 +28,7 @@ import {
 } from "@/lib/domain-events";
 import { DEFAULT_NOTIFICATION_PREFERENCES, type NotificationPreferences } from "@/lib/domain-events";
 import { getAutomationExecutionContext } from "./automation-context";
+import { resolveOrgFallbackRecipient } from "./tenant-guard";
 
 // ---------------------------------------------------------------------------
 // Deep link resolution per event type
@@ -104,26 +105,12 @@ export function resolveNotificationRecipients(
   return first ? [first] : [];
 }
 
-/** Org fallback recipient: first OWNER, then ADMIN, then any ACTIVE user. */
+/** Org fallback recipient (v0.19.2 §16): first ACTIVE OWNER member, then
+ *  ADMIN, then any ACTIVE member — resolved from OrganizationMember (the
+ *  membership source of truth), NEVER User.role/User.organizationId (legacy
+ *  cache pointers). Delegates to the central tenant guard. */
 export async function getOrgFallbackRecipient(orgId: string): Promise<string | null> {
-  const owner = await db.user.findFirst({
-    where: { organizationId: orgId, role: "OWNER", status: "ACTIVE" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (owner) return owner.id;
-  const admin = await db.user.findFirst({
-    where: { organizationId: orgId, role: "ADMIN", status: "ACTIVE" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (admin) return admin.id;
-  const any = await db.user.findFirst({
-    where: { organizationId: orgId, status: "ACTIVE" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  return any?.id ?? null;
+  return resolveOrgFallbackRecipient(orgId);
 }
 
 // ---------------------------------------------------------------------------

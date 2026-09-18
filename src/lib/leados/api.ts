@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { AuthRequiredError, ForbiddenError } from "./context";
+import { TenantGuardError } from "./tenant-guard";
 
 export function ok(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, init);
@@ -55,6 +56,10 @@ export function apiError(message: string, details?: unknown) {
   }
   if (details instanceof ForbiddenError) {
     return forbidden(details.message);
+  }
+  if (details instanceof TenantGuardError) {
+    // v0.19.2 §10: foreign ID = same outcome as missing (404, no enumeration).
+    return notFound(details.code.replace(/_NOT_FOUND$/, "").toLowerCase());
   }
   return serverError(message, details);
 }

@@ -28,6 +28,7 @@
 
 import { db } from "@/lib/db";
 import type { NotificationDelivery } from "@prisma/client";
+import { isOrgMember } from "../tenant-guard";
 import {
   acquireWorkerLease,
   releaseWorkerLease,
@@ -238,8 +239,8 @@ async function processOneDelivery(
   try {
     switch (delivery.channel) {
       case DELIVERY_CHANNEL.EMAIL: {
-        const user = await db.user.findUnique({ where: { id: delivery.recipient }, select: { id: true, email: true, organizationId: true } });
-        if (!user || user.organizationId !== delivery.organizationId) {
+        const user = await db.user.findUnique({ where: { id: delivery.recipient }, select: { id: true, email: true } });
+        if (!user || !(await isOrgMember(delivery.organizationId, user.id))) {
           await failWith({ errorCode: AUTO_ERROR.INVALID_RECIPIENT, errorMessage: "Recipient not found in this organization.", retryable: false });
           return "FAILED";
         }
@@ -276,8 +277,8 @@ async function processOneDelivery(
       }
 
       case DELIVERY_CHANNEL.TELEGRAM: {
-        const user = await db.user.findUnique({ where: { id: delivery.recipient }, select: { id: true, telegramChatId: true, organizationId: true } });
-        if (!user || user.organizationId !== delivery.organizationId) {
+        const user = await db.user.findUnique({ where: { id: delivery.recipient }, select: { id: true, telegramChatId: true } });
+        if (!user || !(await isOrgMember(delivery.organizationId, user.id))) {
           await failWith({ errorCode: AUTO_ERROR.INVALID_RECIPIENT, errorMessage: "Recipient not found in this organization.", retryable: false });
           return "FAILED";
         }

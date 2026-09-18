@@ -24,7 +24,7 @@ import { getMetaProvider } from "@/lib/integrations/meta/provider";
 import { MetaError, META_ERROR_CODE } from "@/lib/integrations/meta/errors";
 import { mapMetaLead, metadataNote, type MappingRule } from "@/lib/integrations/meta/lead-mapper";
 import { ingestLead } from "./ingest-lead";
-import { META_CONNECTION_STATUS, META_EVENT_STATUS, requireActiveConnection, markConnectionStatus } from "./meta-service";
+import { META_CONNECTION_STATUS, META_EVENT_STATUS, requireActiveConnection, markConnectionStatus, resolveMetaPageRoute } from "./meta-service";
 
 const MAX_ATTEMPTS = 5;
 const STALE_PROCESSING_MS = 3 * 60_000; // reclaim crashed PROCESSING rows
@@ -165,11 +165,12 @@ async function processEvent(eventId: string, ctx: ProcessCtx): Promise<void> {
     summary.failed++;
   };
 
-  // 1) ROUTE — organization may have been mapped since the webhook arrived.
+  // 1) ROUTE (§19) — deterministic service; organization may have been
+  // mapped since the webhook arrived. Never findFirst, never a guess.
   let orgId = ev.organizationId;
   if (!orgId) {
-    const page = await db.metaPageConnection.findFirst({ where: { pageId: ev.pageId } });
-    orgId = page?.organizationId ?? null;
+    const route = await resolveMetaPageRoute(ev.pageId);
+    orgId = route?.organizationId ?? null;
     if (!orgId) {
       // Unknown page stays parked as UNMAPPED_PAGE — safe, no Lead, no retry burn.
       await db.metaWebhookEvent.update({ where: { id: ev.id }, data: { status: META_EVENT_STATUS.UNMAPPED_PAGE } });

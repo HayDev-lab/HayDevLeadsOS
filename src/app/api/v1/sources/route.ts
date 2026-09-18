@@ -11,7 +11,25 @@ export async function GET() {
       where: { organizationId: session.orgId },
       orderBy: { position: "asc" },
     });
-    return ok({ rows });
+    // v0.19.2 §7: NEVER expose the stored tokenHash — credential metadata only.
+    const safe = rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      type: r.type,
+      position: r.position,
+      isSystem: r.isSystem,
+      active: r.active,
+      createdAt: r.createdAt,
+      token: {
+        hasCredential: !!r.tokenPrefix,
+        prefix: r.tokenPrefix,
+        last4: r.tokenLast4,
+        createdAt: r.tokenCreatedAt,
+        revealedAt: r.tokenRevealedAt,
+        disabledAt: r.tokenDisabledAt,
+      },
+    }));
+    return ok({ rows: safe });
   } catch (e) {
     return apiError("sources-list-failed", e);
   }
