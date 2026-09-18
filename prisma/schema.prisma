@@ -60,6 +60,11 @@ model Organization {
   members                OrganizationMember[]
   invites                OrganizationInvite[]
   auditLogs              AuditLog[]
+  // META LEAD ADS INTEGRATION (v0.18)
+  metaConnections        MetaConnection[]
+  metaPageConnections    MetaPageConnection[]
+  metaLeadForms          MetaLeadForm[]
+  metaWebhookEvents      MetaWebhookEvent[]
 }
 
 model User {
@@ -1187,4 +1192,119 @@ model NotificationDelivery {
   @@index([organizationId, status, nextAttemptAt])
   @@index([notificationId])
   @@index([organizationId, channel, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// META LEAD ADS INTEGRATION (v0.18)
+// Organization-scoped Meta connections, Page subscriptions, Form mappings,
+// and durable webhook events for reliable lead ingestion.
+// ---------------------------------------------------------------------------
+
+/// Meta business connection per organization. Stores encrypted access token,
+/// validation state, and expiry. One row per org that connected Meta.
+model MetaConnection {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  status              String    @default("ACTIVE") // ACTIVE | EXPIRING | EXPIRED | REAUTH_REQUIRED | ERROR
+  metaBusinessId      String?   // Meta Business Manager ID
+  metaUserId          String?   // Meta user ID who authorized
+  accessTokenEncrypted String   // Encrypted long-lived or system token
+  tokenExpiresAt      DateTime?
+  grantedScopes       Json?     // Array of granted permission strings
+  createdByUserId     String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  lastValidatedAt     DateTime?
+  lastErrorCode       String?
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pageConnections     MetaPageConnection[]
+  leadForms           MetaLeadForm[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+/// Connected Meta Page within an organization's Meta connection.
+/// Tracks subscription status and last webhook/lead timestamps.
+model MetaPageConnection {
+  id                String    @id @default(cuid())
+  organizationId    String
+  metaConnectionId  String
+  pageId            String    // Meta Page ID
+  pageName          String
+  pageTokenEncrypted String?  // Optional page-specific token
+  status            String    @default("ACTIVE") // ACTIVE | INACTIVE | ERROR
+  subscribed        Boolean   @default(false)
+  lastWebhookAt     DateTime?
+  lastLeadAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  metaConnection    MetaConnection     @relation(fields: [metaConnectionId], references: [id], onDelete: Cascade)
+  leadForms         MetaLeadForm[]
+  webhookEvents     MetaWebhookEvent[]
+
+  @@unique([metaConnectionId, pageId])
+  @@index([organizationId])
+  @@index([pageId])
+}
+
+/// Meta Lead Form mapping configuration. Links a Meta form to a LeadSource
+/// and stores field mappings for canonical ingestion.
+model MetaLeadForm {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  metaPageConnectionId String
+  formId             String    // Meta form ID
+  formName           String
+  status             String    @default("UNMAPPED") // UNMAPPED | MAPPED | ACTIVE | INACTIVE
+  leadSourceId       String?
+  fieldMapping       Json?     // { metaField: leadOSField, ... }
+  defaultOwnerId     String?
+  defaultStageId     String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  metaPageConnection MetaPageConnection @relation(fields: [metaPageConnectionId], references: [id], onDelete: Cascade)
+  leadSource         LeadSource?        @relation(fields: [leadSourceId], references: [id], onDelete: SetNull)
+  defaultOwner       User?              @relation(fields: [defaultOwnerId], references: [id], onDelete: SetNull)
+  defaultStage       PipelineStage?     @relation(fields: [defaultStageId], references: [id], onDelete: SetNull)
+
+  @@unique([metaPageConnectionId, formId])
+  @@index([organizationId])
+  @@index([formId])
+  @@index([status])
+}
+
+/// Durable webhook event storage for idempotent processing.
+/// Stores raw webhook payload and processing state.
+model MetaWebhookEvent {
+  id             String    @id @default(cuid())
+  organizationId String?   // NULL until page/form is mapped
+  pageId         String    // Meta Page ID from webhook
+  formId         String    // Meta Form ID from webhook
+  leadgenId      String    // Unique lead generation ID (idempotency key)
+  createdTime    DateTime  // When lead was submitted on Meta
+  payload        Json      // Raw webhook change payload (minimal, no PII)
+  status         String    @default("RECEIVED") // RECEIVED | FETCHING | FETCHED | INGESTING | INGESTED | FAILED | DUPLICATE | UNMAPPED_PAGE | UNMAPPED_FORM
+  attemptCount   Int       @default(0)
+  errorCode      String?
+  errorMessage   String?
+  receivedAt     DateTime  @default(now())
+  fetchedAt      DateTime?
+  ingestedAt     DateTime?
+  ingestedLeadId String?
+
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  pageConnection MetaPageConnection? @relation(fields: [pageId], references: [pageId], onDelete: SetNull)
+
+  @@unique([leadgenId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([pageId])
+  @@index([formId])
+  @@index([receivedAt])
 }

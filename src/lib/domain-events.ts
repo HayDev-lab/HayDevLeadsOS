@@ -40,6 +40,7 @@ export const DOMAIN_EVENT = {
   STAGE_AGING: "STAGE_AGING",
   STAGE_BECAME_STALE: "STAGE_BECAME_STALE",
   LEAD_ASSIGNED: "LEAD_ASSIGNED",
+  LEAD_INGESTED: "LEAD_INGESTED",
   TASK_ASSIGNED: "TASK_ASSIGNED",
   TASK_DUE_SOON: "TASK_DUE_SOON",
   TASK_OVERDUE: "TASK_OVERDUE",
@@ -65,6 +66,7 @@ export type Severity = (typeof SEVERITY)[keyof typeof SEVERITY];
 export const EVENT_SEVERITY: Record<DomainEventType, Severity> = {
   [DOMAIN_EVENT.LEAD_ASSIGNED]: SEVERITY.INFO,
   [DOMAIN_EVENT.TASK_ASSIGNED]: SEVERITY.INFO,
+  [DOMAIN_EVENT.LEAD_INGESTED]: SEVERITY.INFO,
   [DOMAIN_EVENT.FOLLOW_UP_DUE_SOON]: SEVERITY.WARNING,
   [DOMAIN_EVENT.STAGE_AGING]: SEVERITY.WARNING,
   [DOMAIN_EVENT.TASK_DUE_SOON]: SEVERITY.WARNING,
@@ -164,6 +166,10 @@ export const NOTIFICATION_TEMPLATES: Record<DomainEventType, NotificationTemplat
     titleKey: "notif.task_overdue.title",
     messageKey: "notif.task_overdue.message",
   },
+  [DOMAIN_EVENT.LEAD_INGESTED]: {
+    titleKey: "notif.lead_ingested.title",
+    messageKey: "notif.lead_ingested.message",
+  },
 };
 
 /** Human label i18n key for Settings toggles (one per event type). */
@@ -177,6 +183,7 @@ export const EVENT_LABEL_KEYS: Record<DomainEventType, string> = {
   [DOMAIN_EVENT.TASK_ASSIGNED]: "notif.prefs.task_assigned",
   [DOMAIN_EVENT.TASK_DUE_SOON]: "notif.prefs.task_due_soon",
   [DOMAIN_EVENT.TASK_OVERDUE]: "notif.prefs.task_overdue",
+  [DOMAIN_EVENT.LEAD_INGESTED]: "notif.prefs.lead_ingested",
 };
 
 // ---------------------------------------------------------------------------
@@ -207,6 +214,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   [DOMAIN_EVENT.TASK_ASSIGNED]: true,
   [DOMAIN_EVENT.TASK_DUE_SOON]: true,
   [DOMAIN_EVENT.TASK_OVERDUE]: true,
+  [DOMAIN_EVENT.LEAD_INGESTED]: true,
 };
 
 /** Parse a stored preference row, backfilling unknown types with ON (Section 99: event ≠ delivery preference). */
