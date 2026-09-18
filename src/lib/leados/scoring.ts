@@ -1,7 +1,7 @@
 // Explainable, configurable lead scoring. Deterministic — no random values.
 // Returns score 0-100, category, and the list of contributing reasons with signed deltas.
 
-import { SCORE_CATEGORY, SCORE_THRESHOLDS, type ScoreCategory } from "./constants";
+import { SCORE_CATEGORY, SCORE_THRESHOLDS, STAGE_SEMANTIC, type ScoreCategory } from "./constants";
 
 export interface ScoreRule {
   key: string;
@@ -15,7 +15,10 @@ export interface ScoreInput {
   estimatedValue?: number | null;
   priority?: string | null;
   stageType?: string | null;
+  /** Display name — informational only, NEVER used for scoring (§12). */
   stageName?: string | null;
+  /** Stable semantic code — drives stage-based heuristics (§12). */
+  stageSemanticCode?: string | null;
   firstName?: string | null;
   lastName?: string | null;
   company?: string | null;
@@ -70,7 +73,11 @@ export function computeScore(input: ScoreInput, rules: ScoreRule[]): ScoreResult
   if (input.priority === "URGENT" || input.priority === "HIGH") {
     add("urgency_high", "High urgency", 10);
   }
-  if (input.hasMeetingRequestFlag || input.stageName === "Meeting" || input.stageName === "Proposal") {
+  if (
+    input.hasMeetingRequestFlag ||
+    input.stageSemanticCode === STAGE_SEMANTIC.MEETING ||
+    input.stageSemanticCode === STAGE_SEMANTIC.PROPOSAL
+  ) {
     add("meeting_requested", "Requested consultation/meeting", 15);
   }
   if (input.company) {

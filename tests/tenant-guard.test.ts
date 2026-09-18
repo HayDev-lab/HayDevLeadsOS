@@ -141,6 +141,39 @@ describe("tenant guards (§10)", () => {
     expect(await isOrgMember(orgA, userB1)).toBe(false);
   });
 
+  test("§10 v0.20: same user with DIFFERENT roles in two orgs → per-org role from the MEMBERSHIP row (never the User.role cache)", async () => {
+    // Dual member: MEMBER in Org A, OWNER in Org B. The User.role cache can
+    // only hold ONE value — authorization must read the per-org membership.
+    const dual = await db.user.create({
+      // cache deliberately says OWNER (would wrongly grant Org A owner power)
+      data: { organizationId: orgA, name: "Dual", email: `dual-${Date.now()}@tg.test`, role: "OWNER", status: "ACTIVE" },
+    });
+    await db.organizationMember.createMany({
+      data: [
+        { organizationId: orgA, userId: dual.id, role: "MEMBER" },
+        { organizationId: orgB, userId: dual.id, role: "OWNER" },
+      ],
+    });
+    const inA = await requireOrgMember(orgA, dual.id);
+    expect(inA.role).toBe("MEMBER"); // membership row wins over the OWNER cache
+    const inB = await requireOrgMember(orgB, dual.id);
+    expect(inB.role).toBe("OWNER");
+    // Both orgs grant access; the ROLE differs per org — correct permissions.
+    expect(await isOrgMember(orgA, dual.id)).toBe(true);
+    expect(await isOrgMember(orgB, dual.id)).toBe(true);
+    // The B-membership OWNER role does NOT leak into A's guard…
+    expect((await requireOrgMember(orgA, dual.id)).role).not.toBe("OWNER");
+    // …and removing ONLY the A-membership blocks A immediately while B still works.
+    await db.organizationMember.update({
+      where: { organizationId_userId: { organizationId: orgA, userId: dual.id } },
+      data: { status: "REMOVED" },
+    });
+    await expectTenantBlocked(requireOrgMember(orgA, dual.id));
+    const stillB = await requireOrgMember(orgB, dual.id);
+    expect(stillB.role).toBe("OWNER");
+    await db.user.delete({ where: { id: dual.id } });
+  });
+
   test("requireOrgSource: foreign source rejected", async () => {
     await expectTenantBlocked(requireOrgSource(orgA, sourceB));
     expect((await requireOrgSource(orgA, sourceA)).id).toBe(sourceA);

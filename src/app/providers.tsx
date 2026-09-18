@@ -6,7 +6,7 @@ import { Toaster } from "sonner";
 import { LocaleProvider } from "@/lib/leados/locale";
 import { useState, type ReactNode } from "react";
 
-export function Providers({ initialLocale, children }: { initialLocale?: "hy" | "ru" | "en"; children: ReactNode }) {
+export function Providers({ initialLocale, nonce, children }: { initialLocale?: "hy" | "ru" | "en"; nonce?: string; children: ReactNode }) {
   const [client] = useState(
     () =>
       new QueryClient({
@@ -20,7 +20,9 @@ export function Providers({ initialLocale, children }: { initialLocale?: "hy" | 
       })
   );
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+    // v0.20 §13: nonce stamps next-themes' inline no-FOUC bootstrap script so
+    // it passes the production nonce-CSP (the proxy generates it per request).
+    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange nonce={nonce}>
       <QueryClientProvider client={client}>
         <LocaleProvider initialLocale={initialLocale}>
           {children}

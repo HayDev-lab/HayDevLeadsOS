@@ -59,6 +59,56 @@ export const STAGE_TYPE = {
   LOST: "lost",
 } as const;
 
+// v0.20 closure §12 — STABLE STAGE SEMANTICS.
+//
+// Business logic NEVER reads stage display names (user-renamable, localizable):
+// it reads PipelineStage.semanticCode. Superset of the suggested core set
+// (NEW/CONTACTED/QUALIFIED/OPEN/CUSTOM/WON/LOST): MEETING/PROPOSAL/
+// NEGOTIATION exist because follow-up suggestions, lost-detection and scoring
+// heuristics genuinely distinguish them and map 1:1 from the default stages.
+export const STAGE_SEMANTIC = {
+  NEW: "NEW",
+  CONTACTED: "CONTACTED",
+  QUALIFIED: "QUALIFIED",
+  MEETING: "MEETING",
+  PROPOSAL: "PROPOSAL",
+  NEGOTIATION: "NEGOTIATION",
+  OPEN: "OPEN",
+  CUSTOM: "CUSTOM",
+  WON: "WON",
+  LOST: "LOST",
+} as const;
+export type StageSemanticCode = (typeof STAGE_SEMANTIC)[keyof typeof STAGE_SEMANTIC];
+export const STAGE_SEMANTIC_VALUES = [
+  STAGE_SEMANTIC.NEW,
+  STAGE_SEMANTIC.CONTACTED,
+  STAGE_SEMANTIC.QUALIFIED,
+  STAGE_SEMANTIC.MEETING,
+  STAGE_SEMANTIC.PROPOSAL,
+  STAGE_SEMANTIC.NEGOTIATION,
+  STAGE_SEMANTIC.OPEN,
+  STAGE_SEMANTIC.CUSTOM,
+  STAGE_SEMANTIC.WON,
+  STAGE_SEMANTIC.LOST,
+] as const;
+
+/** Derive Lead.status from stage SEMANTICS (never display names). Structural
+ * type (won/lost) and semanticCode agree on final stages by invariant. */
+export function statusFromStageSemantic(semanticCode: string, stageType: string): string {
+  if (stageType === STAGE_TYPE.WON || semanticCode === STAGE_SEMANTIC.WON) return LEAD_STATUS.WON;
+  if (stageType === STAGE_TYPE.LOST || semanticCode === STAGE_SEMANTIC.LOST) return LEAD_STATUS.LOST;
+  switch (semanticCode) {
+    case STAGE_SEMANTIC.NEW:
+      return LEAD_STATUS.NEW;
+    case STAGE_SEMANTIC.CONTACTED:
+      return LEAD_STATUS.CONTACTED;
+    case STAGE_SEMANTIC.QUALIFIED:
+      return LEAD_STATUS.QUALIFIED;
+    default:
+      return LEAD_STATUS.OPEN;
+  }
+}
+
 export const ACTIVITY_TYPE = {
   CALL: "CALL",
   MESSAGE: "MESSAGE",
@@ -152,15 +202,15 @@ export const DEFAULT_SOURCES: { name: string; type: string }[] = [
   { name: "Other", type: "other" },
 ];
 
-export const DEFAULT_STAGES: { name: string; type: string; color: string }[] = [
-  { name: "New", type: "open", color: "#94a3b8" },
-  { name: "Contacted", type: "open", color: "#64748b" },
-  { name: "Qualified", type: "open", color: "#0ea5e9" },
-  { name: "Meeting", type: "open", color: "#8b5cf6" },
-  { name: "Proposal", type: "open", color: "#f59e0b" },
-  { name: "Negotiation", type: "open", color: "#ec4899" },
-  { name: "Won", type: "won", color: "#16a34a" },
-  { name: "Lost", type: "lost", color: "#dc2626" },
+export const DEFAULT_STAGES: { name: string; type: string; color: string; semanticCode: string }[] = [
+  { name: "New", type: "open", color: "#94a3b8", semanticCode: STAGE_SEMANTIC.NEW },
+  { name: "Contacted", type: "open", color: "#64748b", semanticCode: STAGE_SEMANTIC.CONTACTED },
+  { name: "Qualified", type: "open", color: "#0ea5e9", semanticCode: STAGE_SEMANTIC.QUALIFIED },
+  { name: "Meeting", type: "open", color: "#8b5cf6", semanticCode: STAGE_SEMANTIC.MEETING },
+  { name: "Proposal", type: "open", color: "#f59e0b", semanticCode: STAGE_SEMANTIC.PROPOSAL },
+  { name: "Negotiation", type: "open", color: "#ec4899", semanticCode: STAGE_SEMANTIC.NEGOTIATION },
+  { name: "Won", type: "won", color: "#16a34a", semanticCode: STAGE_SEMANTIC.WON },
+  { name: "Lost", type: "lost", color: "#dc2626", semanticCode: STAGE_SEMANTIC.LOST },
 ];
 
 export const DEFAULT_LOST_REASONS = [

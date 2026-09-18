@@ -224,6 +224,26 @@ describe("rate limit (§9 — durable, DB-backed)", () => {
     const after = await json(await ingest(req({ firstName: "Recover", email: `recover-${Date.now()}@ingest.test` }, authA())));
     expect(after.status).toBe(201);
   });
+
+  test("§9 v0.20 concurrency: PARALLEL requests are ALL counted — no lost window entries", async () => {
+    // Clean window, then fire 6 genuinely concurrent ingests. The limiter is
+    // DB-backed (WebhookLog rows = shared state): every completed request
+    // must leave exactly one log row, and none may be falsely 429'd
+    // (6 << 60). This pins the multi-instance-ready property: window state
+    // lives in the shared database, not in process memory.
+    await db.webhookLog.deleteMany({ where: { source: `public_ingest:${sourceA}` } });
+    const stamp = Date.now();
+    const results = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        ingest(req({ firstName: `Par${i}`, email: `par-${stamp}-${i}@ingest.test` }, authA())).then((r) => json(r))
+      )
+    );
+    expect(results.every((r) => r.status === 201)).toBe(true);
+    const counted = await db.webhookLog.count({
+      where: { source: `public_ingest:${sourceA}`, createdAt: { gte: new Date(Date.now() - 60_000) } },
+    });
+    expect(counted).toBe(6); // every concurrent request left its durable entry
+  });
 });
 
 describe("payload logging redaction (§8)", () => {

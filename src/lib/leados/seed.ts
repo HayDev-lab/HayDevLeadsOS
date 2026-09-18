@@ -15,6 +15,7 @@ import {
   LEAD_STATUS,
   PRIORITY,
   ROLES,
+  statusFromStageSemantic,
 } from "./constants";
 import { normalizeEmail, normalizePhone } from "./normalize";
 import { computeScore } from "./scoring";
@@ -201,6 +202,7 @@ export async function seed(): Promise<{ orgId: string }> {
           name: DEFAULT_STAGES[i].name,
           position: i,
           type: DEFAULT_STAGES[i].type,
+          semanticCode: DEFAULT_STAGES[i].semanticCode,
           color: DEFAULT_STAGES[i].color,
           isWon: DEFAULT_STAGES[i].type === "won",
           isLost: DEFAULT_STAGES[i].type === "lost",
@@ -235,16 +237,18 @@ export async function seed(): Promise<{ orgId: string }> {
 
   // STAGE INACTIVITY config — per-stage thresholds keyed by STAGE ID (Section 77/78).
   // Composition targets (Section 125): ~60% ON_TRACK, ~20% AGING, ~15% STALE, rest final.
-  const stageByName = new Map(stages.map((s) => [s.name, s.id] as const));
+  // §12: keyed by the stable SEMANTIC code (stages are created by this seed from
+  // DEFAULT_STAGES, so the mapping is deterministic).
+  const stageBySemantic = new Map(stages.map((s) => [s.semanticCode, s.id] as const));
   const stageInactivityValue = {
     warningBeforeHours: 12,
     stages: {
-      [stageByName.get("New")!]: { thresholdHours: 24 },
-      [stageByName.get("Contacted")!]: { thresholdHours: 48 },
-      [stageByName.get("Qualified")!]: { thresholdHours: 72 },
-      [stageByName.get("Meeting")!]: { thresholdHours: 72 },
-      [stageByName.get("Proposal")!]: { thresholdHours: 120 },
-      [stageByName.get("Negotiation")!]: { thresholdHours: 120 },
+      [stageBySemantic.get("NEW")!]: { thresholdHours: 24 },
+      [stageBySemantic.get("CONTACTED")!]: { thresholdHours: 48 },
+      [stageBySemantic.get("QUALIFIED")!]: { thresholdHours: 72 },
+      [stageBySemantic.get("MEETING")!]: { thresholdHours: 72 },
+      [stageBySemantic.get("PROPOSAL")!]: { thresholdHours: 120 },
+      [stageBySemantic.get("NEGOTIATION")!]: { thresholdHours: 120 },
     },
   };
   await db.setting.create({
@@ -312,7 +316,7 @@ export async function seed(): Promise<{ orgId: string }> {
     let nextActionLabel: string | null = null;
     if (l.nextActionHoursFromNow != null) {
       nextActionAt = new Date(Date.now() + l.nextActionHoursFromNow * 3600000);
-      nextActionLabel = suggestNextAction(stage.name, new Date()).label;
+      nextActionLabel = suggestNextAction(stage.semanticCode, new Date()).label;
     }
     const lastContactAt = l.lastContactHoursAgo != null ? new Date(Date.now() - l.lastContactHoursAgo * 3600000) : null;
 
@@ -321,12 +325,12 @@ export async function seed(): Promise<{ orgId: string }> {
     const stageEnteredAt =
       l.stageAgeHours != null
         ? new Date(Date.now() - l.stageAgeHours * 3_600_000)
-        : stage.name === "New"
+        : stage.semanticCode === "NEW"
         ? created
         : new Date(created.getTime() + 7_200_000);
 
-    const status =
-      stage.type === "won" ? LEAD_STATUS.WON : stage.type === "lost" ? LEAD_STATUS.LOST : stage.name === "New" ? LEAD_STATUS.NEW : stage.name === "Contacted" ? LEAD_STATUS.CONTACTED : stage.name === "Qualified" ? LEAD_STATUS.QUALIFIED : LEAD_STATUS.OPEN;
+    // §12: status derives from stable semantics, never display names.
+    const status = statusFromStageSemantic(stage.semanticCode, stage.type);
 
     const lead = await db.lead.create({
       data: {
@@ -461,7 +465,7 @@ export async function seed(): Promise<{ orgId: string }> {
         },
       });
     }
-    if (stage.name !== "New" && stage.name !== "Lost" && stage.name !== "Won") {
+    if (stage.semanticCode !== "NEW" && stage.semanticCode !== "LOST" && stage.semanticCode !== "WON") {
       await db.activity.create({
         data: {
           organizationId: orgId,
@@ -605,7 +609,7 @@ export async function seed(): Promise<{ orgId: string }> {
         },
       });
     }
-    if (stage.name === "Proposal") {
+    if (stage.semanticCode === "PROPOSAL") {
       await db.task.create({
         data: {
           organizationId: orgId,

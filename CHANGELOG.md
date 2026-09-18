@@ -3,6 +3,52 @@
 Public product history. Internal development logs live outside the source
 repository (kept privately by the maintaining team).
 
+## 0.19.3 — Final Production Closure & P2 Debt
+
+Maintenance/hardening round: closes everything left open after 0.19.2.
+No new product features.
+
+### P2 debt closed
+
+- **Stage semantics** — `PipelineStage.semanticCode`
+  (NEW/CONTACTED/QUALIFIED/MEETING/PROPOSAL/NEGOTIATION/OPEN/CUSTOM/WON/LOST)
+  with a deterministic migration backfill. Business logic (status
+  derivation, `LEAD_QUALIFIED` events, follow-up suggestions, lost
+  detection, scoring heuristics) reads the stable semantic code —
+  renaming/localizing a stage never changes behavior. Display names are
+  purely presentational.
+- **CSP hardening** — production Content-Security-Policy is now
+  nonce-based (`script-src 'self' 'nonce-…' 'strict-dynamic'`):
+  **no `unsafe-eval`, no script `unsafe-inline` in production**. Dev keeps
+  the React-Refresh relaxation. Documented residual: `style-src
+  'unsafe-inline'` (React inline styles + framework `<style>` blocks have
+  no nonce support).
+
+### Reproducibility & database safety
+
+- Generic `db:push --accept-data-loss` removed; the only such entry point
+  is the explicit DEV-ONLY `db:dev:push`. Production uses
+  `db:migrate:deploy` exclusively (guard-tested).
+- Bun pinned to **1.3.14** (CI `bun-version` + `packageManager` field) —
+  CI is deterministic, never `latest`.
+- Packaged demo is **seed-only**: fresh SQLite → `prisma migrate deploy` →
+  deterministic seed. The developer's preview runtime DB is never copied
+  into any artifact (guard + hermetic functional tests).
+- Rate limiter classified honestly: state lives in the application
+  database (WebhookLog rows) — shared across app instances in production
+  (external DATABASE_URL), single-instance with SQLite demo/dev;
+  non-atomic check-then-insert documented; concurrency pinned by tests.
+
+### Repository hygiene
+
+- Stale fully-merged branch `meta-lead-ads-integration-ae41e` deleted.
+- Dependabot added (npm + github-actions, weekly, no auto-merge; every
+  update flows through the protected PR + `verify` CI gate).
+- GitHub Actions pinning policy documented (major-version tags +
+  Dependabot PRs).
+- History audit re-run: only previously documented TEST-ONLY values in
+  historic commits; no new secrets; PAT rotation still an owner action.
+
 ## 0.19.2 — Production Security & Release Hardening
 
 Security and release-engineering round. No new product features.

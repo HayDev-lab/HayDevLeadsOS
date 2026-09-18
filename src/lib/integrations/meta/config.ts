@@ -1,11 +1,13 @@
-// META LEAD ADS — configuration (v0.19 / v0.19.1).
+// META LEAD ADS — configuration (v0.19 / v0.19.1 / v0.20 §24).
 //
 // ALL Meta Graph API calls go through the centralized client, and the client
 // reads its version ONLY from here (spec: "Версия только через
 // META_GRAPH_API_VERSION"). Default = v26.0, the current stable Graph API
-// version (released 2026-07-29; re-verified against Meta's developer changelog
-// on 2026-09-18). Older still-supported versions (e.g. v25.0, ~2-year support
-// window) can be pinned via META_GRAPH_API_VERSION without code changes.
+// version (released 2026-07-29; re-verified against Meta's official
+// developer changelog on 2026-09-18 — "The latest Graph API version is:
+// v26.0"). Older still-supported versions (e.g. v25.0) can be pinned via
+// META_GRAPH_API_VERSION without code changes. Deprecation horizon from the
+// same changelog: v20.0 removed 2026-09-24, v21.0 scheduled 2027-01-21.
 //
 // This module is PURE (no DB, no React) so tests can inject env values.
 

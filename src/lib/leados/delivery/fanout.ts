@@ -78,6 +78,10 @@ function renderChannelContent(input: {
         name: String(p.leadName ?? p.taskTitle ?? ""),
         stage: String(p.stageName ?? ""),
         task: String(p.taskTitle ?? ""),
+        // v0.20 §32 repair: LEAD_INGESTED messages use {context} (the
+        // originating channel) — without this var the placeholder rendered
+        // literally in emails/telegram.
+        context: String(p.context ?? p.channel ?? ""),
         duration: humanizeDuration(Number(p.overdueMinutes ?? p.remainingMinutes ?? 0)),
         threshold: humanizeDuration(Number(p.thresholdMinutes ?? 0)),
       };

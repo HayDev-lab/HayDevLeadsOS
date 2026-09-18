@@ -9,9 +9,20 @@
 //    Requests WITHOUT Origin (curl, Telegram, workers) pass through and are
 //    authenticated by their own mechanisms (session cookie / secrets).
 //
-// 2. SECURITY HEADERS (spec 96) — nosniff, frame protection, referrer
-//    policy, permissions policy, CSP that keeps Next.js assets working, HSTS
-//    in production.
+// 2. SECURITY HEADERS (spec 96 + v0.20 §13) — nosniff, frame protection,
+//    referrer policy, permissions policy, CSP, HSTS in production.
+//
+//    CSP (v0.20 §13 hardening):
+//      • PRODUCTION: per-request NONCE + 'strict-dynamic' — NO 'unsafe-eval',
+//        NO 'unsafe-inline' for scripts. The nonce is set on the REQUEST
+//        headers (Next.js convention): the framework detects it and stamps
+//        its own bootstrap/hydration scripts with the same nonce.
+//      • DEV: 'unsafe-inline' + 'unsafe-eval' remain — React Refresh HMR
+//        requires them (documented, dev-only relaxation).
+//      • style-src keeps 'unsafe-inline' in BOTH modes: React inline style
+//        attributes and framework-injected <style> blocks (e.g. chart
+//        theming) have no nonce support — documented residual risk, tested
+//        by the browser E2E (no style-related CSP errors).
 //
 // No CORS headers are ever set (spec 95): authenticated APIs are same-origin.
 
@@ -61,28 +72,55 @@ export function proxy(req: NextRequest) {
   }
 
   // --- 2. Security headers --------------------------------------------------
-  const res = NextResponse.next();
+  const isProduction = process.env.NODE_ENV === "production";
+  // v0.20 §13: fresh per-request nonce (hex — valid base64url chars).
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  const csp = isProduction
+    ? [
+        "default-src 'self'",
+        // NONCE-based: no unsafe-inline, no unsafe-eval in production.
+        // 'strict-dynamic' lets nonce'd loaders pull their own dependencies.
+        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "font-src 'self' data:",
+        "connect-src 'self'",
+        "worker-src 'self' blob:",
+        "frame-ancestors 'self'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+      ].join("; ")
+    : [
+        // DEV ONLY: React Refresh requires unsafe-inline + unsafe-eval for
+        // its HMR runtime. Never shipped to production (documented §13).
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob:",
+        "font-src 'self' data:",
+        "connect-src 'self'",
+        "worker-src 'self' blob:",
+        "frame-ancestors 'self'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+      ].join("; ");
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  // Next.js reads the CSP from the REQUEST headers, extracts the nonce and
+  // stamps its own inline bootstrap scripts with it (App Router convention).
+  requestHeaders.set("content-security-policy", csp);
+
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
   const headers = res.headers;
+  headers.set("Content-Security-Policy", csp);
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("X-Frame-Options", "SAMEORIGIN");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
-  headers.set(
-    "Content-Security-Policy",
-    [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "connect-src 'self'",
-      "worker-src 'self' blob:",
-      "frame-ancestors 'self'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join("; ")
-  );
-  if (process.env.NODE_ENV === "production") {
+  if (isProduction) {
     headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
   }
   return res;

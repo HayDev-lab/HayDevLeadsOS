@@ -9,7 +9,9 @@ import {
   LEAD_EVENT,
   LEAD_STATUS,
   PRIORITY,
+  STAGE_SEMANTIC,
   STAGE_TYPE,
+  statusFromStageSemantic,
 } from "./constants";
 import { normalizeEmail, normalizePhone } from "./normalize";
 import { computeScore } from "./scoring";
@@ -52,7 +54,7 @@ export interface CreateLeadResult {
 async function recomputeScore(
   orgId: string,
   lead: { id: string; firstName?: string | null; lastName?: string | null; company?: string | null; phone?: string | null; email?: string | null; priority: string; estimatedValue?: number | null; sourceId?: string | null; stageId?: string | null; ownerId?: string | null },
-  stageName?: string | null,
+  stageSemanticCode?: string | null,
   auditData?: { automation: number; aiReadiness: number } | null
 ) {
   const rules = await db.scoringConfig.findMany({ where: { organizationId: orgId } });
@@ -62,14 +64,14 @@ async function recomputeScore(
       audit: auditData,
       estimatedValue: lead.estimatedValue,
       priority: lead.priority,
-      stageName: stageName ?? null,
+      stageSemanticCode: stageSemanticCode ?? null,
       firstName: lead.firstName,
       lastName: lead.lastName,
       company: lead.company,
       phone: lead.phone,
       email: lead.email,
       sourceType: source?.type ?? null,
-      hasMeetingRequestFlag: stageName === "Meeting" || stageName === "Proposal",
+      hasMeetingRequestFlag: stageSemanticCode === STAGE_SEMANTIC.MEETING || stageSemanticCode === STAGE_SEMANTIC.PROPOSAL,
       hasBudgetFlag: (lead.estimatedValue ?? 0) > 0,
     },
     rules.map((r) => ({ key: r.key, label: r.label, points: r.points, enabled: r.enabled }))
@@ -145,7 +147,7 @@ export async function createLead(
   // from the validated stage, never trusted from the input.
   let stageId = input.stageId ?? null;
   let pipelineId: string | null = null;
-  let stage: { id: string; name: string; type: string } | null = null;
+  let stage: { id: string; name: string; type: string; semanticCode: string } | null = null;
   if (stageId) {
     const guarded = await requireOrgStage(orgId, stageId);
     stageId = guarded.id;
@@ -165,8 +167,9 @@ export async function createLead(
   }
 
   const now = new Date();
-  const nextActionAt = input.nextActionAt ? new Date(input.nextActionAt) : (stage ? suggestNextAction(stage.name, now).nextActionAt : null);
-  const nextActionLabel = input.nextActionLabel ?? (stage ? suggestNextAction(stage.name, now).label : null);
+  // §12: follow-up suggestions read the STABLE semantic code, never the display name.
+  const nextActionAt = input.nextActionAt ? new Date(input.nextActionAt) : (stage ? suggestNextAction(stage.semanticCode, now).nextActionAt : null);
+  const nextActionLabel = input.nextActionLabel ?? (stage ? suggestNextAction(stage.semanticCode, now).label : null);
 
   // Auto-assignment: if no explicit owner, check assignment rules
   let ownerId = input.ownerId ?? null;
@@ -240,7 +243,7 @@ export async function createLead(
   }
 
   // recompute score
-  await recomputeScore(orgId, lead, stage?.name ?? null);
+  await recomputeScore(orgId, lead, stage?.semanticCode ?? null);
 
   // events + activity
   await db.activity.create({
@@ -351,7 +354,7 @@ export async function updateLead(
   }
 
   // recompute score (est value / priority may have changed)
-  await recomputeScore(orgId, updated, updated.stageId ? (await db.pipelineStage.findUnique({ where: { id: updated.stageId } }))?.name : null);
+  await recomputeScore(orgId, updated, updated.stageId ? (await db.pipelineStage.findUnique({ where: { id: updated.stageId } }))?.semanticCode : null);
 
   await db.activity.create({
     data: {
@@ -406,18 +409,9 @@ export async function changeStage(
     data: {
       stageId: stage.id,
       pipelineId: stage.pipelineId,
-      status:
-        stage.type === STAGE_TYPE.WON
-          ? LEAD_STATUS.WON
-          : stage.type === STAGE_TYPE.LOST
-          ? LEAD_STATUS.LOST
-          : stage.name === "New"
-          ? LEAD_STATUS.NEW
-          : stage.name === "Contacted"
-          ? LEAD_STATUS.CONTACTED
-          : stage.name === "Qualified"
-          ? LEAD_STATUS.QUALIFIED
-          : LEAD_STATUS.OPEN,
+      // §12: status derives from STABLE semantics (type + semanticCode),
+      // never the (renamable/localizable) display name.
+      status: statusFromStageSemantic(stage.semanticCode, stage.type),
       // STAGE INACTIVITY: a REAL transition restarts the stage timer.
       stageEnteredAt: new Date(),
     },
@@ -425,7 +419,7 @@ export async function changeStage(
 
   // suggest next action when moving to an open stage
   if (stage.type === STAGE_TYPE.OPEN) {
-    const s = suggestNextAction(stage.name);
+    const s = suggestNextAction(stage.semanticCode);
     await db.lead.update({
       where: { id: leadId },
       data: { nextActionAt: s.nextActionAt, nextActionLabel: s.label, lastContactAt: new Date() },
@@ -455,7 +449,7 @@ export async function changeStage(
   let eventType: typeof LEAD_EVENT[keyof typeof LEAD_EVENT] = LEAD_EVENT.STAGE_CHANGED;
   if (stage.type === STAGE_TYPE.WON) eventType = LEAD_EVENT.LEAD_WON;
   else if (stage.type === STAGE_TYPE.LOST) eventType = LEAD_EVENT.LEAD_LOST;
-  else if (stage.name === "Qualified") eventType = LEAD_EVENT.LEAD_QUALIFIED;
+  else if (stage.semanticCode === STAGE_SEMANTIC.QUALIFIED) eventType = LEAD_EVENT.LEAD_QUALIFIED;
   await publishEvent({
     orgId,
     leadId,
@@ -549,13 +543,8 @@ export async function archiveLead(orgId: string, leadId: string, userId: string 
 export async function restoreLead(orgId: string, leadId: string, userId: string | null) {
   const lead = await db.lead.findUnique({ where: { id: leadId }, include: { stage: true } });
   if (!lead || lead.organizationId !== orgId) throw new Error("LEAD_NOT_FOUND");
-  const status =
-    lead.stage?.type === "won" ? LEAD_STATUS.WON :
-    lead.stage?.type === "lost" ? LEAD_STATUS.LOST :
-    lead.stage?.name === "New" ? LEAD_STATUS.NEW :
-    lead.stage?.name === "Contacted" ? LEAD_STATUS.CONTACTED :
-    lead.stage?.name === "Qualified" ? LEAD_STATUS.QUALIFIED :
-    LEAD_STATUS.OPEN;
+  // §12: status derives from stable semantics, never display names.
+  const status = statusFromStageSemantic(lead.stage?.semanticCode ?? STAGE_SEMANTIC.CUSTOM, lead.stage?.type ?? STAGE_TYPE.OPEN);
   const updated = await db.lead.update({
     where: { id: leadId },
     data: { status, archivedAt: null },

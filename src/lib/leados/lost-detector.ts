@@ -1,14 +1,17 @@
 // LOST LEAD DETECTOR — deterministic rule engine. NOT "AI".
 // Inspects each active lead and produces flags explaining why it needs attention.
 
-import { FOLLOWUP, LOST_FLAG_REASON, PRIORITY, type LostFlagReason } from "./constants";
+import { FOLLOWUP, LOST_FLAG_REASON, PRIORITY, STAGE_SEMANTIC, type LostFlagReason } from "./constants";
 import { hoursSince, isOverdue } from "./followup";
 
 export interface DetectorLeadInput {
   id: string;
   status: string;
   stageType: string;
+  /** Display name — informational only, NEVER used for decisions (§12). */
   stageName?: string | null;
+  /** Stable semantic code — drives all detector decisions (§12). */
+  stageSemanticCode?: string | null;
   ownerId?: string | null;
   priority: string;
   createdAt: Date | string;
@@ -59,7 +62,7 @@ export function detectLeadFlags(lead: DetectorLeadInput, now: Date = NOW()): Det
   // 2. New lead with no contact past the contact window
   const sinceCreatedH = hoursSince(created, now);
   const sinceContactH = hoursSince(lastContact, now);
-  if (lead.status === "NEW" || (lead.stageName === "New")) {
+  if (lead.status === "NEW" || lead.stageSemanticCode === STAGE_SEMANTIC.NEW) {
     if (sinceContactH == null && sinceCreatedH != null && sinceCreatedH > FOLLOWUP.NEW_LEAD_CONTACT_WINDOW_HOURS) {
       flags.push({
         leadId: lead.id,
@@ -84,7 +87,7 @@ export function detectLeadFlags(lead: DetectorLeadInput, now: Date = NOW()): Det
   const sinceActivityH = hoursSince(lastActivity ?? lastContact, now);
   if (
     lead.stageType === "open" &&
-    lead.stageName !== "New" &&
+    lead.stageSemanticCode !== STAGE_SEMANTIC.NEW &&
     sinceActivityH != null &&
     sinceActivityH > FOLLOWUP.INACTIVE_HOURS
   ) {
@@ -97,7 +100,7 @@ export function detectLeadFlags(lead: DetectorLeadInput, now: Date = NOW()): Det
   }
 
   // 5. Proposal sent without a follow-up
-  if (lead.stageName === "Proposal") {
+  if (lead.stageSemanticCode === STAGE_SEMANTIC.PROPOSAL) {
     if (!next || isOverdue(next, now)) {
       flags.push({
         leadId: lead.id,
@@ -109,7 +112,7 @@ export function detectLeadFlags(lead: DetectorLeadInput, now: Date = NOW()): Det
   }
 
   // 6. Meeting completed without a next action
-  if (lead.stageName === "Meeting") {
+  if (lead.stageSemanticCode === STAGE_SEMANTIC.MEETING) {
     if (!next) {
       flags.push({
         leadId: lead.id,
