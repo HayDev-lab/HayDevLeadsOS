@@ -27,6 +27,7 @@ import { runEventReconciliation, type ReconciliationSummary } from "./event-reco
 import { runAutomationProcessor, type AutomationProcessorSummary } from "./automation-processor";
 import { fanoutNotificationDeliveries, type FanoutSummary } from "./delivery/fanout";
 import { runNotificationDeliveryWorker, type DeliveryWorkerResult } from "./delivery/delivery-worker";
+import { runMetaLeadWorker, type MetaWorkerSummary } from "./meta-worker";
 import {
   acquireWorkerLease,
   releaseWorkerLease,
@@ -41,7 +42,7 @@ import {
   WORKER_RUN_STATUS,
 } from "./worker-run-service";
 
-export type { ReconciliationSummary, AutomationProcessorSummary, FanoutSummary, DeliveryWorkerResult };
+export type { ReconciliationSummary, AutomationProcessorSummary, FanoutSummary, DeliveryWorkerResult, MetaWorkerSummary };
 
 export interface OrgRunResult {
   orgId: string;
@@ -56,6 +57,7 @@ export interface LeadOSWorkersResult {
   automations: (AutomationProcessorSummary & { error?: string }) | null;
   fanout: (FanoutSummary & { error?: string }) | null;
   delivery: (DeliveryWorkerResult["stats"] & { error?: string; leaseBusy?: boolean }) | null;
+  meta: (MetaWorkerSummary & { error?: string; leaseBusy?: boolean }) | null;
   durationMs: number;
   status: "SUCCESS" | "PARTIAL" | "FAILED" | "LEASE_BUSY";
   runId: string | null;
@@ -97,6 +99,7 @@ export async function runAllLeadOSWorkers(
     automations: null,
     fanout: null,
     delivery: null,
+    meta: null,
     durationMs: Date.now() - startedAt,
     status: "LEASE_BUSY",
     runId: runStart.id,
@@ -195,6 +198,24 @@ export async function runAllLeadOSWorkers(
       stepErrors.push("budget:delivery");
     }
 
+    // Step 5 — META LEAD ADS worker (v0.19, OWN lease: a Meta/Graph failure
+    // never blocks reconciliation/automation/delivery; LEASE_BUSY is OK).
+    let meta: LeadOSWorkersResult["meta"] = null;
+    if (budgetLeft() > 0) {
+      try {
+        const res = await runMetaLeadWorkerStep(trigger);
+        meta = res;
+        if (res.leaseBusy) stepErrors.push("meta:LEASE_BUSY");
+        else if (res.error) stepErrors.push("meta");
+      } catch (e) {
+        console.error("[LEADOS-WORKERS] meta worker failed:", e);
+        meta = { error: (e as Error)?.message ?? String(e) } as MetaWorkerSummary & { error?: string };
+        stepErrors.push("meta");
+      }
+    } else {
+      stepErrors.push("budget:meta");
+    }
+
     const durationMs = Date.now() - startedAt;
     const stats = {
       orgsProcessed: orgs.length,
@@ -217,6 +238,7 @@ export async function runAllLeadOSWorkers(
       automations: first?.automations ?? null,
       fanout: first?.fanout ?? null,
       delivery,
+      meta,
       durationMs,
       status,
       runId: runStart.id,
@@ -239,11 +261,38 @@ export async function runAllLeadOSWorkers(
       automations: orgs[0]?.automations ?? null,
       fanout: orgs[0]?.fanout ?? null,
       delivery: null,
+      meta: null,
       durationMs,
       status: "FAILED",
       runId: runStart.id,
       orgs,
       stats: { orgsProcessed: orgs.length, eventsScanned: 0, eventsProjected: 0, executionsCreated: 0, deliveriesCreated: 0, deliveriesSent: 0, stepErrors: [String((e as Error)?.message ?? e)] },
+    };
+  }
+}
+
+/** v0.19 Step 5 wrapper: run the Meta lead worker under its OWN lease so a
+ *  Meta/Graph failure never blocks other steps; LEASE_BUSY → next tick. */
+async function runMetaLeadWorkerStep(trigger: string): Promise<MetaWorkerSummary & { leaseBusy?: boolean; error?: string }> {
+  const runStart = await startWorkerRun(WORKER_RUN_TYPE.META, `${trigger}:meta`);
+  const lease = await acquireWorkerLease(WORKER_LEASE_TYPE.META, runStart.id, 90_000);
+  if (!lease.ok) {
+    await completeWorkerRun(runStart.id, WORKER_RUN_STATUS.FAILED, { error: "LEASE_BUSY", stats: { note: "Meta lease busy" } as never });
+    return { scanned: 0, processed: 0, completed: 0, deduplicated: 0, failed: 0, unmappedPage: 0, unmappedForm: 0, requeued: 0, reclaimedStale: 0, reauthTriggered: false, leaseBusy: true };
+  }
+  try {
+    const summary = await runMetaLeadWorker({ maxRunMs: 15_000 });
+    await heartbeatWorkerRun(runStart.id);
+    await completeWorkerRun(runStart.id, summary.failed > 0 ? WORKER_RUN_STATUS.PARTIAL : WORKER_RUN_STATUS.SUCCESS, { stats: summary as never });
+    await releaseWorkerLease(WORKER_LEASE_TYPE.META, runStart.id);
+    return summary;
+  } catch (e) {
+    await completeWorkerRun(runStart.id, WORKER_RUN_STATUS.FAILED, { error: (e as Error)?.message ?? String(e) } as never);
+    await releaseWorkerLease(WORKER_LEASE_TYPE.META, runStart.id);
+    return {
+      scanned: 0, processed: 0, completed: 0, deduplicated: 0, failed: 0,
+      unmappedPage: 0, unmappedForm: 0, requeued: 0, reclaimedStale: 0, reauthTriggered: false,
+      error: (e as Error)?.message ?? String(e),
     };
   }
 }

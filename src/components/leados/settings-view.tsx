@@ -29,6 +29,7 @@ import { WorkersTab } from "./settings/workers-tab";
 import { ProfileTab } from "./settings/profile-tab";
 import { TeamTab } from "./settings/team-tab";
 import { SecurityAuditTab } from "./settings/security-audit-tab";
+import { MetaLeadAdsCard } from "./settings/meta-lead-ads-card";
 import { useSession } from "@/hooks/leados/use-api";
 
 // v0.17: centralized permission constants (client mirror — the SERVER
@@ -328,7 +329,10 @@ function SourcesTab() {
   const { t } = useLocale();
   const sources = useSources();
   return (
-    <Card><CardContent className="p-0 divide-y">
+    <div className="space-y-3">
+      {/* v0.19 — META LEAD ADS connector lives in Settings → Lead Sources */}
+      <MetaLeadAdsCard />
+      <Card><CardContent className="p-0 divide-y">
       {(sources.data?.rows ?? []).map((s: any) => (
         <div key={s.id} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted/40 transition-colors">
           <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-muted">{s.type}</span>
@@ -338,6 +342,7 @@ function SourcesTab() {
         </div>
       ))}
     </CardContent></Card>
+    </div>
   );
 }
 

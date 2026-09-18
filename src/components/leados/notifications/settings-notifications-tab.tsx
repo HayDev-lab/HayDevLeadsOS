@@ -31,6 +31,7 @@ const PREF_LABEL_KEYS: Record<DomainEventType, string> = {
   STAGE_AGING: "notif.prefs.stage_aging",
   STAGE_BECAME_STALE: "notif.prefs.stage_stale",
   LEAD_ASSIGNED: "notif.prefs.lead_assigned",
+  LEAD_INGESTED: "notif.prefs.lead_ingested",
   TASK_ASSIGNED: "notif.prefs.task_assigned",
   TASK_DUE_SOON: "notif.prefs.task_due_soon",
   TASK_OVERDUE: "notif.prefs.task_overdue",

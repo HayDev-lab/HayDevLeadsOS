@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 export const WORKER_RUN_TYPE = {
   WORKERS: "LEADOS_WORKERS",
   DELIVERY: "NOTIFICATION_DELIVERY",
+  META: "META_LEAD_WORKER",
 } as const;
 export type WorkerRunType = (typeof WORKER_RUN_TYPE)[keyof typeof WORKER_RUN_TYPE];
 

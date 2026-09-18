@@ -60,6 +60,12 @@ model Organization {
   members                OrganizationMember[]
   invites                OrganizationInvite[]
   auditLogs              AuditLog[]
+  // v0.19 META LEAD ADS
+  metaConnection         MetaConnection?
+  metaPages              MetaPageConnection[]
+  metaForms              MetaLeadForm[]
+  metaWebhookEvents      MetaWebhookEvent[]
+  metaOAuthStates        MetaOAuthState[]
 }
 
 model User {
@@ -259,6 +265,7 @@ model LeadSource {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leads        Lead[]
+  metaForms    MetaLeadForm[] @relation("MetaFormLeadSource")
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -376,6 +383,7 @@ model Lead {
   incomingMessages  IncomingMessage[]
   integrationSyncs  IntegrationSync[]
   integrationEvents IntegrationEvent[]
+  metaWebhookEvents MetaWebhookEvent[]
   notifications     Notification[]
 
   @@index([organizationId])
@@ -1187,4 +1195,135 @@ model NotificationDelivery {
   @@index([organizationId, status, nextAttemptAt])
   @@index([notificationId])
   @@index([organizationId, channel, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// v0.19 — META LEAD ADS CONNECTOR
+//
+// ARCHITECTURE: Meta is ONLY an adapter onto the existing LeadOS core:
+//   webhook → durable MetaWebhookEvent → worker → Graph fetch → mapper →
+//   canonical ingestLead() → Lead → LEAD_INGESTED → SLA/Automation/Notification.
+// There is NO Meta-specific CRM logic anywhere.
+//
+// TENANT SECURITY: every connection/page/form row is organizationId-scoped;
+// routing pageId → organization is derived SERVER-side from page connections,
+// never from webhook payloads. leadgenId is globally unique (Meta guarantee)
+// and enforced here as the WEBHOOK IDEMPOTENCY KEY: same leadgenId ×10 → 1 row.
+// ---------------------------------------------------------------------------
+
+model MetaConnection {
+  id             String    @id @default(cuid())
+  organizationId String    @unique // ONE connection per org
+  status         String    @default("DISCONNECTED") // MetaConnectionStatus: DISCONNECTED | CONNECTED | REAUTH_REQUIRED | ERROR
+  appMode        String    @default("REAL") // REAL | DEMO (demo = zero Meta network)
+  displayName    String?
+  /// AES-256-GCM ciphertext. NEVER selected into any API/UI/log/audit payload.
+  tokenEncrypted String?
+  tokenExpiresAt DateTime?
+  scopes         String?
+  authError      String?
+  connectedAt    DateTime?
+  lastLeadAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pages        MetaPageConnection[]
+
+  @@index([organizationId, status])
+}
+
+model MetaPageConnection {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  connectionId       String
+  pageId             String // Meta Page ID (numeric string)
+  pageName           String?
+  subscriptionStatus String    @default("NOT_SUBSCRIBED") // SUBSCRIBED | NOT_SUBSCRIBED | ERROR
+  subscriptionError  String?
+  lastWebhookAt      DateTime?
+  lastLeadAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  connection   MetaConnection   @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  forms        MetaLeadForm[]
+
+  @@unique([organizationId, pageId])
+  @@index([connectionId])
+  @@index([pageId])
+}
+
+model MetaLeadForm {
+  id               String    @id @default(cuid())
+  organizationId   String
+  pageConnectionId String
+  formId           String // Meta Lead Gen Form ID (numeric string)
+  formName         String?
+  /// Live Meta form status (as last discovered).
+  status           String    @default("ACTIVE") // ACTIVE | PAUSED
+  /// LeadOS-side ingestion switch — NEWLY DISCOVERED FORMS START OFF (v0.19 spec:
+  //  "Новая form не auto-activate" — an unmapped form must never silently create leads).
+  active           Boolean   @default(false)
+  leadSourceId     String?
+  /// Field mapping [{ metaField, leadosField }] — the BACKEND MAPPER is the
+  /// source of truth; this is persisted configuration, not client output.
+  mapping          Json?
+  defaultOwnerId   String?
+  defaultStageId   String?
+  lastLeadAt       DateTime?
+  discoveredAt     DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  pageConnection MetaPageConnection @relation(fields: [pageConnectionId], references: [id], onDelete: Cascade)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadSource     LeadSource?        @relation("MetaFormLeadSource", fields: [leadSourceId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, formId])
+  @@index([pageConnectionId])
+  @@index([organizationId, active])
+}
+
+model MetaWebhookEvent {
+  id             String    @id @default(cuid())
+  /// Null until the page is routed to an org (UNMAPPED_PAGE keeps it null).
+  organizationId String?
+  pageId         String
+  formId         String
+  /// GLOBAL idempotency key — Meta leadgen IDs are globally unique. Same
+  /// leadgenId delivered 10× → ONE row → ONE ingestion chain, ever.
+  leadgenId      String    @unique
+  payload        Json
+  status         String    @default("PENDING") // PENDING | PROCESSING | COMPLETED | FAILED | UNMAPPED_PAGE | UNMAPPED_FORM
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
+  lastErrorCode  String?
+  lastErrorAt    DateTime?
+  leadId         String?
+  processedAt    DateTime?
+  receivedAt     DateTime  @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, status])
+  @@index([receivedAt])
+}
+
+model MetaOAuthState {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  /// Cryptographically random, single-use, expiry-bound.
+  state          String    @unique
+  redirectTo     String?
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }

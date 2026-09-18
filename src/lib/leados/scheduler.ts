@@ -62,6 +62,7 @@ export function startLeadOSScheduler(): void {
       console.log(
         `[LEADOS-SCHEDULER] run=${result.runId} status=${result.status} orgs=${result.stats.orgsProcessed} ` +
           `executions=${result.stats.executionsCreated} deliveriesSent=${result.stats.deliveriesSent} ` +
+          `metaProcessed=${result.meta?.processed ?? 0} metaFailed=${result.meta?.failed ?? 0} ` +
           `duration=${result.durationMs}ms`
       );
     } catch (e) {

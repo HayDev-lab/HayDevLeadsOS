@@ -40,6 +40,10 @@ export const DOMAIN_EVENT = {
   STAGE_AGING: "STAGE_AGING",
   STAGE_BECAME_STALE: "STAGE_BECAME_STALE",
   LEAD_ASSIGNED: "LEAD_ASSIGNED",
+  // v0.19: a lead entered LeadOS from an EXTERNAL integration channel (Meta
+  // Lead Ads, Business Audit, import...). Emitted by the canonical ingest
+  // wrapper — one per logical ingestion, deduplicated by source+external id.
+  LEAD_INGESTED: "LEAD_INGESTED",
   TASK_ASSIGNED: "TASK_ASSIGNED",
   TASK_DUE_SOON: "TASK_DUE_SOON",
   TASK_OVERDUE: "TASK_OVERDUE",
@@ -64,6 +68,7 @@ export type Severity = (typeof SEVERITY)[keyof typeof SEVERITY];
 /** Recommended severity per event type (spec Section 19). */
 export const EVENT_SEVERITY: Record<DomainEventType, Severity> = {
   [DOMAIN_EVENT.LEAD_ASSIGNED]: SEVERITY.INFO,
+  [DOMAIN_EVENT.LEAD_INGESTED]: SEVERITY.INFO,
   [DOMAIN_EVENT.TASK_ASSIGNED]: SEVERITY.INFO,
   [DOMAIN_EVENT.FOLLOW_UP_DUE_SOON]: SEVERITY.WARNING,
   [DOMAIN_EVENT.STAGE_AGING]: SEVERITY.WARNING,
@@ -152,6 +157,10 @@ export const NOTIFICATION_TEMPLATES: Record<DomainEventType, NotificationTemplat
     titleKey: "notif.lead_assigned.title",
     messageKey: "notif.lead_assigned.message",
   },
+  [DOMAIN_EVENT.LEAD_INGESTED]: {
+    titleKey: "notif.lead_ingested.title",
+    messageKey: "notif.lead_ingested.message",
+  },
   [DOMAIN_EVENT.TASK_ASSIGNED]: {
     titleKey: "notif.task_assigned.title",
     messageKey: "notif.task_assigned.message",
@@ -174,6 +183,7 @@ export const EVENT_LABEL_KEYS: Record<DomainEventType, string> = {
   [DOMAIN_EVENT.STAGE_AGING]: "notif.prefs.stage_aging",
   [DOMAIN_EVENT.STAGE_BECAME_STALE]: "notif.prefs.stage_stale",
   [DOMAIN_EVENT.LEAD_ASSIGNED]: "notif.prefs.lead_assigned",
+  [DOMAIN_EVENT.LEAD_INGESTED]: "notif.prefs.lead_ingested",
   [DOMAIN_EVENT.TASK_ASSIGNED]: "notif.prefs.task_assigned",
   [DOMAIN_EVENT.TASK_DUE_SOON]: "notif.prefs.task_due_soon",
   [DOMAIN_EVENT.TASK_OVERDUE]: "notif.prefs.task_overdue",
@@ -204,6 +214,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   [DOMAIN_EVENT.STAGE_AGING]: true,
   [DOMAIN_EVENT.STAGE_BECAME_STALE]: true,
   [DOMAIN_EVENT.LEAD_ASSIGNED]: true,
+  [DOMAIN_EVENT.LEAD_INGESTED]: true,
   [DOMAIN_EVENT.TASK_ASSIGNED]: true,
   [DOMAIN_EVENT.TASK_DUE_SOON]: true,
   [DOMAIN_EVENT.TASK_OVERDUE]: true,

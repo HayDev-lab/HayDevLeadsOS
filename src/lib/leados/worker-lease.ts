@@ -21,6 +21,7 @@ import { db } from "@/lib/db";
 export const WORKER_LEASE_TYPE = {
   WORKERS: "WORKERS",
   DELIVERY: "NOTIFICATION_DELIVERY",
+  META: "META_LEAD_WORKER",
 } as const;
 export type WorkerLeaseType = (typeof WORKER_LEASE_TYPE)[keyof typeof WORKER_LEASE_TYPE];
 
