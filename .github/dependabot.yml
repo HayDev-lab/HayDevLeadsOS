@@ -1,0 +1,42 @@
+# HAYDEV LEADOS — DEPENDENCY AUTOMATION (v0.20 §20).
+#
+# Weekly security/patch PRs for:
+#   • github-actions  — workflow action versions (checkout, setup-bun)
+#   • npm (bun.lock)  — runtime + dev dependencies
+#
+# Policy:
+#   • NO auto-merge — every update lands through the protected PR flow with
+#     the required "verify" CI gate (frozen install, tests, typecheck, lint,
+#     build, deployment guards).
+#   • Major bumps are reviewed manually (potential breaking changes).
+#   • GitHub Actions are tag-pinned (major version tags); Dependabot PRs
+#     move them forward deliberately instead of implicit drift.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - "dependencies"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    labels:
+      - "dependencies"
+    groups:
+      # Patch/minor updates batch together to keep PR noise low; majors stay
+      # separate for manual review.
+      patch-and-minor:
+        update-types:
+          - "patch"
+          - "minor"

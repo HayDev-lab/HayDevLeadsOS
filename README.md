@@ -1,5 +1,68 @@
 # HAYDEV LEADOS
 
+## Production (deploy)
+
+- **Toolchain**: Bun **1.3.14** (pinned in `.github/workflows/ci.yml` and
+  `package.json#packageManager`). CI never uses `latest` — bump via PR.
+- **Database (real production)**: external `DATABASE_URL` is REQUIRED —
+  the server fails fast at boot without it (`src/instrumentation.ts`).
+  Apply the schema with migrations only:
+  ```bash
+  DATABASE_URL=<external> bunx prisma migrate deploy   # never db push
+  ```
+  No database ships inside the artifact; there is no preview-DB promotion.
+- **Database (dev)**: `bun run db:dev:push` (the only
+  `--accept-data-loss` entry point, DEV-ONLY) or
+  `bunx prisma migrate dev`. The generic `db:push` script was removed.
+- **Packaged demo** (`LEADOS_DEMO=true`): built from scratch —
+  fresh SQLite → `prisma migrate deploy` → deterministic seed
+  (`bun run db:seed:demo`, refuses non-empty databases). The developer's
+  preview runtime DB is never copied into any artifact.
+- **Reverse proxy**: `Caddyfile.production` (fixed `localhost:3000`
+  upstream, `$LEADOS_DOMAIN`, edge security headers, NO CSP — the app owns
+  CSP). `Caddyfile.dev` is the sandbox development gateway only.
+- **CI / branch protection**: PR + push run the `verify` job (frozen
+  install → prisma generate/validate → migrate deploy on an isolated DB →
+  tests → typecheck → lint → build → deployment guards → clean-tree
+  check; no continue-on-error, 30-min timeout, concurrency-cancelling).
+  `main` requires the PR + the `verify` status; force-push and deletion
+  are disabled. Dependabot (npm + github-actions) files weekly update
+  PRs — nothing auto-merges.
+- **Content-Security-Policy**: production is nonce-based
+  (`strict-dynamic`, no `unsafe-eval`/script `unsafe-inline`). Known
+  residual: `style-src 'unsafe-inline'` (React inline styles + framework
+  `<style>` blocks — see `SECURITY.md`).
+- **Public-ingest rate limit**: state lives in the application database
+  (WebhookLog rows, 60 req / 60 s per source). With a shared production
+  `DATABASE_URL` the window is shared across app instances — no Redis
+  required. Check-then-insert is not atomic (bounded burst overshoot,
+  documented in the route header).
+- **Real Meta certification** requires external assets (Meta app + App
+  Review + Business Verification) — see the Meta section below. Without
+  them the app runs in demo mode with zero network calls.
+
+## Commands
+```bash
+bun run typecheck   # tsc --noEmit — 0 errors required
+bun test            # full suite (security, tenant, stage semantics, deployment guards…)
+bun run lint        # eslint — 0 errors
+bun run db:generate       # prisma generate
+bun run db:validate       # prisma validate
+bun run db:migrate:deploy # apply migrations (production path)
+bun run db:dev:push       # DEV-ONLY lossy push (local dev convenience)
+bun run db:seed:demo      # seed a FRESH migrated DB with the demo dataset
+```
+
+## v0.20 readiness note (architecture only — not implemented)
+
+The next major phase targets an **Omnichannel Inbox**. Planned model:
+`ExternalChannel` (per-source connection: Meta/WhatsApp/Telegram/…),
+`Conversation` (thread bound to a channel + contact/lead),
+`InboundMessage` (durable, exactly-once by provider message id), and
+explicit Contact ↔ Lead linkage. The current Meta connector already
+follows the shape (durable events → worker → mapper → canonical ingest);
+v0.20 generalizes it. No v0.20 code exists in this release.
+
 ## Meta Lead Ads Connector (v0.19)
 
 Meta is an **adapter onto the existing LeadOS core** — there is no Meta-specific CRM logic:
@@ -22,10 +85,3 @@ Meta is an **adapter onto the existing LeadOS core** — there is no Meta-specif
 - Access tokens are AES-256-GCM encrypted at rest and never returned by any API/UI/log.
 - Unconfigured real OAuth returns an explicit 503 blocker listing the missing env vars (v0.19.1) — never fake success.
 - The build is never green with TypeScript errors (`ignoreBuildErrors` removed; `bun run typecheck`).
-
-### Commands
-```bash
-bun run typecheck   # tsc --noEmit — 0 errors required
-bun test            # unit suites (encryption, webhook verify, mapper, errors, config, demo)
-bun run lint        # eslint — 0 errors
-```
