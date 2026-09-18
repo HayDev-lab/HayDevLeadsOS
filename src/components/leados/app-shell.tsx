@@ -6,7 +6,7 @@ import { useLocale } from "@/lib/leados/locale";
 import { useLostDetector, useSession, useSeed, useRunWorkers } from "@/hooks/leados/use-api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database, Inbox as InboxIcon, BarChart3, UserCircle, Zap } from "lucide-react";
 import { LangSwitcher, NotificationsBell, ThemeToggle, UserSwitcher } from "./header-controls";
 import { CommandPalette } from "./command-palette";
@@ -210,6 +210,12 @@ export function LeadOSApp() {
                 <Button variant="ghost" size="icon" className="h-8 w-8"><Menu className="h-5 w-5" /></Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0">
+                {/* a11y (§32 repair): Radix DialogContent requires a title —
+                    sr-only header stops the console error on mobile. */}
+                <SheetHeader className="sr-only">
+                  <SheetTitle>LeadOS navigation</SheetTitle>
+                  <SheetDescription>Mobile navigation drawer.</SheetDescription>
+                </SheetHeader>
                 <SidebarBrand org={org} />
                 <NavList currentView={currentView} attentionCount={attentionCount} inboxUnassigned={inboxUnassigned} onNavigate={() => setMobileOpen(false)} />
               </SheetContent>

@@ -18,7 +18,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "HAYDEV LeadOS — Lead Management",
   description: "Every lead has an owner. Every lead has a next action. Nothing gets lost. — HayDev LeadOS",
-  icons: { icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg" },
+  // v0.20 §32 repair: local same-origin icon — the previous external CDN URL
+  // was silently blocked by the production CSP (img-src 'self').
+  icons: { icon: "/logo.svg" },
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

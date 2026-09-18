@@ -89,6 +89,9 @@ export async function ingestLead(
     deduplicationKey: `LEAD_INGESTED:${input.channel}:${input.externalId}`,
     payload: {
       leadId: result.lead.id,
+      // v0.20 §32 repair: leadName feeds the {name} placeholder in
+      // notif.lead_ingested.message (was rendering empty).
+      leadName: [result.lead.firstName, result.lead.lastName].filter(Boolean).join(" ") || null,
       channel: input.channel,
       externalId: input.externalId,
       context: input.channelContext ?? null,
