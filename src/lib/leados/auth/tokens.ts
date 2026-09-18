@@ -24,3 +24,28 @@ export function safeEqualHex(a: string, b: string): boolean {
     return false;
   }
 }
+
+/**
+ * Constant-time string comparison for webhook verification tokens.
+ * Prevents timing attacks when comparing secrets.
+ */
+export function constantTimeCompare(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  
+  const aBuf = Buffer.from(a, "utf8");
+  const bBuf = Buffer.from(b, "utf8");
+  
+  // If lengths differ, still compare to avoid timing leak
+  const maxLen = Math.max(aBuf.length, bBuf.length);
+  const paddedA = Buffer.alloc(maxLen, 0);
+  const paddedB = Buffer.alloc(maxLen, 0);
+  
+  aBuf.copy(paddedA);
+  bBuf.copy(paddedB);
+  
+  try {
+    return timingSafeEqual(paddedA, paddedB) && a.length === b.length;
+  } catch {
+    return false;
+  }
+}
