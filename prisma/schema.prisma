@@ -1266,8 +1266,11 @@ model MetaPageConnection {
   forms        MetaLeadForm[]
 
   @@unique([organizationId, pageId])
+  /// v0.19.2 ROUTING INVARIANT (hardening §18): ONE Meta Page ID → ONE
+  /// LeadOS organization — webhook routing (pageId → org) is deterministic
+  /// and can never be ambiguous. Verified duplicate-free before applying.
+  @@unique([pageId])
   @@index([connectionId])
-  @@index([pageId])
 }
 
 model MetaLeadForm {
