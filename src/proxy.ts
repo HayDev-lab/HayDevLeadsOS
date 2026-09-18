@@ -23,7 +23,7 @@ const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const ORIGIN_EXEMPT = [
   "/api/v1/integrations/telegram/webhook", // secret-token verified
   "/api/v1/workers/run", // x-workers-secret verified
-  "/api/v1/leads/ingest", // public lead capture (rate-limited)
+  "/api/v1/leads/ingest", // public lead capture (source-token authenticated + DB rate-limited)
   "/api/v1/seed", // first-run demo bootstrap
 ];
 

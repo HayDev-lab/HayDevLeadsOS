@@ -263,12 +263,24 @@ model LeadSource {
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
 
+  // v0.19.2 PUBLIC INGEST CREDENTIAL (hardening §7) — hash-only storage.
+  // Token format: lsrc_<8-char-prefix>_<24-char-secret>. The full plaintext
+  // is revealed EXACTLY ONCE (create/rotate); afterwards only prefix + last4
+  // + timestamps exist server-side. SHA-256(token) is the stored secret.
+  tokenPrefix     String?
+  tokenHash       String?
+  tokenLast4      String?
+  tokenCreatedAt  DateTime?
+  tokenRevealedAt DateTime?
+  tokenDisabledAt DateTime?
+
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   leads        Lead[]
   metaForms    MetaLeadForm[] @relation("MetaFormLeadSource")
 
   @@unique([organizationId, name])
   @@index([organizationId])
+  @@index([tokenPrefix])
 }
 
 model Pipeline {
