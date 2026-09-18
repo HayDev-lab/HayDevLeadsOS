@@ -13,8 +13,18 @@
 // LOGGING: WebhookLog stores ONLY redacted diagnostics — field NAMES, no
 // values (no phone/email/answers), plus sourceId + requestId + status.
 //
-// RATE LIMIT: DB-backed per-source sliding window (durable across processes;
-// single SQLite instance — documented limitation, not claimed distributed).
+// RATE LIMIT (v0.20 §9 classification — honest, no inflated claims):
+//   State store: the APPLICATION DATABASE (WebhookLog rows) — NOT process
+//   memory. This means:
+//     • Packaged demo / dev (SQLite file): effectively single-instance.
+//     • Real production (external DATABASE_URL, e.g. Postgres): the window
+//       is SHARED by every app instance connected to that database — no
+//       Redis required for correct multi-instance limiting.
+//   Known non-atomicity: the check-then-insert sequence is not serialized;
+//   under extreme burst concurrency the window can overshoot slightly
+//   (bounded by in-flight requests). Documented, accepted for lead capture.
+//   Concurrency pinned by tests/public-ingest.test.ts (parallel requests
+//   are all durably counted).
 
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
