@@ -17,6 +17,7 @@ import {
   taskAssignedDedupKey,
 } from "@/lib/domain-events";
 import { publishDomainEvent } from "./domain-event-service";
+import { invalidateOrgCache } from "./api-cache";
 import { getAutomationExecutionContext } from "./automation-context";
 
 export interface CreateTaskInput {
@@ -95,5 +96,6 @@ export async function createTask(orgId: string, input: CreateTaskInput) {
       },
     });
   }
+  invalidateOrgCache(orgId);
   return task;
 }

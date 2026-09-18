@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Menu, Sparkles, AlertTriangle, Database, Inbox as InboxIcon, BarChart3, UserCircle, Zap } from "lucide-react";
-import { LangSwitcher, NotificationsBell, SearchTrigger, ThemeToggle, UserSwitcher } from "./header-controls";
+import { LangSwitcher, NotificationsBell, ThemeToggle, UserSwitcher } from "./header-controls";
+import { CommandPalette } from "./command-palette";
 import { DemoBadge } from "./primitives";
 import { toast } from "sonner";
 import { DashboardView } from "./dashboard-view";
@@ -204,7 +205,7 @@ export function LeadOSApp() {
             <span className="text-sm font-bold tracking-tight">LeadOS</span>
           </div>
           <div className="flex-1" />
-          <SearchTrigger />
+          <CommandPalette />
           <NotificationsBell />
           <LangSwitcher />
           <ThemeToggle />
@@ -266,6 +267,7 @@ function NavList({ currentView, attentionCount, inboxUnassigned, onNavigate }: {
               active ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent hover:text-foreground"
             )}
           >
+            {active && <span className="absolute left-0.5 top-1/2 -translate-y-1/2 h-5 w-1 rounded-full bg-primary-foreground/80" aria-hidden="true" />}
             <Icon className="h-4 w-4" />
             <span className="font-medium">{t(n.key)}</span>
             {badge > 0 && (

@@ -709,6 +709,11 @@ export function useAnalytics() {
         trend30: { date: string; count: number; won: number }[];
         respBuckets: Record<string, number>;
         funnel: { stage: string; type: string; color: string | null; count: number; value: number }[];
+        forecast: {
+          stages: { stage: string; color: string | null; count: number; value: number; probability: number; empirical: boolean; resolvedSamples: number; weightedValue: number }[];
+          weightedTotal: number; bestCase: number; commit: number; empiricalCoverage: number;
+          runRate: { last7Wins: number; last7Value: number; weeklyValue: number; weeklyCount: number };
+        };
         openPipelineValue: number; wonValue: number;
         sourceRoi: { type: string; name: string; count: number; won: number; lost: number; value: number; conversion: number }[];
       }>("/analytics"),

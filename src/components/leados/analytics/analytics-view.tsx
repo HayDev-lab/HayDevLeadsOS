@@ -346,6 +346,7 @@ type Forecast = {
   bestCase: number;
   commit: number;
   empiricalCoverage: number;
+  runRate?: { last7Wins: number; last7Value: number; weeklyValue: number; weeklyCount: number } | null;
 };
 
 function ForecastCard({ forecast }: { forecast: Forecast }) {
@@ -403,6 +404,26 @@ function ForecastCard({ forecast }: { forecast: Forecast }) {
                   </div>
                 </div>
               </div>
+
+              {/* weekly-won run-rate strip (v0.19) */}
+              {forecast.runRate && (
+                <UiTooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border border-dashed border-emerald-500/40 bg-emerald-500/[0.04] dark:bg-emerald-500/[0.06] px-3 py-2 cursor-help">
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span className="text-[11px] font-medium text-muted-foreground">{t("analytics.forecast.runrate")}</span>
+                      <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatMoney(forecast.runRate.weeklyValue)}</span>
+                      <span className="text-[10px] text-muted-foreground">{t("analytics.forecast.per_week")}</span>
+                      <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
+                        <Trophy className="h-2.5 w-2.5" /> {forecast.runRate.last7Wins} · 7d
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs max-w-64">
+                    {t("analytics.forecast.runrate_hint")}
+                  </TooltipContent>
+                </UiTooltip>
+              )}
 
               {/* per-stage breakdown */}
               <TooltipProvider delayDuration={150}>

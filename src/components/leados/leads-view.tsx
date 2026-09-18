@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLeads, useSources, useUsers, usePipeline, useTags, useArchiveLead, useBulkLeads, useRestoreLead, type LeadsQuery } from "@/hooks/leados/use-api";
 import { useSavedFilters } from "@/hooks/leados/use-saved-filters";
 import { useLocale } from "@/lib/leados/locale";
@@ -49,9 +49,18 @@ export function LeadsView() {
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const [newLeadOpen, setNewLeadOpen] = useState(false);
   const savedFilters = useSavedFilters();
   const restore = useRestoreLead();
   const limit = 25;
+
+  // COMMAND PALETTE (v0.19): the "new lead" quick action navigates here and
+  // fires `leados:new-lead` — we open the (controlled) create dialog.
+  useEffect(() => {
+    const fn = () => setNewLeadOpen(true);
+    window.addEventListener("leados:new-lead", fn);
+    return () => window.removeEventListener("leados:new-lead", fn);
+  }, []);
 
   const sources = useSources();
   const users = useUsers();
@@ -155,7 +164,7 @@ export function LeadsView() {
             <Button variant="outline" size="sm"><Upload className="h-4 w-4 mr-1.5" />{t("leads.import")}</Button>
           </ImportDialog>
           <Button variant="outline" size="sm" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />{t("leads.export")}</Button>
-          <LeadFormDialog><Button size="sm"><Plus className="h-4 w-4 mr-1.5" />{t("leads.new")}</Button></LeadFormDialog>
+          <LeadFormDialog open={newLeadOpen} onOpenChange={setNewLeadOpen}><Button size="sm"><Plus className="h-4 w-4 mr-1.5" />{t("leads.new")}</Button></LeadFormDialog>
         </div>
       </div>
 

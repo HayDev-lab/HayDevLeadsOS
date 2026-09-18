@@ -249,6 +249,34 @@ export async function getAnalytics(orgId: string) {
   const bestCase = forecastStages.reduce((a, x) => a + x.value, 0);
   const commit = forecastStages.filter((x) => x.probability >= 60).reduce((a, x) => a + x.weightedValue, 0);
   const empiricalStages = forecastStages.filter((x) => x.empirical).length;
+
+  // WEEKLY-WON RUN-RATE (v0.19): how fast revenue is actually landing.
+  // 7-day figure is the live pulse; the 30-day→per-week average is the
+  // smoother signal (a single big win in the last 7 days shouldn't read
+  // as the new normal).
+  const nowMs = Date.now();
+  const since7 = new Date(nowMs - 7 * 86400000);
+  const since30 = new Date(nowMs - 30 * 86400000);
+  const [won7, won30] = await Promise.all([
+    db.lead.aggregate({
+      where: { organizationId: orgId, status: "WON", updatedAt: { gte: since7 } },
+      _count: { _all: true },
+      _sum: { estimatedValue: true },
+    }),
+    db.lead.aggregate({
+      where: { organizationId: orgId, status: "WON", updatedAt: { gte: since30 } },
+      _count: { _all: true },
+      _sum: { estimatedValue: true },
+    }),
+  ]);
+  const runRate = {
+    last7Wins: won7._count._all,
+    last7Value: won7._sum.estimatedValue ?? 0,
+    // 30-day window scaled to a week (7/30) — the headline figure.
+    weeklyValue: Math.round(((won30._sum.estimatedValue ?? 0) * 7) / 30),
+    weeklyCount: Math.round(((won30._count._all * 7) / 30) * 10) / 10,
+  };
+
   const forecast = {
     stages: forecastStages,
     weightedTotal,
@@ -256,6 +284,7 @@ export async function getAnalytics(orgId: string) {
     commit,
     // How much of the forecast rests on real history vs. position estimates.
     empiricalCoverage: openStages.length > 0 ? Math.round((empiricalStages / openStages.length) * 100) : 0,
+    runRate,
   };
 
   return {

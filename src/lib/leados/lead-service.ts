@@ -25,6 +25,7 @@ import {
   leadAssignedDedupKey,
 } from "@/lib/domain-events";
 import { publishDomainEvent } from "./domain-event-service";
+import { invalidateOrgCache } from "./api-cache";
 import {
   resolveAllLeadProblems,
   resolveStageNotifications,
@@ -256,6 +257,7 @@ export async function createLead(
   }
 
   const full = await db.lead.findUniqueOrThrow({ where: { id: lead.id }, include: { stage: true, source: true, owner: true } });
+  invalidateOrgCache(orgId);
   return { lead: full, duplicate, created: true };
 }
 
@@ -350,6 +352,7 @@ export async function updateLead(
     await emitLeadAssigned(orgId, updated, userId);
   }
 
+  invalidateOrgCache(orgId);
   return db.lead.findUniqueOrThrow({ where: { id: leadId }, include: { stage: true, source: true, owner: true, leadTags: { include: { tag: true } } } });
 }
 
@@ -442,6 +445,7 @@ export async function changeStage(
   // lead — the deal moved, the stale/aging alert is no longer actual.
   await resolveStageNotifications(orgId, leadId);
 
+  invalidateOrgCache(orgId);
   return db.lead.findUniqueOrThrow({ where: { id: leadId }, include: { stage: true } });
 }
 
@@ -481,6 +485,7 @@ export async function assignLead(
   if (lead.ownerId !== ownerId) {
     await emitLeadAssigned(orgId, updated, userId);
   }
+  invalidateOrgCache(orgId);
   return updated;
 }
 
@@ -510,6 +515,7 @@ export async function archiveLead(orgId: string, leadId: string, userId: string 
   // EVENT ENGINE: an archived lead is not monitored by any engine — every
   // active problem notification for it resolves (history is kept).
   await resolveAllLeadProblems(orgId, leadId);
+  invalidateOrgCache(orgId);
   return updated;
 }
 
@@ -536,6 +542,7 @@ export async function restoreLead(orgId: string, leadId: string, userId: string 
       title: "Lead restored from archive",
     },
   });
+  invalidateOrgCache(orgId);
   return updated;
 }
 
@@ -596,6 +603,7 @@ export async function mergeLeads(
     type: LEAD_EVENT.LEAD_MERGED,
     payload: { sourceId } as Prisma.InputJsonValue,
   });
+  invalidateOrgCache(orgId);
   return db.lead.findUniqueOrThrow({ where: { id: targetId } });
 }
 

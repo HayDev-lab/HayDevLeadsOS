@@ -1209,3 +1209,38 @@ Stage Summary:
 - All round-2 suggestions except stage-name i18n overlay are done.
 - Open risks: (a) dashboard now fires the analytics query (heavier — ~6 extra DB aggregate scans) on every dashboard visit; acceptable for demo scale, worth caching if orgs grow; (b) OOM fragility still present (browser closed when idle this round, no incidents); (c) stage names still English-by-design.
 - Next round suggestions: (1) API-level caching for analytics/dashboard (in-memory TTL cache — matches "local memory caching" stack rule); (2) weekly-won run-rate line in forecast card; (3) keyboard shortcut palette (⌘K search exists — verify and extend to actions); (4) lead detail: revenue-impact badge when lead stage changes.
+
+---
+Task ID: round4-1
+Agent: main (Z.ai Code webDevReview)
+Task: Scheduled 15-min review: assess stability, then implement round-3 suggestions — command palette, API-level caching, forecast run-rate + styling polish.
+
+Work Log:
+- STATUS CHECK: server healthy (scheduler SUCCESS cycles, dev.log clean), dashboard renders, zero console errors.
+- NEW FEATURE 1 — Command Palette ⌘K (v0.19, src/components/leados/command-palette.tsx):
+  * Full replacement of the old lead-only SearchTrigger (deleted from header-controls.tsx; app-shell now renders CommandPalette).
+  * Groups: LEADS (server /search results ≥2 chars, avatar + name + company·phone + stage chip + ↵ icon), GO TO (all 9 sidebar views + notifications "view all"), ACTIONS (New lead → navigates to #/leads and fires `leados:new-lead` custom event; Toggle dark mode), LANGUAGE (hy/ru/en with current-locale marker).
+  * Built on shadcn command.tsx (cmdk) composed directly with Dialog (CommandDialog wrapper can't pass shouldFilter=false).
+  * shouldFilter=false + manual client-side filtering of static groups — server-returned leads never hidden by cmdk's local fuzzy filter; own empty state (icon + no-results + hint), searching spinner strip under input, kbd footer (↑↓ · hint · ⌘K), mobile icon trigger + desktop input-look trigger with focus-visible ring.
+  * LeadFormDialog now supports CONTROLLED mode (open/onOpenChange props, internal-state fallback); LeadsView listens for `leados:new-lead` and opens the dialog.
+  * i18n: +16 palette keys ×3 locales.
+- NEW FEATURE 2 — API response cache (src/lib/leados/api-cache.ts):
+  * cached(key, ttl, fn) per-org TTL cache, 512-entry insert-order eviction, lazy expiry sweep; invalidateOrgCache() drops all scopes for an org.
+  * WIRED: /analytics (90s TTL) + /dashboard (45s TTL).
+  * INVALIDATION: lead-service createLead/updateLead/changeStage/assignLead/archiveLead/restoreLead/mergeLeads + task-service createTask + tasks/[id] PATCH/DELETE + leads/bulk POST (raw updateMany path). Import/ingest covered via createLead.
+  * CRITICAL FIX during QA: module-level Map was DUPLICATED per Turbopack route graph (invalidation from lead-service never reached the analytics route's copy — served stale 31 vs 32). Fixed by moving the store to globalThis.__leadosApiCache (same singleton pattern as db.ts Prisma client).
+  * MEASURED: analytics 406ms → 14ms (28x) cached; dashboard 124ms → 11ms (11x); after a lead mutation the next call recomputes (verified totalLeads 31 → 32 → 31 with create/delete probe).
+- NEW FEATURE 3 — Weekly-won run-rate (forecast):
+  * analytics-service: forecast.runRate {last7Wins, last7Value, weeklyValue (30d×7/30 smoothed), weeklyCount}.
+  * ForecastCard: dashed emerald strip under the range bar — TrendingUp icon, "Run-rate (30d)" label, bold weekly value, "per week", right-aligned "{n} · 7d" wins pill; full hint in tooltip.
+  * TYPE FIX (latent round-2 bug): useAnalytics return type was missing `forecast` entirely — added full forecast + runRate typing.
+- STYLING: sidebar active nav item now has a left accent bar (primary-foreground/80 pill, also visible on mobile sheet); cmdk selected items get a 2px primary left accent via globals.css [data-slot=command-item][data-selected=true]; palette trigger focus-visible ring; run-rate strip itself is a new visual element (dashed emerald).
+- REACT COMPILER fixes: removed useMemo around trivial filters in palette (compiler rejected the match-closure dependency pattern); removed unused eslint-disable directives; renamed lucide Command icon import (clashed with cmdk Command).
+- VERIFY: ESLint PASS (0 issues), tsc --noEmit PASS (src/), dev.log 0 errors, browser QA round4-qa/01-11: palette opens via ⌘K (placeholder "Որոնում կամ անցում…"), lead search "ann" → 3 results (Anna/Hovhannes/Anahit with avatars), Enter → lead detail, "analytics" → #/analytics, "Նոր լիդ" → #/leads + create dialog opens, theme toggle → dark on, language switch EN → instant ("Analytics" h1, "Run-rate (30d) 1.1M AMD per week") and back to hy, empty state ("Արդյունքներ չկան։"), run-rate strip renders light+dark (hy+en), mobile 390×844 no horizontal overflow, sidebar active indicator confirmed in DOM, VLM review of palette + dark analytics: clean, no defects, zero console errors. Locale and theme restored to original (hy / light).
+- NOTE: probe leads cleaned up (created 3, deleted 3 — DB back to 31 leads).
+
+Stage Summary:
+- ⌘K is now a full command palette (search + navigation + actions + language), the forecast card answers "how fast is revenue landing", and the heaviest read APIs are cached with correct mutation-driven invalidation.
+- Cache is single-process by design (matches local-memory-caching stack rule); multi-instance deployments would need per-node or shared caching.
+- Open risks: (a) OOM fragility unchanged (browser closed when idle this round, no incidents); (b) forecast commit threshold still hardcoded 60%; (c) stage names still English-by-design; (d) settings/pipeline mutations are not cache-invalidated (bounded by TTL 45-90s, acceptable).
+- Next round suggestions: (1) recently-viewed leads section in the palette (localStorage history); (2) lead-detail revenue-impact badge when stage changes (round-3 leftover); (3) cache TTL/invalidation for /team and /inbox stats; (4) stage-name i18n overlay; (5) keyboard shortcut hints in sidebar tooltips.

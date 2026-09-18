@@ -11,6 +11,7 @@ import {
   taskAssignedDedupKey,
 } from "@/lib/domain-events";
 import { publishDomainEvent } from "@/lib/leados/domain-event-service";
+import { invalidateOrgCache } from "@/lib/leados/api-cache";
 import {
   resolveFollowUpNotifications,
   resolveTaskNotifications,
@@ -105,6 +106,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         await resolveTaskNotifications(session.orgId, id);
       }
     }
+    invalidateOrgCache(session.orgId);
     return ok({ task: updated });
   } catch (e) {
     return apiError("task-update-failed", e);
@@ -126,6 +128,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       await resolveTaskNotifications(session.orgId, id);
     }
     await db.task.delete({ where: { id } });
+    invalidateOrgCache(session.orgId);
     return ok({ ok: true });
   } catch (e) {
     return apiError("task-delete-failed", e);

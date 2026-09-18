@@ -15,8 +15,15 @@ import { AlertTriangle, Loader2, UserPlus, ExternalLink, GitMerge } from "lucide
 import { LeadAvatar } from "./primitives";
 import { cn } from "@/lib/utils";
 
-export function LeadFormDialog({ children, defaultStageId }: { children?: ReactNode; defaultStageId?: string }) {
-  const [open, setOpen] = useState(false);
+export function LeadFormDialog({ children, defaultStageId, open: openProp, onOpenChange }: { children?: ReactNode; defaultStageId?: string; open?: boolean; onOpenChange?: (v: boolean) => void }) {
+  const [openInternal, setOpenInternal] = useState(false);
+  // Controlled mode (command palette "new lead" action) falls back to
+  // internal state when the props are not provided.
+  const open = openProp ?? openInternal;
+  const setOpen = (v: boolean) => {
+    setOpenInternal(v);
+    onOpenChange?.(v);
+  };
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
   const [company, setCompany] = useState("");

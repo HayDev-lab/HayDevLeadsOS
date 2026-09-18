@@ -7,6 +7,7 @@ import { ok, badRequest, apiError, validate, parseJson } from "@/lib/leados/api"
 import { z } from "zod";
 import { ACTIVITY_TYPE, LEAD_EVENT } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
+import { invalidateOrgCache } from "@/lib/leados/api-cache";
 
 const BulkAction = z.object({
   ids: z.array(z.string().min(1)).min(1).max(200),
@@ -68,6 +69,7 @@ export async function POST(req: Request) {
       }
     }
 
+    invalidateOrgCache(session.orgId);
     return ok({ updated, total: leads.length });
   } catch (e) {
     return apiError("bulk-failed", e);
