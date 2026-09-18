@@ -87,7 +87,7 @@ export function LeadFormDialog({ children, defaultStageId }: { children?: ReactN
             <Label className="text-xs">{t("common.name")} *</Label>
             <div className="grid grid-cols-2 gap-2">
               <Input placeholder={t("common.name")} value={first} onChange={(e) => setFirst(e.target.value)} />
-              <Input placeholder="Surname" value={last} onChange={(e) => setLast(e.target.value)} />
+              <Input placeholder={t("common.surname")} value={last} onChange={(e) => setLast(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1">
@@ -150,7 +150,7 @@ export function LeadFormDialog({ children, defaultStageId }: { children?: ReactN
           </div>
           <div className="col-span-2 space-y-1">
             <Label className="text-xs">{t("common.note")}</Label>
-            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Initial note…" />
+            <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("lead.note_placeholder")} />
           </div>
         </div>
         {dupInfo && (

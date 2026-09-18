@@ -179,6 +179,85 @@ export async function getAnalytics(orgId: string) {
   }
   const sourceRoi = Array.from(sourceRoiMap.values()).sort((a, b) => b.count - a.count);
 
+  // ---------------------------------------------------------------------------
+  // REVENUE FORECAST — stage-weighted pipeline (v0.18).
+  // Win probability per OPEN stage is computed EMPIRICALLY from stage history:
+  // p(S) = won-after-reaching-S / resolved-after-reaching-S (min 2 samples).
+  // Stages without enough history fall back to a position-based estimate and
+  // are flagged `empirical: false` — the UI never presents estimates as facts.
+  // ---------------------------------------------------------------------------
+  const stageChangeActs = await db.activity.findMany({
+    where: { organizationId: orgId, type: "STAGE_CHANGE" },
+    select: { leadId: true, metadata: true },
+  });
+  // leadId -> set of stageIds the lead ever occupied (from transition history)
+  const leadStages = new Map<string, Set<string>>();
+  const addReached = (leadId: string, stageId: string) => {
+    let s = leadStages.get(leadId);
+    if (!s) {
+      s = new Set();
+      leadStages.set(leadId, s);
+    }
+    s.add(stageId);
+  };
+  for (const a of stageChangeActs) {
+    const to = (a.metadata as { to?: string } | null)?.to;
+    if (to) addReached(a.leadId, to);
+  }
+  // Resolved leads: which open stages did they pass through before resolving?
+  const resolvedLeads = await db.lead.findMany({
+    where: { organizationId: orgId, status: { in: ["WON", "LOST"] } },
+    select: { id: true, status: true },
+  });
+  // Open leads currently parked at each stage (value exposed to forecast)
+  const openLeads = await db.lead.findMany({
+    where: { organizationId: orgId, status: { notIn: ["WON", "LOST", "ARCHIVED"] } },
+    select: { id: true, stageId: true, estimatedValue: true },
+  });
+  for (const l of openLeads) if (l.stageId) addReached(l.id, l.stageId);
+
+  const openStages = stages.filter((s) => !s.isWon && !s.isLost);
+  const forecastStages = openStages.map((s, idx) => {
+    const reachedCount = { won: 0, lost: 0 };
+    for (const rl of resolvedLeads) {
+      const reached = leadStages.get(rl.id);
+      if (!reached || !reached.has(s.id)) continue;
+      if (rl.status === "WON") reachedCount.won++;
+      else reachedCount.lost++;
+    }
+    const resolvedHere = reachedCount.won + reachedCount.lost;
+    const empirical = resolvedHere >= 2;
+    // Position-based fallback: even progression across open stages (14%..86%
+    // for 6 stages). Flagged as an estimate — never shown as a historical fact.
+    const probability = empirical
+      ? Math.round((reachedCount.won / resolvedHere) * 100)
+      : Math.round(((idx + 1) / (openStages.length + 1)) * 100);
+    const count = stageMap.get(s.id) ?? 0;
+    const value = valueMap.get(s.id) ?? 0;
+    return {
+      stage: s.name,
+      color: s.color,
+      count,
+      value,
+      probability,
+      empirical,
+      resolvedSamples: resolvedHere,
+      weightedValue: Math.round((value * probability) / 100),
+    };
+  });
+  const weightedTotal = forecastStages.reduce((a, x) => a + x.weightedValue, 0);
+  const bestCase = forecastStages.reduce((a, x) => a + x.value, 0);
+  const commit = forecastStages.filter((x) => x.probability >= 60).reduce((a, x) => a + x.weightedValue, 0);
+  const empiricalStages = forecastStages.filter((x) => x.empirical).length;
+  const forecast = {
+    stages: forecastStages,
+    weightedTotal,
+    bestCase,
+    commit,
+    // How much of the forecast rests on real history vs. position estimates.
+    empiricalCoverage: openStages.length > 0 ? Math.round((empiricalStages / openStages.length) * 100) : 0,
+  };
+
   return {
     totalLeads,
     won: wonCount,
@@ -192,6 +271,7 @@ export async function getAnalytics(orgId: string) {
     trend30,
     respBuckets,
     funnel,
+    forecast,
     openPipelineValue: openValueRaw._sum.estimatedValue ?? 0,
     wonValue: wonValueRaw._sum.estimatedValue ?? 0,
     sourceRoi,

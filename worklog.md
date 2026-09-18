@@ -1156,3 +1156,29 @@ Stage Summary:
 - Demo login is enabled (LEADOS_DEMO=true) — opening / shows the app with an implicit demo session.
 - No code changes were needed; the repo ships a complete, self-consistent app + database.
 - Verification artifacts: download/clone-verify/01..07*.png
+
+---
+Task ID: round2-1
+Agent: main (Z.ai Code webDevReview)
+Task: Scheduled 15-min review: QA the untested views, fix findings, add features (forecast + i18n), improve styling.
+
+Work Log:
+- QA'd all previously untested views via agent-browser (Analytics, Automations, Tasks, Inbox, Team, Settings) — all render, zero console errors. Screenshots in download/round2-qa/ (01–15).
+- VLM-assisted UI review. Findings triage: settings 16-tab wrap = acceptable; team red dot = intentional critical pulse; analytics funnel "truncation" = below-fold scroll.
+- REAL FINDING 1: systematic i18n gap — Team view fully English, Analytics ~20 hardcoded strings, lead dialog ("Surname", "Initial note…").
+- REAL FINDING 2 (false alarm resolved): "stuck" lead dialog was the DUPLICATE DETECTOR working as designed — typed phone matched Vega Logistics exactly; amber banner shown, no lead created. API POST verified separately (probe lead cleaned up).
+- NEW FEATURE — Revenue Forecast (v0.18):
+  * Backend (analytics-service.ts): per-OPEN-stage win probability computed EMPIRICALLY from STAGE_CHANGE activity history (p = won-after-reaching / resolved-after-reaching, min 2 samples); stages without history fall back to position-based estimate flagged empirical:false (never presented as fact). Returns stages[] + weightedTotal + bestCase + commit (≥60%) + empiricalCoverage.
+  * Frontend (analytics-view.tsx): new ForecastCard — gradient headline number, commit→forecast→best-case range bar with markers, per-stage rows (count, value, probability chip with tooltip showing empirical/estimate + sample size, weighted value bar; hatched style for estimates), staggered framer-motion entrance, mobile 2-line layout, hint line. Empirical chips solid, estimate chips dashed-border muted.
+  * Seed (seed.ts): new SeedLead fields entryStageIdx/lostAtStageIdx; resolved leads now get FULL transition history (entry→furthest open→terminal, deterministic timestamps, metadata.to on every hop); open leads' single activity now carries metadata. Demo design: Mher W full path, Gayane W enters at Qualified (business_audit), Pavel L lost at Negotiation, Anahit L lost at Proposal.
+  * Backfill script (scripts/backfill-forecast-history.ts): synthesized histories for the 4 pre-existing resolved leads + repaired metadata.to on 22 old activities. Idempotent. Result: 100% empirical coverage, probabilities 33/33/50/50/50/67%, samples 3/3/4/4/4/3.
+- I18N: +95 keys ×3 locales (hy/ru/en) — full Team view, all Analytics card titles/descriptions/bucket labels/ROI table headers, forecast keys, common.surname, lead.note_placeholder.
+- STYLING: KPI cards get leados-lift hover + entrance motion; heatmap cells scale on hover; forecast card gradient header; probability bars with hatched estimate pattern.
+- INFRA INCIDENT: dev server killed by OOM killer twice (next-server ~2GB RSS + stale Chromium renderers ~700MB on 4.1GB machine). Fixed: closed stale browser daemon; restarted with the persistent pattern `(nohup bun run dev &)`. Server now stable across commands. NOTE for future rounds: close agent-browser between test batches; if next-server RSS > ~1.5GB, schedule a restart.
+- VERIFY: lint PASS (0 issues); dev.log clean (0 errors); API /analytics returns forecast; browser QA — forecast card renders (light+dark, hy+ru), Team view localized (hy/ru verified in DOM), lead dialog placeholders localized, locale restored to hy; screenshots 11–15.
+
+Stage Summary:
+- App stable; new Revenue Forecast feature fully working with honest empirical/estimate distinction.
+- i18n coverage now includes Team + Analytics + lead form; stage NAMES remain English by design (org-configurable data, consistent across locales).
+- Open risks: (a) OOM fragility on this 4.1GB sandbox — keep browser closed when idle; (b) forecast commit threshold hardcoded 60%; (c) forecast samples depend on stage history — CSV-imported leads without transitions undercount "reached" stages.
+- Next round suggestions: restart-safe server monitoring; consider localizing seeded stage names per-locale (needs stageName i18n overlay); dashboard mini-forecast widget; weekly-won run-rate in forecast card.

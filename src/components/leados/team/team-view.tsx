@@ -40,27 +40,27 @@ export function TeamView() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Users className="h-6 w-6" />
-          Team Performance
+          {t("team.title")}
         </h1>
-        <p className="text-sm text-muted-foreground">Per-user metrics · deterministic · no fake numbers</p>
+        <p className="text-sm text-muted-foreground">{t("team.subtitle")}</p>
       </div>
 
       {/* team totals KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <TeamKpi icon={Users} label="Team size" value={String(totals.userCount ?? 0)} accent="#0ea5e9" />
-        <TeamKpi icon={TrendingUp} label="Active leads" value={String(totals.totalActive ?? 0)} accent="#8b5cf6" />
-        <TeamKpi icon={Trophy} label="Won" value={String(totals.totalWon ?? 0)} accent="#16a34a" />
-        <TeamKpi icon={Target} label="Lost" value={String(totals.totalLost ?? 0)} accent="#dc2626" />
-        <TeamKpi icon={Clock} label="Open tasks" value={String(totals.totalOpenTasks ?? 0)} accent="#f59e0b" />
-        <TeamKpi icon={AlertTriangle} label="Overdue" value={String(totals.totalOverdue ?? 0)} accent="#ef4444" critical />
+        <TeamKpi icon={Users} label={t("team.size")} value={String(totals.userCount ?? 0)} accent="#0ea5e9" />
+        <TeamKpi icon={TrendingUp} label={t("team.active")} value={String(totals.totalActive ?? 0)} accent="#8b5cf6" />
+        <TeamKpi icon={Trophy} label={t("team.won")} value={String(totals.totalWon ?? 0)} accent="#16a34a" />
+        <TeamKpi icon={Target} label={t("team.lost")} value={String(totals.totalLost ?? 0)} accent="#dc2626" />
+        <TeamKpi icon={Clock} label={t("team.open_tasks")} value={String(totals.totalOpenTasks ?? 0)} accent="#f59e0b" />
+        <TeamKpi icon={AlertTriangle} label={t("team.overdue")} value={String(totals.totalOverdue ?? 0)} accent="#ef4444" critical />
       </div>
 
       {/* chart: won vs active per user */}
       {users.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Trophy className="h-4 w-4" />Won vs Active leads per user</CardTitle>
-            <CardDescription className="text-xs">Pipeline value (K) shown as bars</CardDescription>
+            <CardTitle className="text-sm flex items-center gap-2"><Trophy className="h-4 w-4" />{t("team.chart.title")}</CardTitle>
+            <CardDescription className="text-xs">{t("team.chart.desc")}</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="h-56 w-full">
@@ -70,8 +70,8 @@ export function TeamView() {
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
                   <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} allowDecimals={false} />
                   <Tooltip contentStyle={{ background: "var(--background)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} />
-                  <Bar dataKey="active" fill="#0ea5e9" name="Active" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="won" fill="#16a34a" name="Won" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="active" fill="#0ea5e9" name={t("team.series.active")} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="won" fill="#16a34a" name={t("team.won")} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -81,7 +81,7 @@ export function TeamView() {
 
       {/* user cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {users.length === 0 && <Card><CardContent><EmptyState icon={Users} title="No team members" /></CardContent></Card>}
+        {users.length === 0 && <Card><CardContent><EmptyState icon={Users} title={t("team.no_members")} /></CardContent></Card>}
         {users.map((u, i) => (
           <motion.div
             key={u.userId}
@@ -104,27 +104,27 @@ export function TeamView() {
                 </div>
                 {/* metrics grid */}
                 <div className="grid grid-cols-4 gap-2 text-center">
-                  <Metric label="Leads" value={u.totalAssigned} color="text-sky-600 dark:text-sky-400" />
-                  <Metric label="Won" value={u.won} color="text-emerald-600 dark:text-emerald-400" />
-                  <Metric label="Lost" value={u.lost} color="text-rose-600 dark:text-rose-400" />
-                  <Metric label="Tasks" value={u.openTasks} color="text-amber-600 dark:text-amber-400" />
+                  <Metric label={t("team.leads")} value={u.totalAssigned} color="text-sky-600 dark:text-sky-400" />
+                  <Metric label={t("team.won")} value={u.won} color="text-emerald-600 dark:text-emerald-400" />
+                  <Metric label={t("team.lost")} value={u.lost} color="text-rose-600 dark:text-rose-400" />
+                  <Metric label={t("team.tasks")} value={u.openTasks} color="text-amber-600 dark:text-amber-400" />
                 </div>
                 {/* extra metrics */}
                 <div className="space-y-1.5 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />Avg response</span>
+                    <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />{t("team.avg_response")}</span>
                     <span className="font-medium tabular-nums">{u.avgResponseHours != null ? `${u.avgResponseHours}h` : "—"}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Overdue tasks</span>
+                    <span className="text-muted-foreground flex items-center gap-1"><AlertTriangle className="h-3 w-3" />{t("team.overdue_tasks")}</span>
                     <span className={cn("font-medium tabular-nums", u.overdueTasks > 0 && "text-red-500")}>{u.overdueTasks}</span>
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t">
-                    <span className="text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" />Won value</span>
+                    <span className="text-muted-foreground flex items-center gap-1"><DollarSign className="h-3 w-3" />{t("team.won_value")}</span>
                     <span className="font-semibold tabular-nums">{formatMoney(u.wonValue)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" />Pipeline</span>
+                    <span className="text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" />{t("team.pipeline")}</span>
                     <span className="font-semibold tabular-nums">{formatMoney(u.pipelineValue)}</span>
                   </div>
                 </div>

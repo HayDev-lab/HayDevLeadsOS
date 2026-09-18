@@ -78,6 +78,19 @@ interface SeedLead {
   stageAgeHours?: number;
   meetingRequested?: boolean;
   budgetFlag?: boolean;
+  /**
+   * FORECAST demo: stage index the lead ENTERED the funnel at (default 0/New).
+   * business_audit leads typically enter at Qualified (audit → hot lead).
+   * Only used for RESOLVED (won/lost) leads — open leads keep their single
+   * "Moved to X" activity.
+   */
+  entryStageIdx?: number;
+  /**
+   * FORECAST demo: furthest OPEN stage a LOST lead reached before losing
+   * (default: last open stage before Lost). Controls empirical win-rate
+   * sample distribution per stage.
+   */
+  lostAtStageIdx?: number;
 }
 
 const LEADS: SeedLead[] = [
@@ -96,9 +109,9 @@ const LEADS: SeedLead[] = [
   { first: "Arman", last: "Gevorgyan", company: "AutoPro Service", phone: "+37492221100", email: "arman@autopro.am", sourceType: "referral", stageIndex: 5, priority: PRIORITY.URGENT, ownerIdx: 2, est: 2800000, summary: "Negotiating — service center management", stageAgeHours: 118, createdAtDaysAgo: 18, lastContactHoursAgo: 30, nextActionHoursFromNow: 12, budgetFlag: true },
   { first: "Sona", last: "Zakaryan", company: "Kidlandia Kindergarten", phone: "+37493445566", email: "sona@kidlandia.am", sourceType: "instagram", stageIndex: 5, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 700000, summary: "Negotiation — parent communication portal", stageAgeHours: 40, createdAtDaysAgo: 20, lastContactHoursAgo: 24 },
   { first: "Mher", last: "Avetisyan", company: "HayAuto Import", phone: "+37491234599", email: "mher@hayauto.am", sourceType: "website", stageIndex: 6, priority: PRIORITY.HIGH, ownerIdx: 2, est: 3600000, summary: "WON — ERP + inventory + finance, full rollout", requirements: "ERP + CRM + accounting", createdAtDaysAgo: 30, lastContactHoursAgo: 2, audit: { acquisition: 70, sales: 55, operations: 85, data: 60, automation: 80, aiReadiness: 75 }, meetingRequested: true, budgetFlag: true },
-  { first: "Gayane", last: "Tadevosyan", company: "Aroma Coffee Roasters", phone: "+37494455667", email: "gayane@aroma.am", sourceType: "business_audit", stageIndex: 6, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 900000, summary: "WON — B2B order automation + CRM", createdAtDaysAgo: 35, lastContactHoursAgo: 48, audit: { acquisition: 50, sales: 40, operations: 65, data: 45, automation: 60, aiReadiness: 55 } },
-  { first: "Pavel", last: "Morozov", company: "QuickFix Services", phone: "+79161239876", email: "p.morozov@quickfix.ru", sourceType: "google_ads", stageIndex: 7, priority: PRIORITY.LOW, ownerIdx: 2, summary: "LOST — chose competitor on price", createdAtDaysAgo: 40, lastContactHoursAgo: 200 },
-  { first: "Anahit", last: "Hovhannisyan", company: "Sunset Restaurant Group", phone: "+37496554433", email: "anahit@sunset.am", sourceType: "website", stageIndex: 7, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "LOST — timing not right, revisit Q3", createdAtDaysAgo: 45, lastContactHoursAgo: 500 },
+  { first: "Gayane", last: "Tadevosyan", company: "Aroma Coffee Roasters", phone: "+37494455667", email: "gayane@aroma.am", sourceType: "business_audit", stageIndex: 6, priority: PRIORITY.MEDIUM, ownerIdx: 3, est: 900000, summary: "WON — B2B order automation + CRM", createdAtDaysAgo: 35, lastContactHoursAgo: 48, entryStageIdx: 2, audit: { acquisition: 50, sales: 40, operations: 65, data: 45, automation: 60, aiReadiness: 55 } },
+  { first: "Pavel", last: "Morozov", company: "QuickFix Services", phone: "+79161239876", email: "p.morozov@quickfix.ru", sourceType: "google_ads", stageIndex: 7, priority: PRIORITY.LOW, ownerIdx: 2, summary: "LOST — chose competitor on price", createdAtDaysAgo: 40, lastContactHoursAgo: 200, lostAtStageIdx: 5 },
+  { first: "Anahit", last: "Hovhannisyan", company: "Sunset Restaurant Group", phone: "+37496554433", email: "anahit@sunset.am", sourceType: "website", stageIndex: 7, priority: PRIORITY.MEDIUM, ownerIdx: 3, summary: "LOST — timing not right, revisit Q3", createdAtDaysAgo: 45, lastContactHoursAgo: 500, lostAtStageIdx: 4 },
   // extra "needs attention" leads
   { first: "Robert", last: "Mkrtchyan", company: "ExpressDelivery AM", phone: "+37493776655", email: "robert@express.am", sourceType: "website", stageIndex: 0, priority: PRIORITY.HIGH, ownerIdx: null, summary: "New lead — delivery automation, no contact yet", stageAgeHours: 10, createdAtDaysAgo: 2, meetingRequested: true, firstNoteAfterMinutes: 90 },
   { first: "Gagik", last: "Kirakosyan", company: "Mountain Foods", phone: "+37477998800", email: "gagik@mountainfoods.am", sourceType: "referral", stageIndex: 4, priority: PRIORITY.HIGH, ownerIdx: 3, est: 2100000, summary: "Proposal sent 4 days ago, no follow-up", stageAgeHours: 130, createdAtDaysAgo: 11, lastContactHoursAgo: 96, nextActionHoursFromNow: -72 },
@@ -456,9 +469,44 @@ export async function seed(): Promise<{ orgId: string }> {
           userId: owner?.id ?? null,
           type: "STAGE_CHANGE",
           title: `Moved to ${stage.name}`,
+          metadata: { to: stage.id, stageName: stage.name },
           createdAt: new Date(created.getTime() + 7200000),
         },
       });
+    }
+
+    // RESOLVED LEADS (won/lost): full transition history so the revenue
+    // forecast has empirical per-stage win rates. Path: entry stage → furthest
+    // open stage → terminal stage, timestamps spread deterministically between
+    // createdAt+2h and 60% of the way to "now" (long sales cycles).
+    if (stage.type === "won" || stage.type === "lost") {
+      const lastOpenIdx = DEFAULT_STAGES.length - 3; // last open stage (Negotiation)
+      const furthestOpenIdx =
+        stage.type === "lost"
+          ? Math.min(l.lostAtStageIdx ?? lastOpenIdx, lastOpenIdx)
+          : lastOpenIdx;
+      const entryIdx = Math.min(l.entryStageIdx ?? 0, furthestOpenIdx);
+      const path: number[] = [];
+      for (let i = entryIdx; i <= furthestOpenIdx; i++) path.push(i);
+      path.push(l.stageIndex); // terminal stage (won/lost)
+      const start = created.getTime() + 7_200_000;
+      const end = created.getTime() + Math.max(86_400_000, (Date.now() - created.getTime()) * 0.6);
+      for (let pi = 0; pi < path.length; pi++) {
+        const hopStage = stages[path[pi]];
+        if (!hopStage) continue;
+        const at = new Date(start + ((end - start) / path.length) * pi);
+        await db.activity.create({
+          data: {
+            organizationId: orgId,
+            leadId: lead.id,
+            userId: owner?.id ?? null,
+            type: "STAGE_CHANGE",
+            title: `Stage changed to ${hopStage.name}`,
+            metadata: { to: hopStage.id, stageName: hopStage.name },
+            createdAt: at,
+          },
+        });
+      }
     }
 
     // tasks (a few overdue, a few upcoming). Explicit follow-up demo leads
