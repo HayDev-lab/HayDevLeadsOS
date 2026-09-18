@@ -110,7 +110,7 @@ export function NotificationsTab() {
       await Promise.all([prefs.refetch(), settings.refetch()]);
       toast.success(t("notif.settings.saved"));
     } catch {
-      toast.error("Save failed");
+      toast.error(t("toast.save_failed"));
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@
 
 import { useTeamPerformance } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeRole } from "@/lib/leados/i18n";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -96,7 +97,7 @@ export function TeamView() {
                   <LeadAvatar first={u.name} color={u.avatarColor} size={40} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-bold truncate">{u.name}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">{u.email} · {u.role}</div>
+                    <div className="text-[11px] text-muted-foreground truncate">{u.email} · {localizeRole(t, u.role)}</div>
                   </div>
                   <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", u.conversionRate >= 20 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>
                     {u.conversionRate}%

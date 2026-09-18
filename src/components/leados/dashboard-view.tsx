@@ -223,7 +223,7 @@ export function DashboardView() {
               <span className="text-[11px] text-muted-foreground">{t("followup.queue.due_today")}</span>
             </button>
             <div className="flex items-baseline gap-1.5 text-sm">
-              <span className={cn("text-xl font-bold tabular-nums", (m?.meetingsToday ?? 0) > 0 ? "text-indigo-600 dark:text-indigo-400" : "text-muted-foreground")}>{m?.meetingsToday ?? 0}</span>
+              <span className={cn("text-xl font-bold tabular-nums", (m?.meetingsToday ?? 0) > 0 ? "text-sky-600 dark:text-sky-400" : "text-muted-foreground")}>{m?.meetingsToday ?? 0}</span>
               <span className="text-[11px] text-muted-foreground">{t("followup.queue.meetings")}</span>
             </div>
             <button onClick={() => navigate("tasks")} className="flex items-baseline gap-1.5 text-sm hover:scale-[1.02] transition origin-left">

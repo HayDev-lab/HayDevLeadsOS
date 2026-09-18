@@ -23,6 +23,7 @@ import {
   useRevokeInvite,
 } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeRole } from "@/lib/leados/i18n";
 import { LeadAvatar, formatDate } from "@/components/leados/primitives";
 
 const ROLE_BADGE: Record<string, string> = {
@@ -109,14 +110,14 @@ export function TeamTab() {
                       })}>
                         <SelectTrigger className="h-7 w-[110px] text-xs"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
-                          <SelectItem value="MEMBER">Member</SelectItem>
-                          <SelectItem value="VIEWER">Viewer</SelectItem>
+                          <SelectItem value="ADMIN">{t("role.ADMIN")}</SelectItem>
+                          <SelectItem value="MEMBER">{t("role.MEMBER")}</SelectItem>
+                          <SelectItem value="VIEWER">{t("role.VIEWER")}</SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
                       <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${ROLE_BADGE[m.role] ?? ROLE_BADGE.MEMBER}`}>
-                        {m.role}
+                        {localizeRole(t, m.role)}
                       </span>
                     )}
                     {canManage && !m.isSelf && m.role !== "OWNER" && (
@@ -228,9 +229,9 @@ export function TeamTab() {
                 <Select value={inviteRole} onValueChange={setInviteRole}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="MEMBER">Member</SelectItem>
-                    <SelectItem value="VIEWER">Viewer</SelectItem>
-                    {isOwner && <SelectItem value="ADMIN">Admin</SelectItem>}
+                    <SelectItem value="MEMBER">{t("role.MEMBER")}</SelectItem>
+                    <SelectItem value="VIEWER">{t("role.VIEWER")}</SelectItem>
+                    {isOwner && <SelectItem value="ADMIN">{t("role.ADMIN")}</SelectItem>}
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">{t("team.invite.roleHint")}</p>

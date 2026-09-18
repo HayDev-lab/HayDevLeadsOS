@@ -117,7 +117,9 @@ function StageInactivityConfigCard() {
         body: JSON.stringify({ key: STAGE_INACTIVITY_SETTING_KEY, value }),
       });
       if (res.ok) {
-        toast.success(t("stage.settings.title"));
+        // v0.24 fix: was t("stage.settings.title") — showed the card TITLE as the
+        // toast instead of a "saved" message.
+        toast.success(t("toast.stage_config_saved"));
         // Thresholds changed → every stage health surface must recompute NOW.
         await Promise.all([
           qc.invalidateQueries({ queryKey: ["settings"] }),
@@ -127,7 +129,7 @@ function StageInactivityConfigCard() {
           qc.invalidateQueries({ queryKey: ["dashboard"] }),
         ]);
       } else {
-        let msg = "Save failed";
+        let msg = t("toast.save_failed");
         try {
           const body = await res.json();
           msg = body?.error ?? msg;
@@ -136,7 +138,7 @@ function StageInactivityConfigCard() {
         toast.error(msg);
       }
     } catch {
-      toast.error("Save failed");
+      toast.error(t("toast.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -265,7 +267,7 @@ function StageInactivityConfigCard() {
 
         <Button size="sm" onClick={save} disabled={saving || !validation.ok}>
           <Save className="h-3.5 w-3.5 mr-1.5" />
-          {saving ? "Saving…" : t("common.save")}
+          {saving ? t("common.saving") : t("common.save")}
         </Button>
       </CardContent>
     </Card>
@@ -304,7 +306,9 @@ function FollowUpConfigCard() {
         body: JSON.stringify({ key: FOLLOWUP_SETTING_KEY, value: validation.ok ? validation.config : config }),
       });
       if (res.ok) {
-        toast.success(t("followup.settings.title"));
+        // v0.24 fix: was t("followup.settings.title") — showed the card TITLE as
+        // the toast instead of a "saved" message.
+        toast.success(t("toast.followup_saved"));
         await Promise.all([
           qc.invalidateQueries({ queryKey: ["settings"] }),
           qc.invalidateQueries({ queryKey: ["leads"] }),
@@ -313,7 +317,7 @@ function FollowUpConfigCard() {
           qc.invalidateQueries({ queryKey: ["dashboard"] }),
         ]);
       } else {
-        let msg = "Save failed";
+        let msg = t("toast.save_failed");
         try {
           const body = await res.json();
           msg = body?.error ?? msg;
@@ -322,7 +326,7 @@ function FollowUpConfigCard() {
         toast.error(msg);
       }
     } catch {
-      toast.error("Save failed");
+      toast.error(t("toast.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -441,7 +445,7 @@ function FollowUpConfigCard() {
 
         <Button size="sm" onClick={save} disabled={saving || !validation.ok}>
           <Save className="h-3.5 w-3.5 mr-1.5" />
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("common.saving") : t("common.save")}
         </Button>
       </CardContent>
     </Card>
@@ -478,7 +482,7 @@ function FirstResponseCard() {
         body: JSON.stringify({ key: SLA_SETTING_KEY, value: thresholds }),
       });
       if (res.ok) {
-        toast.success("SLA thresholds saved");
+        toast.success(t("toast.sla_saved"));
         // Thresholds changed → every SLA badge/sort/KPI must recompute NOW.
         await Promise.all([
           qc.invalidateQueries({ queryKey: ["settings"] }),
@@ -488,7 +492,7 @@ function FirstResponseCard() {
           qc.invalidateQueries({ queryKey: ["dashboard"] }),
         ]);
       } else {
-        let msg = "Save failed";
+        let msg = t("toast.save_failed");
         try {
           const body = await res.json();
           msg = body?.error ?? msg;
@@ -497,7 +501,7 @@ function FirstResponseCard() {
         toast.error(msg);
       }
     } catch {
-      toast.error("Save failed");
+      toast.error(t("toast.save_failed"));
     } finally {
       setSaving(false);
     }
@@ -510,9 +514,9 @@ function FirstResponseCard() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2"><Clock className="h-4 w-4" />SLA First-Response Thresholds</CardTitle>
+        <CardTitle className="text-sm flex items-center gap-2"><Clock className="h-4 w-4" />{t("sla.settings.title")}</CardTitle>
         <CardDescription className="text-xs">
-          Configure when the first-response SLA changes state. Thresholds are in hours. Rule: Target &lt; Warning &lt; Breach.
+          {t("sla.settings.desc")}
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
@@ -520,7 +524,7 @@ function FirstResponseCard() {
           <div className="space-y-1">
             <Label className="text-xs flex items-center gap-1.5" htmlFor="sla-target">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Target (green)
+              {t("sla.settings.target")}
             </Label>
             <Input
               id="sla-target"
@@ -533,12 +537,12 @@ function FirstResponseCard() {
               aria-invalid={!validation.ok}
               className="h-8"
             />
-            <p className="text-[10px] text-muted-foreground">Respond within this time</p>
+            <p className="text-[10px] text-muted-foreground">{t("sla.settings.target_hint")}</p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs flex items-center gap-1.5" htmlFor="sla-warning">
               <span className="h-2 w-2 rounded-full bg-amber-500" />
-              Warning (amber)
+              {t("sla.settings.warning")}
             </Label>
             <Input
               id="sla-warning"
@@ -551,12 +555,12 @@ function FirstResponseCard() {
               aria-invalid={!validation.ok}
               className="h-8"
             />
-            <p className="text-[10px] text-muted-foreground">Slipping — needs attention</p>
+            <p className="text-[10px] text-muted-foreground">{t("sla.settings.warning_hint")}</p>
           </div>
           <div className="space-y-1">
             <Label className="text-xs flex items-center gap-1.5" htmlFor="sla-breach">
               <span className="h-2 w-2 rounded-full bg-red-500" />
-              Breach (red)
+              {t("sla.settings.breach")}
             </Label>
             <Input
               id="sla-breach"
@@ -569,7 +573,7 @@ function FirstResponseCard() {
               aria-invalid={!validation.ok}
               className="h-8"
             />
-            <p className="text-[10px] text-muted-foreground">Critical — likely lost</p>
+            <p className="text-[10px] text-muted-foreground">{t("sla.settings.breach_hint")}</p>
           </div>
         </div>
 
@@ -591,7 +595,7 @@ function FirstResponseCard() {
             preview can never diverge from production UI. */}
         <div className="rounded-lg border bg-muted/30 p-3">
           <p className="text-xs text-muted-foreground mb-2">
-            Preview — exactly how leads appear ({humanizeHours(thresholds.target)} / {humanizeHours(thresholds.warning)} / {humanizeHours(thresholds.breach)}):
+            {t("sla.settings.preview", { a: humanizeHours(thresholds.target), b: humanizeHours(thresholds.warning), c: humanizeHours(thresholds.breach) })}
           </p>
           <div className="flex items-center gap-2 flex-wrap">
             <SlaBadge createdAt={new Date(Date.now() - 10 * 60_000)} thresholds={validation.ok ? thresholds : null} />
@@ -608,7 +612,7 @@ function FirstResponseCard() {
 
         <Button size="sm" onClick={save} disabled={saving || !validation.ok}>
           <Save className="h-3.5 w-3.5 mr-1.5" />
-          {saving ? "Saving…" : "Save thresholds"}
+          {saving ? t("common.saving") : t("sla.settings.save")}
         </Button>
       </CardContent>
     </Card>

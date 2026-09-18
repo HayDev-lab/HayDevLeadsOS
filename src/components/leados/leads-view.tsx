@@ -40,14 +40,23 @@ export function LeadsView() {
     restoredRef.current = { done: true, snap: loadLeadsState() };
   }
   const snap = restoredRef.current.snap;
-  const [q, setQ] = useState(snap?.q ?? "");
-  const [sourceId, setSourceId] = useState(snap?.sourceId ?? "");
-  const [ownerId, setOwnerId] = useState(snap?.ownerId ?? "");
-  const [stageId, setStageId] = useState(snap?.stageId ?? "");
-  const [priority, setPriority] = useState<string[]>(snap?.priority ?? []);
-  const [overdue, setOverdue] = useState(route.params.overdue === "1" ? true : snap?.overdue ?? false);
-  const [unassigned, setUnassigned] = useState(snap?.unassigned ?? false);
-  const [slaFilter, setSlaFilter] = useState(route.params.sla === "BREACH" ? "BREACH" : snap?.slaFilter ?? "");
+  // v0.24 SHAREABLE LINKS: URL params (route.params) now cover ALL filters —
+  // a shared #/leads?priority=HIGH&q=anna link reproduces the exact list.
+  // Precedence: URL > snapshot > default (navigation intent always wins).
+  const rp = route.params;
+  const PRIORITY_VALUES = [PRIORITY.LOW, PRIORITY.MEDIUM, PRIORITY.HIGH, PRIORITY.URGENT];
+  const [q, setQ] = useState(rp.q ?? snap?.q ?? "");
+  const [sourceId, setSourceId] = useState(rp.source ?? snap?.sourceId ?? "");
+  const [ownerId, setOwnerId] = useState(rp.owner ?? snap?.ownerId ?? "");
+  const [stageId, setStageId] = useState(rp.stage ?? snap?.stageId ?? "");
+  const [priority, setPriority] = useState<string[]>(
+    rp.priority
+      ? rp.priority.split(",").filter((p): p is string => (PRIORITY_VALUES as string[]).includes(p))
+      : snap?.priority ?? []
+  );
+  const [overdue, setOverdue] = useState(rp.overdue === "1" ? true : snap?.overdue ?? false);
+  const [unassigned, setUnassigned] = useState(rp.unassigned === "1" ? true : snap?.unassigned ?? false);
+  const [slaFilter, setSlaFilter] = useState(rp.sla ? String(rp.sla).toUpperCase() : snap?.slaFilter ?? "");
   const [followUpFilter, setFollowUpFilter] = useState(
     route.params.followUp ? String(route.params.followUp).toUpperCase() : snap?.followUpFilter ?? ""
   );
@@ -55,7 +64,7 @@ export function LeadsView() {
     route.params.stageHealth ? String(route.params.stageHealth).toUpperCase() : snap?.stageHealthFilter ?? ""
   );
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState(snap?.sort ?? SLA_SORT_DEFAULT);
+  const [sort, setSort] = useState(rp.sort ?? snap?.sort ?? SLA_SORT_DEFAULT);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -78,6 +87,54 @@ export function LeadsView() {
   useEffect(() => {
     saveLeadsState({ q, sourceId, ownerId, stageId, priority, overdue, unassigned, slaFilter, followUpFilter, stageHealthFilter, sort, showArchived });
   }, [q, sourceId, ownerId, stageId, priority, overdue, unassigned, slaFilter, followUpFilter, stageHealthFilter, sort, showArchived]);
+
+  // v0.24 SHAREABLE LINKS: mirror the active filter state into the URL hash
+  // via replaceState — no history spam, no hashchange (so no re-render loop);
+  // the address bar always shows a URL that reproduces this exact list.
+  // Only NON-DEFAULT values are written, keeping shared URLs short.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (sourceId) params.set("source", sourceId);
+    if (ownerId) params.set("owner", ownerId);
+    if (stageId) params.set("stage", stageId);
+    if (priority.length) params.set("priority", priority.join(","));
+    if (overdue) params.set("overdue", "1");
+    if (unassigned) params.set("unassigned", "1");
+    if (slaFilter) params.set("sla", slaFilter);
+    if (followUpFilter) params.set("followUp", followUpFilter);
+    if (stageHealthFilter) params.set("stageHealth", stageHealthFilter);
+    if (sort !== SLA_SORT_DEFAULT) params.set("sort", sort);
+    const qs = params.toString();
+    const newHash = qs ? `#/leads?${qs}` : "#/leads";
+    if (window.location.hash !== newHash) {
+      history.replaceState(null, "", newHash);
+    }
+  }, [q, sourceId, ownerId, stageId, priority, overdue, unassigned, slaFilter, followUpFilter, stageHealthFilter, sort]);
+
+  // v0.24 DISCOVERABILITY: when a snapshot with ACTIVE filters was applied on
+  // mount, tell the user (once) — otherwise a silently narrowed list looks
+  // like "where did my leads go?". The toast carries a one-click Clear.
+  const snapHasFilters = Boolean(
+    snap && (snap.q || snap.sourceId || snap.ownerId || snap.stageId || snap.priority?.length || snap.overdue || snap.unassigned || snap.slaFilter || snap.followUpFilter || snap.stageHealthFilter)
+  );
+  const restoredToastShown = useRef(false);
+  useEffect(() => {
+    if (!snapHasFilters || restoredToastShown.current) return;
+    restoredToastShown.current = true;
+    toast(t("leads.restored_toast"), {
+      description: t("leads.restored_desc"),
+      action: {
+        label: t("common.clear"),
+        // Inline reset: all setters are stable, so the mount-time closure is safe.
+        onClick: () => {
+          setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]);
+          setOverdue(false); setUnassigned(false); setSlaFilter(""); setFollowUpFilter("");
+          setStageHealthFilter(""); setPage(1); clearLeadsState();
+        },
+      },
+    });
+  }, [snapHasFilters]);
 
   const sources = useSources();
   const users = useUsers();
@@ -172,7 +229,7 @@ export function LeadsView() {
     <div className="px-4 md:px-6 py-5 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("leads.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">{t("leads.title")}</h1>
           <p className="text-sm text-muted-foreground">{leads.data ? t("leads.total_count", { n: leads.data.total }) : ""}</p>
         </div>
         <div className="flex items-center gap-2">
