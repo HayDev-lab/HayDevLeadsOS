@@ -36,6 +36,8 @@ beforeAll(async () => { // 1200 events need more than the 5s bun default
     data: { organizationId: orgId, name: "B Owner", email: `b-owner-${Date.now()}@test.dev`, role: "OWNER", status: "ACTIVE" },
   });
   ownerId = user.id;
+  // v0.19.2: real memberships (OrganizationMember = authorization source).
+  await db.organizationMember.create({ data: { organizationId: orgId, userId: ownerId, role: "OWNER" } });
   const pipeline = await db.pipeline.create({ data: { organizationId: orgId, name: "P", isDefault: true } });
   const stage = await db.pipelineStage.create({ data: { pipelineId: pipeline.id, name: "New", type: "open", position: 0 } });
   pipelineId = pipeline.id;

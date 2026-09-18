@@ -31,6 +31,12 @@ import {
   resolveStageNotifications,
 } from "./notification-service";
 import type { LeadCreateT, LeadUpdateT } from "@/lib/schemas/lead";
+import {
+  requireOrgMember,
+  requireOrgSource,
+  requireOrgStage,
+  isOrgMember,
+} from "./tenant-guard";
 
 export interface CreateLeadInput extends LeadCreateT {
   // internal: bypass duplicate handling (when caller already checked)
@@ -120,9 +126,12 @@ export async function createLead(
     }
   }
 
-  // resolve source
+  // resolve source — TENANT GUARD (v0.19.2 §11): a client-supplied sourceId
+  // belonging to another org is rejected BEFORE any write (404-equivalent).
   let sourceId = input.sourceId ?? null;
-  if (!sourceId && input.sourceType) {
+  if (sourceId) {
+    await requireOrgSource(orgId, sourceId);
+  } else if (input.sourceType) {
     const src = await db.leadSource.findFirst({ where: { organizationId: orgId, type: input.sourceType } });
     if (src) sourceId = src.id;
   }
@@ -131,10 +140,18 @@ export async function createLead(
     sourceId = fallback?.id ?? null;
   }
 
-  // resolve stage
+  // resolve stage — TENANT GUARD (§11/§13): stageId is validated THROUGH its
+  // pipeline (stage.pipeline.organizationId === orgId); pipelineId is DERIVED
+  // from the validated stage, never trusted from the input.
   let stageId = input.stageId ?? null;
   let pipelineId: string | null = null;
-  if (!stageId) {
+  let stage: { id: string; name: string; type: string } | null = null;
+  if (stageId) {
+    const guarded = await requireOrgStage(orgId, stageId);
+    stageId = guarded.id;
+    pipelineId = guarded.pipelineId;
+    stage = guarded;
+  } else {
     const pipeline = await db.pipeline.findFirst({ where: { organizationId: orgId, isDefault: true } });
     if (pipeline) {
       pipelineId = pipeline.id;
@@ -143,12 +160,9 @@ export async function createLead(
         orderBy: { position: "asc" },
       });
       stageId = first?.id ?? null;
+      stage = first ?? null;
     }
-  } else {
-    const stage = await db.pipelineStage.findUnique({ where: { id: stageId }, include: { pipeline: true } });
-    if (stage?.pipeline) pipelineId = stage.pipeline.id;
   }
-  const stage = stageId ? await db.pipelineStage.findUnique({ where: { id: stageId } }) : null;
 
   const now = new Date();
   const nextActionAt = input.nextActionAt ? new Date(input.nextActionAt) : (stage ? suggestNextAction(stage.name, now).nextActionAt : null);
@@ -156,6 +170,11 @@ export async function createLead(
 
   // Auto-assignment: if no explicit owner, check assignment rules
   let ownerId = input.ownerId ?? null;
+  if (ownerId) {
+    // TENANT GUARD (§11/§14): explicit owner must be an ACTIVE member of THIS
+    // org (OrganizationMember is the source of truth).
+    await requireOrgMember(orgId, ownerId);
+  }
   if (!ownerId) {
     ownerId = await resolveAutoAssignee(orgId, { sourceId, sourceType: input.sourceType, priority: input.priority ?? PRIORITY.MEDIUM });
   }
@@ -270,14 +289,18 @@ export async function updateLead(
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead || lead.organizationId !== orgId) throw new Error("LEAD_NOT_FOUND");
 
+  // TENANT GUARDS (§12): foreign ownerId/sourceId/stageId are rejected BEFORE
+  // any Prisma connect — Org A can never attach Org B's User/Source/Stage.
+  if (input.ownerId) await requireOrgMember(orgId, input.ownerId);
+  if (input.sourceId) await requireOrgSource(orgId, input.sourceId);
+
   // STAGE INACTIVITY: stage changes NEVER go through the generic update —
   // real transitions are delegated to changeStage (STAGE_CHANGE activity,
   // events, follow-up cancellation policy, stageEnteredAt reset). A stageId
   // equal to the current one is a no-op (timer must NOT reset, Section 20/50).
   const wantsStageChange = input.stageId != null && input.stageId !== lead.stageId;
   if (wantsStageChange) {
-    const stage = await db.pipelineStage.findUnique({ where: { id: input.stageId! } });
-    if (!stage) throw new Error("STAGE_NOT_FOUND");
+    await requireOrgStage(orgId, input.stageId!);
   }
 
   const data: Prisma.LeadUpdateInput = {};
@@ -364,8 +387,9 @@ export async function changeStage(
 ) {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead || lead.organizationId !== orgId) throw new Error("LEAD_NOT_FOUND");
-  const stage = await db.pipelineStage.findUnique({ where: { id: stageId } });
-  if (!stage) throw new Error("STAGE_NOT_FOUND");
+  // TENANT GUARD (§13): the stage is validated THROUGH its pipeline —
+  // stage.pipeline.organizationId === orgId. Existence alone is insufficient.
+  const stage = await requireOrgStage(orgId, stageId);
 
   // SAME-STAGE GUARD (Section 20/50/59): Proposal → Proposal is a no-op —
   // stageEnteredAt is NOT reset (managers must not be able to refresh a
@@ -457,8 +481,11 @@ export async function assignLead(
 ) {
   const lead = await db.lead.findUnique({ where: { id: leadId } });
   if (!lead || lead.organizationId !== orgId) throw new Error("LEAD_NOT_FOUND");
+  // MEMBERSHIP SOURCE OF TRUTH (§14): authorization is OrganizationMember
+  // (ACTIVE in THIS org) — User.organizationId/User.role are cache pointers.
+  await requireOrgMember(orgId, ownerId);
   const owner = await db.user.findUnique({ where: { id: ownerId } });
-  if (!owner || owner.organizationId !== orgId) throw new Error("USER_NOT_FOUND");
+  if (!owner) throw new Error("USER_NOT_FOUND");
   const updated = await db.lead.update({
     where: { id: leadId },
     data: { ownerId },
@@ -637,9 +664,9 @@ export async function resolveAutoAssignee(
     if (r.sourceType && r.sourceType !== ctx.sourceType) match = false;
     if (r.priority && r.priority !== ctx.priority) match = false;
     if (match) {
-      // verify assignee still active in org
-      const a = await db.user.findUnique({ where: { id: r.assigneeId }, select: { organizationId: true, status: true } });
-      if (a && a.organizationId === orgId && a.status === "ACTIVE") return r.assigneeId;
+      // v0.19.2 §14: assignee validity = ACTIVE OrganizationMember of this
+      // org (User.organizationId is only an active-org cache pointer).
+      if (await isOrgMember(orgId, r.assigneeId)) return r.assigneeId;
     }
   }
   return null;

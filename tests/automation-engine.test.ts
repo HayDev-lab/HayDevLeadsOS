@@ -139,7 +139,18 @@ beforeAll(async () => {
   managerB = (
     await db.user.create({ data: { organizationId: orgId, name: "Manager B", email: "manager-b@auto.test", role: "MANAGER", status: "ACTIVE" } })
   ).id;
-  await db.user.create({ data: { organizationId: orgBId, name: "Org B User", email: "b@auto.test", role: "OWNER", status: "ACTIVE" } });
+  const orgBUserId = (
+    await db.user.create({ data: { organizationId: orgBId, name: "Org B User", email: "b@auto.test", role: "OWNER", status: "ACTIVE" } })
+  ).id;
+  // v0.19.2: OrganizationMember is the authorization source of truth —
+  // fixtures must create real memberships, not rely on User cache columns.
+  await db.organizationMember.createMany({
+    data: [
+      { organizationId: orgId, userId: ownerA, role: "OWNER" },
+      { organizationId: orgId, userId: managerB, role: "MANAGER" },
+      { organizationId: orgBId, userId: orgBUserId, role: "OWNER" },
+    ],
+  });
 
   for (const org of [orgId, orgBId]) {
     const pipeline = await db.pipeline.create({ data: { organizationId: org, name: "P", isDefault: true } });

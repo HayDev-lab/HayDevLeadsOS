@@ -19,6 +19,7 @@ import {
 import { publishDomainEvent } from "./domain-event-service";
 import { invalidateOrgCache } from "./api-cache";
 import { getAutomationExecutionContext } from "./automation-context";
+import { requireOrgMember } from "./tenant-guard";
 
 export interface CreateTaskInput {
   title: string;
@@ -39,6 +40,11 @@ export async function createTask(orgId: string, input: CreateTaskInput) {
   if (input.leadId) {
     const lead = await db.lead.findUnique({ where: { id: input.leadId }, select: { organizationId: true } });
     if (!lead || lead.organizationId !== orgId) throw new Error("LEAD_NOT_FOUND");
+  }
+  // TENANT GUARD (v0.19.2 §15): the assignee must be an ACTIVE member of the
+  // CURRENT org — same path for API routes AND the Automation Engine.
+  if (input.assignedTo) {
+    await requireOrgMember(orgId, input.assignedTo);
   }
 
   // Automation attribution (spec 61/64): stamped from the execution context.

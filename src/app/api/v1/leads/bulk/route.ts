@@ -3,11 +3,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
-import { ok, badRequest, apiError, validate, parseJson } from "@/lib/leados/api";
+import { ok, badRequest, notFound, apiError, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 import { ACTIVITY_TYPE, LEAD_EVENT } from "@/lib/leados/constants";
 import { publishEvent } from "@/lib/leados/events";
 import { invalidateOrgCache } from "@/lib/leados/api-cache";
+import { requireOrgMember, requireOrgStage } from "@/lib/leados/tenant-guard";
 
 const BulkAction = z.object({
   ids: z.array(z.string().min(1)).min(1).max(200),
@@ -42,18 +43,31 @@ export async function POST(req: Request) {
       }
     } else if (action === "assign") {
       if (!v.value.ownerId) return badRequest("ownerId-required");
-      const owner = await db.user.findUnique({ where: { id: v.value.ownerId }, select: { organizationId: true, name: true } });
-      if (!owner || owner.organizationId !== session.orgId) return badRequest("owner-not-in-org");
+      // TENANT GUARD (v0.19.2): owner must be an ACTIVE member of THIS org —
+      // OrganizationMember is the source of truth (User.organizationId is a
+      // cache pointer). Foreign owner → 404 (same as missing).
+      try {
+        await requireOrgMember(session.orgId, v.value.ownerId);
+      } catch {
+        return notFound("owner");
+      }
+      const owner = await db.user.findUnique({ where: { id: v.value.ownerId }, select: { name: true } });
       const res = await db.lead.updateMany({ where: { id: { in: leads.map((l) => l.id) } }, data: { ownerId: v.value.ownerId } });
       updated = res.count;
       for (const l of leads) {
-        await db.activity.create({ data: { organizationId: session.orgId, leadId: l.id, userId: session.userId, type: ACTIVITY_TYPE.ASSIGNMENT, title: `Bulk assigned to ${owner.name}` } });
+        await db.activity.create({ data: { organizationId: session.orgId, leadId: l.id, userId: session.userId, type: ACTIVITY_TYPE.ASSIGNMENT, title: `Bulk assigned to ${owner?.name ?? "member"}` } });
         await publishEvent({ orgId: session.orgId, leadId: l.id, userId: session.userId, type: LEAD_EVENT.LEAD_ASSIGNED, payload: { ownerId: v.value.ownerId, bulk: true } as never });
       }
     } else if (action === "stage") {
       if (!v.value.stageId) return badRequest("stageId-required");
-      const stage = await db.pipelineStage.findUnique({ where: { id: v.value.stageId }, include: { pipeline: true } });
-      if (!stage || stage.pipeline.organizationId !== session.orgId) return badRequest("stage-not-in-org");
+      // TENANT GUARD (v0.19.2 §13): stage validated THROUGH its pipeline —
+      // foreign stage → 404 (identical to missing).
+      let stage: { id: string; name: string; pipelineId: string };
+      try {
+        stage = await requireOrgStage(session.orgId, v.value.stageId);
+      } catch {
+        return notFound("stage");
+      }
       const res = await db.lead.updateMany({ where: { id: { in: leads.map((l) => l.id) } }, data: { stageId: v.value.stageId, pipelineId: stage.pipelineId } });
       updated = res.count;
       for (const l of leads) {
