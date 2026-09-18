@@ -1,0 +1,14 @@
+You are a meticulous QA reviewer inspecting a screenshot of a CRM web app "automation rule builder" dialog. The UI language is Armenian — that is the product default and is NOT a defect. Screenshot is 1440x900.
+
+Report precisely, top to bottom, quoting exact visible text (transliterate/translate Armenian where useful):
+1) DIALOG HEADER: Is there a title and subtitle? Quote them.
+2) NAME/DESCRIPTION: Are rule-name and description inputs present with labels? Empty or filled? Any placeholder text?
+3) WHEN SECTION: Is there a colored chip/badge (what color — blue?) and a trigger dropdown select? What value does the trigger select show?
+4) IF SECTION: Colored chip (amber?)? Is there an ALL/ANY select — which option is displayed? Is there an "add condition" button?
+5) THEN SECTION: Colored chip (green?)? Is there an action row — does it show a "Create task" type action with parameters: title, due hours, priority, assignee? Quote each parameter's visible value. Is there an "add action" button?
+6) ENABLED TOGGLE: Is there an on/off toggle with a hint/explanatory text near it? What state (on/off)?
+7) FOOTER: Cancel and Save buttons present? Which appears primary (filled)?
+8) RAW I18N KEYS: List ANY strings that look like raw translation keys, e.g. "auto.builder.title", "automation.rules.xxx", dotted lowercase English identifiers, or template braces like {name}. Quote them exactly and state where they appear.
+9) LAYOUT DEFECTS: Any overlapping elements, clipped/cutoff text, misaligned controls, content overflowing the dialog, missing scrollbars, broken icons, or rendering glitches? Check edges of the dialog carefully, including the footer and any elements near the dialog borders.
+
+Be exhaustive and structured. If something is missing, say explicitly that it is missing.
