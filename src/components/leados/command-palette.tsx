@@ -12,7 +12,7 @@
 // client-side (shouldFilter=false + manual match) so server-returned leads
 // are never hidden by cmdk's local fuzzy filter.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import {
   Command,
@@ -25,7 +25,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Bell, Inbox as InboxIcon,
-  BarChart3, UserCircle, Zap, Plus, Moon, Languages, Search, Command as CommandIcon, Loader2, CornerDownLeft, History,
+  BarChart3, UserCircle, Zap, Plus, Moon, Languages, Search, Command as CommandIcon, Loader2, CornerDownLeft, History, Keyboard,
 } from "lucide-react";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
@@ -56,6 +56,7 @@ export function CommandPalette() {
   const { theme, setTheme } = useTheme();
   const [, navigate] = useHashRoute();
   const [open, setOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [query, setQuery] = useState("");
   const search = useSearch(query.trim().length >= 2 ? query : "");
 
@@ -71,17 +72,50 @@ export function CommandPalette() {
     return () => window.removeEventListener("leados:open-palette", onOpen);
   }, []);
 
+  // New lead from ANYWHERE (v0.21): navigate to the leads view and open the
+  // controlled create dialog via the existing `leados:new-lead` event.
+  const newLeadFromShortcut = useCallback(() => {
+    setOpen(false);
+    navigate("leads");
+    // LeadsView listens for this event and opens the (controlled) lead dialog.
+    setTimeout(() => window.dispatchEvent(new CustomEvent("leados:new-lead")), 150);
+  }, [navigate]);
+
   // ⌘K / Ctrl+K toggles the palette from anywhere.
+  // ⌘⇧N / Ctrl+Shift+N (and Alt+N as a browser-safe alternative — Chrome
+  // reserves Ctrl+Shift+N for its own incognito shortcut on some platforms)
+  // creates a new lead from ANY view (v0.21).
+  // "?" (Shift+/) opens the shortcuts help sheet — but never while the user
+  // is typing in a form field (v0.21).
   useEffect(() => {
+    const isTypingContext = (el: EventTarget | null) => {
+      if (!(el instanceof HTMLElement)) return false;
+      return el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
+    };
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen((v) => !v);
+        return;
+      }
+      const isShiftCombo = (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "n";
+      const isAltCombo = e.altKey && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === "n";
+      if (isShiftCombo || isAltCombo) {
+        e.preventDefault();
+        newLeadFromShortcut();
+        return;
+      }
+      // "?" on US layouts — plain "/" as well, because Shift+Slash does not
+      // produce "?" on many national layouts (e.g. Armenian).
+      if ((e.key === "?" || e.key === "/") && !isTypingContext(e.target)) {
+        e.preventDefault();
+        setOpen(false);
+        setHelpOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [newLeadFromShortcut]);
 
   const close = () => {
     setOpen(false);
@@ -104,13 +138,14 @@ export function CommandPalette() {
   const showNotifications = match(t("notif.view_all"), "notifications bell");
   const showNewLead = match(t("palette.new_lead"), "new lead create");
   const showTheme = match(t("palette.toggle_theme"), "theme dark light mode");
+  const showShortcuts = match(t("palette.shortcuts.title"), "shortcuts keys keyboard help");
   const langItems = LANGS.filter((l) => match(l.label, l.kw));
 
   const leadRows = (search.data?.rows ?? []).slice(0, 6);
   const searchingLeads = q.length >= 2;
   const hasLeads = searchingLeads && leadRows.length > 0;
   const hasAny =
-    hasLeads || recentItems.length > 0 || goItems.length > 0 || showNotifications || showNewLead || showTheme || langItems.length > 0;
+    hasLeads || recentItems.length > 0 || goItems.length > 0 || showNotifications || showNewLead || showTheme || showShortcuts || langItems.length > 0;
 
   const go = (view: string, params?: Record<string, string>) => {
     close();
@@ -119,14 +154,17 @@ export function CommandPalette() {
 
   const newLead = () => {
     close();
-    navigate("leads");
-    // LeadsView listens for this event and opens the (controlled) lead dialog.
-    setTimeout(() => window.dispatchEvent(new CustomEvent("leados:new-lead")), 150);
+    newLeadFromShortcut();
   };
 
   const toggleTheme = () => {
     close();
     setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const openHelp = () => {
+    close();
+    setHelpOpen(true);
   };
 
   return (
@@ -258,18 +296,30 @@ export function CommandPalette() {
               )}
 
               {/* actions */}
-              {(showNewLead || showTheme) && (
+              {(showNewLead || showTheme || showShortcuts) && (
                 <CommandGroup heading={t("palette.group.actions")}>
                   {showNewLead && (
                     <CommandItem value="action-new-lead" onSelect={newLead}>
                       <Plus className="h-4 w-4" />
                       {t("palette.new_lead")}
+                      <span className="ml-auto flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground/80">
+                        <Kbd><span className="hidden sm:inline">⇧</span>⌘</Kbd><Kbd>N</Kbd>
+                      </span>
                     </CommandItem>
                   )}
                   {showTheme && (
                     <CommandItem value="action-theme" onSelect={toggleTheme}>
                       <Moon className="h-4 w-4" />
                       {t("palette.toggle_theme")}
+                    </CommandItem>
+                  )}
+                  {showShortcuts && (
+                    <CommandItem value="action-shortcuts" onSelect={openHelp}>
+                      <Keyboard className="h-4 w-4" />
+                      {t("palette.shortcuts.title")}
+                      <span className="ml-auto flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground/80">
+                        <Kbd>?</Kbd>
+                      </span>
                     </CommandItem>
                   )}
                 </CommandGroup>
@@ -309,9 +359,44 @@ export function CommandPalette() {
               </span>
               <span className="hidden sm:flex items-center gap-1">
                 <CommandIcon className="h-2.5 w-2.5" />K
+                <span className="mx-0.5 text-muted-foreground/50">·</span>
+                <Kbd>?</Kbd>
               </span>
             </div>
           </Command>
+        </DialogContent>
+      </Dialog>
+
+      {/* SHORTCUTS HELP (v0.21) — "?" from anywhere (not while typing). */}
+      <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
+        <DialogHeader className="sr-only">
+          <DialogTitle>{t("palette.shortcuts.title")}</DialogTitle>
+          <DialogDescription>{t("palette.shortcuts.palette")}</DialogDescription>
+        </DialogHeader>
+        <DialogContent className="sm:max-w-md top-[14vh] translate-y-0">
+          <div className="flex items-center gap-2 border-b pb-3 mb-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Keyboard className="h-4 w-4" />
+            </span>
+            <h2 className="text-sm font-semibold">{t("palette.shortcuts.title")}</h2>
+          </div>
+          <div className="space-y-0.5">
+            {[
+              { keys: [<Kbd key="k">⌘</Kbd>, <Kbd key="kk">K</Kbd>], desc: t("palette.shortcuts.palette") },
+              { keys: [<Kbd key="s">⇧</Kbd>, <Kbd key="c">⌘</Kbd>, <Kbd key="n">N</Kbd>], desc: t("palette.new_lead") },
+              { keys: [<Kbd key="alt">Alt</Kbd>, <Kbd key="nn">N</Kbd>], desc: t("palette.new_lead") },
+              { keys: [<Kbd key="up">↑</Kbd>, <Kbd key="down">↓</Kbd>], desc: t("palette.shortcuts.navigate") },
+              { keys: [<Kbd key="enter">↵</Kbd>], desc: t("palette.shortcuts.select") },
+              { keys: [<Kbd key="esc">Esc</Kbd>], desc: t("palette.shortcuts.close") },
+              { keys: [<Kbd key="q">?</Kbd>], desc: t("palette.shortcuts.help") },
+            ].map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 text-sm odd:bg-muted/40">
+                <span className="text-muted-foreground">{r.desc}</span>
+                <span className="flex items-center gap-1 shrink-0">{r.keys}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground/70 pt-2">⌘ — Ctrl on Windows/Linux</p>
         </DialogContent>
       </Dialog>
     </>

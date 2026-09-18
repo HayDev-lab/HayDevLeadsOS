@@ -7,6 +7,7 @@ import { getSessionOrNull } from "@/lib/leados/context";
 import { setSessionCookie } from "@/lib/leados/auth/session-store";
 import { acceptInvite } from "@/lib/leados/auth/auth-service";
 import { actionLimiter, clientIp } from "@/lib/leados/auth/rate-limit";
+import { invalidateOrgCache } from "@/lib/leados/api-cache";
 
 const AcceptSchema = z.object({
   token: z.string().min(10).max(200),
@@ -49,6 +50,8 @@ export async function POST(req: Request) {
     if (result.issued) {
       await setSessionCookie(result.issued.token, result.issued.expiresAt);
     }
+    // v0.21: a joined member feeds the cached /team read — invalidate eagerly.
+    if (result.organization?.id) invalidateOrgCache(result.organization.id);
     return ok({
       ok: true,
       joined: !result.alreadyMember,

@@ -1288,3 +1288,57 @@ Stage Summary:
 - Cache coverage now: analytics(90s), dashboard(45s), team(60s), inbox-stats(30s); mutation-driven invalidation still wired only for lead/task mutations (settings/pipeline bounded by TTL — acceptable).
 - Open risks: (a) OOM fragility remains the #1 operational risk — this round had one kill (1.6GB rss) despite precautions; recommend a periodic scheduled restart or NODE_OPTIONS=--max-old-space-size cap next round; (b) forecast stage matching is by stage NAME (unique per pipeline today, would need ID in forecast payload if orgs rename stages to duplicates across pipelines); (c) stage names still English-by-design.
 - Next round suggestions: (1) dev-server memory mitigation (max-old-space-size / scheduled restart / Turbopack memory flags); (2) stage-name i18n overlay or rename stage.name→id in forecast payload; (3) "Copy lead link" share action in lead header; (4) keyboard shortcut for new lead (e.g. ⌘⇧N) wired to the existing leados:new-lead event; (5) settings mutations → cache invalidation.
+
+---
+Task ID: round6-1
+Agent: main (Z.ai Code webDevReview)
+Task: Scheduled 15-min review: assess stability, QA via agent-browser, fix findings, then implement round-5 suggestions — ⌘⇧N new-lead shortcut, copy-lead-link, settings/pipeline/member cache invalidation, dev-server memory mitigation — plus mandatory styling polish.
+
+Work Log:
+- STATUS CHECK: server healthy (scheduler SUCCESS cycles, dev.log clean, all 9 views + lead detail render with ZERO console errors; QA screenshots round6-qa/01–07). next-server RSS was 1.68GB (above the 1.5GB OOM threshold); dmesg later confirmed the OLD uncapped server had been OOM-killed once (~03:14, before this round's restart).
+- MEMORY MITIGATION (round-5 suggestion #1, delivered):
+  * package.json dev script now runs with NODE_OPTIONS=--max-old-space-size=1536 — bounds V8 old-space so GC works harder before the kernel OOM-killer fires.
+  * Restarted the dev server (RSS 1.68GB → 545MB fresh). The capped server survived a FULL browser QA round with Chromium open (~700MB) — no OOM kill this round (previous rounds lost the server at least once per round).
+- NEW FEATURE 1 — Global new-lead shortcut (v0.21, command-palette.tsx):
+  * ⌘⇧N / Ctrl+Shift+N AND Alt+N (browser-safe alternative — Chrome reserves Ctrl+Shift+N for incognito on some platforms) create a lead from ANY view: navigate("leads") + existing `leados:new-lead` event → controlled LeadFormDialog opens.
+  * Implementation: newLeadFromShortcut wrapped in useCallback([navigate]) (navigate is stable in useHashRoute); global keydown effect extended, deps clean.
+  * Discoverability: kbd chip "⇧⌘N" on the leads-view "New lead" button (hidden on mobile, title tooltip) + kbd chips on the palette ACTIONS item.
+  * VERIFIED live: Alt+N from a lead-detail page → URL #/leads + "Նոր լիդ" dialog open (agent-browser press Alt+n).
+- NEW FEATURE 2 — Keyboard shortcuts help sheet (v0.21, command-palette.tsx):
+  * "?" (and plain "/" — Shift+Slash doesn't produce "?" on Armenian/national layouts) opens a styled shortcuts dialog: ⌘K palette, ⇧⌘N + Alt+N new lead, ↑↓ navigate, ↵ select, Esc close, ? help. Guarded by isTypingContext so it never fires while typing in inputs.
+  * Palette ACTIONS group gains "Keyboard shortcuts" item (Keyboard icon + "?" kbd chip); palette footer now shows "⌘K · ?" hint.
+  * Full i18n ×3 locales (6 new keys: shortcuts.title/palette/navigate/select/close/help).
+  * VERIFIED live: synthetic "?" keydown opens sheet; physical "/" press opens sheet (after HMR); EN locale shows "Keyboard shortcuts"; palette filter "keys" narrows to the item.
+- NEW FEATURE 3 — Copy lead link (v0.21, lead-detail-view.tsx):
+  * LeadHeader gains a "Copy link" button: navigator.clipboard.writeText(`${origin}/#/lead/${id}`) with textarea+execCommand fallback and toast-error showing the raw URL as last resort; emerald success state (Check icon + "Copied") for 2s.
+  * i18n keys lead.copy_link / lead.link_copied_short / toast.lead_link_copied ×3 locales.
+  * VERIFIED live: click → toast "Լիդի հղումը պատճենվեց սեղմատախտակ"; EN shows "Copy link".
+- NEW FEATURE 4 — Lead header "More" overflow menu (v0.21):
+  * VLM flagged the 10-button action wall. Row reduced to 6: Call (primary), Message, Email, Edit, Copy link + "⋯ More" DropdownMenu holding ERP sync, Score recalc, Export activity, QuoteFlow (disabled), separator, destructive red Archive.
+  * Archive converted from AlertDialogTrigger-wrapping-a-button to a CONTROLLED AlertDialog (open/onOpenChange state) opened from the menu item — avoids Radix nested-portal issues.
+  * VERIFIED live: menu opens with all 5 items; Archive → confirmation AlertDialog renders; cancelled safely. VLM review of the decluttered header: "well-structured and clean… clear visual hierarchy".
+- NEW FEATURE 5 — Cache invalidation for org-config mutations (round-5 suggestion #5):
+  * invalidateOrgCache(orgId) now fires on: settings PATCH (org/scoring), pipeline stage POST/PATCH/DELETE, members PATCH (role change) / DELETE (removal), auth invite accept (new membership → /team cache).
+  * Rationale comments in each route; invite create/resend/revoke deliberately NOT invalidated (team-service returns no pending invites).
+  * VERIFIED via curl timing: /team 43ms → 9.7ms (cached) → settings PATCH 200 → 35.5ms (recomputed) — invalidation works end-to-end.
+- STYLING POLISH (mandatory, VLM-triage then code-verified):
+  * Dashboard KPI labels: truncate → line-clamp-2 + min-h-[2.4em] + title tooltip (DOM-verified: 9/10 labels now fully readable in 2 lines, the 10th clips slightly but has a tooltip; before: ALL were single-line ellipsized).
+  * Armenian all-caps section headers (attention banner + today queue): removed `uppercase` (Armenian caps are hard to read); kept font-semibold + tracking-wide.
+  * Lead contact info: Field values now font-medium (clearer value-vs-label hierarchy).
+  * Leads table company column: max-w 160→220px + title tooltip.
+  * Sidebar inbox badge: washed sky chip → solid bg-primary text-primary-foreground shadow-sm (+ tabular-nums).
+  * New-lead button + palette items carry kbd hint chips (consistent with palette trigger style).
+- i18n total: +18 keys ×3 locales (copy_link ×3, shortcuts ×6, common.more, toast, kbd hints are symbols).
+- VERIFY (agent-browser + VLM + curl):
+  * ESLint PASS (0 issues), tsc --noEmit PASS (src/).
+  * All 9 views + lead detail: zero console errors; mobile 390×844 NO horizontal overflow (dashboard + lead detail); dark-mode lead header verified.
+  * Palette: ⌘K opens; "keys" filter works; shortcuts item present; footer hint updated.
+  * EN locale verified (Copy link / Keyboard shortcuts / filter), locale + light theme restored to hy.
+  * 18 screenshots in download/round6-qa/ (01–18).
+
+Stage Summary:
+- v0.21 shipped: global ⇧⌘N/Alt+N new-lead shortcut, "?" shortcuts help sheet, copy-lead-link with copied feedback, decluttered 6-button lead header with More menu, mutation-driven cache invalidation for org-config changes, and the long-awaited dev-server memory cap.
+- The memory cap is the first round since round 2 with ZERO OOM incidents while running full browser QA.
+- Cache coverage now: analytics(90s), dashboard(45s), team(60s), inbox-stats(30s) — invalidated by lead/task mutations AND settings/stage/member mutations.
+- Open risks: (a) V8 old-space cap doesn't bound non-heap (external/Turbopack) memory — RSS can still reach ~1.8GB; restart before QA if RSS creeps higher; (b) Ctrl+Shift+N reserved on some Chrome platforms — Alt+N documented as the fallback; (c) stage names still English-by-design (i18n overlay pending); (d) "Priority: Low" chip contrast in dark mode flagged by VLM (pre-existing primitives design, not touched); (e) forecast commit threshold still hardcoded 60%.
+- Next round suggestions: (1) stage-name i18n overlay (long-standing); (2) priority-badge dark-mode contrast pass in primitives.tsx; (3) "/" key could also focus the palette search (common convention) instead of only opening help; (4) users/sources/tags route mutations → cache invalidation if those endpoints gain caching; (5) kanban drag-and-drop regression round; (6) add a "shortcuts" hint row to the sidebar search button tooltip.

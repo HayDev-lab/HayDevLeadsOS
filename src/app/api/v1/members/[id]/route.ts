@@ -9,6 +9,7 @@ import { getSession } from "@/lib/leados/context";
 import { changeMemberRole, removeMember } from "@/lib/leados/member-service";
 import { recordAudit, requestMeta, AUDIT_ACTIONS, AUDIT_ACTOR } from "@/lib/leados/auth/audit";
 import { ROLES } from "@/lib/leados/constants";
+import { invalidateOrgCache } from "@/lib/leados/api-cache";
 
 const PatchSchema = z.object({
   role: z.enum([ROLES.ADMIN, ROLES.MEMBER, ROLES.VIEWER]),
@@ -48,6 +49,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       metadata: { from: before?.role ?? null, to: v.value.role, userId: before?.userId ?? null },
       ...meta,
     });
+    // v0.21: membership feeds the cached /team read — invalidate eagerly.
+    invalidateOrgCache(session.orgId);
     return ok({ ok: true });
   } catch (e) {
     return apiError("member-role-change-failed", e);
@@ -77,6 +80,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
       metadata: { email: before?.user.email ?? null, userId: before?.userId ?? null, self: before?.userId === session.userId },
       ...meta,
     });
+    // v0.21: membership feeds the cached /team read — invalidate eagerly.
+    invalidateOrgCache(session.orgId);
     return ok({ ok: true });
   } catch (e) {
     return apiError("member-remove-failed", e);

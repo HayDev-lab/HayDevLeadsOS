@@ -14,7 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain, Download, TrendingUp, TrendingDown } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain, Download, TrendingUp, TrendingDown, Link2, Check, MoreHorizontal } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPill, SourceBadge, TagChip, formatDate, formatDay, formatMoney, timeAgo } from "./primitives";
 import { SlaDetail } from "./sla/sla-detail";
@@ -224,7 +225,7 @@ function Field({ label, value, icon: Icon, action }: { label: string; value?: Re
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <div className="flex items-center gap-1.5 text-sm">
         {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-        {value ? <span className="truncate">{value}</span> : <span className="text-muted-foreground">—</span>}
+        {value ? <span className="truncate font-medium">{value}</span> : <span className="text-muted-foreground">—</span>}
         {action && (
           <a href={action} className="ml-auto text-[11px] text-primary hover:underline shrink-0">{action.startsWith("tel") ? "Call" : "Send"}</a>
         )}
@@ -255,6 +256,33 @@ function LeadHeader({
 
   const quickLog = async (type: string, title: string) => {
     try { await logActivity.mutateAsync({ type, title }); toast.success(title); } catch (e) { toast.error((e as Error).message); }
+  };
+
+  // Copy shareable link (v0.21) — hash-routed deep link to this lead.
+  // Clipboard API with a textarea fallback for non-secure contexts.
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const copyLeadLink = async () => {
+    const url = `${window.location.origin}/#/lead/${l.id}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = url;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setLinkCopied(true);
+      toast.success(t("toast.lead_link_copied"));
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      toast.error(url); // last resort: show the link so the user can copy manually
+    }
   };
 
   return (
@@ -329,17 +357,43 @@ function LeadHeader({
             </div>
           );
         })()}
+        {/* v0.21: primary quick actions stay inline; infrequent actions
+            (ERP sync, score recalc, export, quote, archive) moved into an
+            overflow "More" menu — the row was a 10-button wall. */}
         <div className="flex flex-wrap items-center gap-2 mt-4">
           <Button size="sm" variant="default" onClick={() => quickLog("CALL", "Call logged")} disabled={logActivity.isPending}><Phone className="h-3.5 w-3.5 mr-1.5" />{t("lead.call")}</Button>
           <Button size="sm" variant="outline" onClick={() => quickLog("MESSAGE", "Message sent")} disabled={logActivity.isPending}><MessageSquare className="h-3.5 w-3.5 mr-1.5" />{t("lead.message")}</Button>
           <Button size="sm" variant="outline" onClick={() => quickLog("EMAIL", "Email sent")} disabled={logActivity.isPending}><Send className="h-3.5 w-3.5 mr-1.5" />Email</Button>
           <Button size="sm" variant="outline" onClick={onEdit}><StickyNote className="h-3.5 w-3.5 mr-1.5" />{t("common.edit")}</Button>
-          <Button size="sm" variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}><RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", sync.isPending && "animate-spin")} />{l.integrationSyncs?.some((s: any) => s.status === "SYNCED") ? t("lead.synced_erp") : t("lead.sync_erp")}</Button>
-          <Button size="sm" variant="outline" onClick={() => recalc.mutate()} disabled={recalc.isPending}><Zap className="h-3.5 w-3.5 mr-1.5" />{t("common.score")}</Button>
-          <Button size="sm" variant="outline" onClick={() => window.open(`/api/v1/leads/${l.id}/export-activity`, "_blank")} title="Export activity timeline as CSV"><Download className="h-3.5 w-3.5 mr-1.5" />Export</Button>
-          <Button size="sm" variant="outline" disabled title={t("lead.create_quote.disabled")}><FileText className="h-3.5 w-3.5 mr-1.5" />{t("lead.create_quote")}</Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild><Button size="sm" variant="outline"><Archive className="h-3.5 w-3.5 mr-1.5" />{t("common.archive")}</Button></AlertDialogTrigger>
+          <Button size="sm" variant="outline" onClick={copyLeadLink} title={t("lead.copy_link")} className={cn(linkCopied && "border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400")}>
+            {linkCopied ? <Check className="h-3.5 w-3.5 mr-1.5" /> : <Link2 className="h-3.5 w-3.5 mr-1.5" />}
+            <span className="hidden sm:inline">{linkCopied ? t("lead.link_copied_short") : t("lead.copy_link")}</span>
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline"><MoreHorizontal className="h-3.5 w-3.5" /><span className="sr-only">{t("common.more")}</span></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onClick={() => sync.mutate()} disabled={sync.isPending}>
+                <RefreshCw className={cn("h-3.5 w-3.5 mr-2", sync.isPending && "animate-spin")} />
+                <span className="truncate">{l.integrationSyncs?.some((s: any) => s.status === "SYNCED") ? t("lead.synced_erp") : t("lead.sync_erp")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => recalc.mutate()} disabled={recalc.isPending}>
+                <Zap className="h-3.5 w-3.5 mr-2" />{t("common.score")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => window.open(`/api/v1/leads/${l.id}/export-activity`, "_blank")}>
+                <Download className="h-3.5 w-3.5 mr-2" />Export
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled title={t("lead.create_quote.disabled")}>
+                <FileText className="h-3.5 w-3.5 mr-2" /><span className="truncate">{t("lead.create_quote")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setArchiveOpen(true)} className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400">
+                <Archive className="h-3.5 w-3.5 mr-2" />{t("common.archive")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <AlertDialog open={archiveOpen} onOpenChange={setArchiveOpen}>
             <AlertDialogContent>
               <AlertDialogHeader><AlertDialogTitle>{t("common.archive")}?</AlertDialogTitle><AlertDialogDescription>This will soft-archive the lead. History is preserved.</AlertDialogDescription></AlertDialogHeader>
               <AlertDialogFooter>

@@ -14,6 +14,7 @@ import { validateFollowUpConfig } from "@/lib/sla-followup";
 import { validateStageInactivityConfig } from "@/lib/sla-stage-inactivity";
 import { validateTaskEventConfig } from "@/lib/domain-events";
 import { TASK_EVENT_SETTING_KEY } from "@/lib/leados/event-reconciler";
+import { invalidateOrgCache } from "@/lib/leados/api-cache";
 
 export async function GET() {
   try {
@@ -54,6 +55,10 @@ export async function PATCH(req: Request) {
         });
       }
     }
+    // v0.21: org name/locale/currency + scoring changes feed the cached
+    // team/dashboard/analytics reads — invalidate eagerly instead of waiting
+    // out the TTL.
+    invalidateOrgCache(session.orgId);
     return ok({ ok: true });
   } catch (e) {
     return apiError("settings-update-failed", e);

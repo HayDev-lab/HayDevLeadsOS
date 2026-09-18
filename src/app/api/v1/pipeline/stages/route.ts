@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, apiError, parseJson, validate } from "@/lib/leados/api";
+import { invalidateOrgCache } from "@/lib/leados/api-cache";
 import { z } from "zod";
 
 const Create = z.object({
@@ -34,6 +35,9 @@ export async function POST(req: Request) {
         isLost: v.value.type === "lost",
       },
     });
+    // v0.21: stage list feeds the cached analytics forecast + dashboard
+    // by-stage chart — invalidate eagerly.
+    invalidateOrgCache(session.orgId);
     return ok({ stage });
   } catch (e) {
     return apiError("stage-create-failed", e);

@@ -164,7 +164,12 @@ export function LeadsView() {
             <Button variant="outline" size="sm"><Upload className="h-4 w-4 mr-1.5" />{t("leads.import")}</Button>
           </ImportDialog>
           <Button variant="outline" size="sm" onClick={exportCsv}><Download className="h-4 w-4 mr-1.5" />{t("leads.export")}</Button>
-          <LeadFormDialog open={newLeadOpen} onOpenChange={setNewLeadOpen}><Button size="sm"><Plus className="h-4 w-4 mr-1.5" />{t("leads.new")}</Button></LeadFormDialog>
+          <LeadFormDialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
+            <Button size="sm" title="⇧⌘N / Alt+N">
+              <Plus className="h-4 w-4 mr-1.5" />{t("leads.new")}
+              <span className="ml-2 hidden md:inline-flex items-center gap-0.5 text-[9px] font-medium text-muted-foreground/70 border rounded px-1 py-px">⇧⌘N</span>
+            </Button>
+          </LeadFormDialog>
         </div>
       </div>
 
@@ -400,7 +405,7 @@ export function LeadsView() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 truncate max-w-[160px]">{l.company || "—"}</td>
+                    <td className="px-3 py-2.5 truncate max-w-[220px]" title={l.company || undefined}>{l.company || "—"}</td>
                     <td className="px-3 py-2.5"><SourceBadge name={l.source?.name} type={l.source?.type} /></td>
                     <td className="px-3 py-2.5">
                       <div className="flex flex-col gap-0.5">

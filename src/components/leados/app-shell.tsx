@@ -273,7 +273,7 @@ function NavList({ currentView, attentionCount, inboxUnassigned, onNavigate }: {
             <Icon className="h-4 w-4" />
             <span className="font-medium">{t(n.key)}</span>
             {badge > 0 && (
-              <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold", active ? "bg-primary-foreground/20 text-primary-foreground" : n.view === "inbox" ? "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300" : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300")}>
+              <span className={cn("ml-auto inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums", active ? "bg-primary-foreground/20 text-primary-foreground" : n.view === "inbox" ? "bg-primary text-primary-foreground shadow-sm" : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300")}>
                 {n.view === "inbox" ? null : <AlertTriangle className="h-2.5 w-2.5" />}{badge}
               </span>
             )}

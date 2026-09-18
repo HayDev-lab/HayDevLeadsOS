@@ -109,7 +109,10 @@ export function DashboardView() {
               {c.critical && c.value > 0 && <span className="h-2 w-2 rounded-full bg-red-500 leados-pulse" />}
             </div>
             <div className="mt-2 text-2xl font-bold tabular-nums">{dash.isLoading ? "…" : c.value}</div>
-            <div className="text-[11px] text-muted-foreground truncate">{c.label}</div>
+            {/* v0.21: labels wrap to 2 lines (was truncate — Armenian labels
+                like "SLA-ի խախտումներ" were unreadable at 10-column density);
+                fixed min-height keeps all cards in a row equal-height. */}
+            <div className="text-[11px] leading-tight text-muted-foreground line-clamp-2 min-h-[2.4em]" title={c.label}>{c.label}</div>
           </motion.button>
         ))}
       </div>
@@ -120,7 +123,7 @@ export function DashboardView() {
         <Card className="border-red-200/70 dark:border-red-900/60 bg-red-50/30 dark:bg-red-950/20">
           <CardContent className="py-3.5 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400 flex items-center gap-1.5">
+              <p className="text-xs font-semibold tracking-wide text-red-600 dark:text-red-400 flex items-center gap-1.5">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 {t("attention.needs_attention")}
                 <span className="text-muted-foreground font-normal normal-case">
@@ -206,7 +209,7 @@ export function DashboardView() {
       <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
         <CardContent className="py-3.5">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground flex items-center gap-1.5">
               <Zap className="h-3.5 w-3.5 text-primary" />
               {t("followup.queue.title")}
             </p>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, apiError, notFound, parseJson } from "@/lib/leados/api";
+import { invalidateOrgCache } from "@/lib/leados/api-cache";
 import { z } from "zod";
 
 const Update = z.object({
@@ -31,6 +32,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (v.data.color !== undefined) data.color = v.data.color;
     if (v.data.position !== undefined) data.position = v.data.position;
     const updated = await db.pipelineStage.update({ where: { id }, data });
+    // v0.21: stage changes feed the cached analytics forecast + dashboard
+    // by-stage chart — invalidate eagerly.
+    invalidateOrgCache(session.orgId);
     return ok({ stage: updated });
   } catch (e) {
     return apiError("stage-update-failed", e);
@@ -48,6 +52,9 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     const leadCount = await db.lead.count({ where: { stageId: id, status: { notIn: ["ARCHIVED"] } } });
     if (leadCount > 0) return badRequest(`Cannot delete: ${leadCount} active lead(s) are in this stage. Move them first.`);
     await db.pipelineStage.delete({ where: { id } });
+    // v0.21: stage changes feed the cached analytics forecast + dashboard
+    // by-stage chart — invalidate eagerly.
+    invalidateOrgCache(session.orgId);
     return ok({ ok: true });
   } catch (e) {
     return apiError("stage-delete-failed", e);
