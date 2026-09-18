@@ -1,11 +1,11 @@
 "use client";
 
-import { useDashboard, useLostDetector, useRunLostDetector, useSession } from "@/hooks/leados/use-api";
+import { useDashboard, useLostDetector, useRunLostDetector, useSession, useAnalytics } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Activity, AlertTriangle, ArrowUpRight, Bell, CalendarClock, CheckCircle2, ClipboardList, Hourglass, Inbox, Layers, Plus, Sparkles, Timer, Trophy, XCircle, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Bell, CalendarClock, CheckCircle2, ClipboardList, GaugeCircle, Hourglass, Inbox, Layers, Plus, Sparkles, Timer, TrendingUp, Trophy, XCircle, Zap } from "lucide-react";
 import { MiniBar, OwnerChip, ScoreBadge, SourceBadge, StageBadge, timeAgo, EmptyState, formatMoney } from "./primitives";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { LeadFormDialog } from "./lead-form-dialog";
@@ -20,10 +20,12 @@ export function DashboardView() {
   const lost = useLostDetector();
   const run = useRunLostDetector();
   const session = useSession();
+  const analytics = useAnalytics();
   const [, navigate] = useHashRoute();
 
   const m = dash.data?.metrics;
   const currency = session.data?.session?.organization?.currency ?? "AMD";
+  const forecast = analytics.data?.forecast;
 
   const metricCards: { key: string; value: number; icon: typeof Sparkles; label: string; color: string; critical?: boolean; view: string; params?: Record<string, string> }[] = [
     { key: "new", value: m?.newLeads ?? 0, icon: Sparkles, label: t("metric.new_leads"), color: "text-sky-600 bg-sky-50 dark:bg-sky-950/40", view: "leads" },
@@ -233,7 +235,7 @@ export function DashboardView() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2"><Layers className="h-4 w-4" /> {t("dashboard.by_source")}</CardTitle>
-            <CardDescription className="text-xs">{totalActive} active leads</CardDescription>
+            <CardDescription className="text-xs">{totalActive} · {t("team.active")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2.5 pt-1">
             {dash.isLoading && Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
@@ -244,18 +246,78 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" /> {t("dashboard.by_stage")}</CardTitle>
-            <CardDescription className="text-xs">Conversion funnel</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2.5 pt-1">
-            {dash.isLoading && Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
-            {!dash.isLoading && byStage.map((s) => (
-              <MiniBar key={s.stage} value={s.count} max={stageMax} color={s.color ?? "#94a3b8"} label={s.stage} right={String(s.count)} />
-            ))}
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          {/* mini revenue forecast */}
+          {forecast && forecast.stages.some((s: any) => s.count > 0) && (
+            <Card className="overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-transparent leados-lift">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <GaugeCircle className="h-4 w-4 text-primary" /> {t("analytics.forecast.title")}
+                  <span className="ml-auto text-[10px] text-muted-foreground font-normal">{t("analytics.forecast.coverage")}: {forecast.empiricalCoverage}%</span>
+                </CardTitle>
+                <CardDescription className="text-xs">{t("analytics.forecast.subtitle")}</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <button onClick={() => navigate("analytics")} className="w-full text-left group">
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <div className="text-2xl font-bold tabular-nums bg-gradient-to-r from-primary to-emerald-500 bg-clip-text text-transparent group-hover:from-primary/80 transition">
+                        {formatMoney(forecast.weightedTotal)}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">{t("analytics.forecast.weighted")}</div>
+                    </div>
+                    <div className="flex gap-4 text-right">
+                      <div>
+                        <div className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{formatMoney(forecast.commit)}</div>
+                        <div className="text-[10px] text-muted-foreground">{t("analytics.forecast.commit")}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold tabular-nums">{formatMoney(forecast.bestCase)}</div>
+                        <div className="text-[10px] text-muted-foreground">{t("analytics.forecast.best")}</div>
+                      </div>
+                    </div>
+                  </div>
+                  {/* compact range bar */}
+                  <div className="relative mt-3 h-2 rounded-full bg-muted">
+                    <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 via-primary to-violet-400 transition-all duration-700" style={{ width: `${forecast.bestCase > 0 ? Math.min(100, Math.round((forecast.weightedTotal / forecast.bestCase) * 100)) : 0}%` }} />
+                    <div className="absolute top-1/2 -translate-y-1/2 h-3.5 w-[3px] rounded-full bg-emerald-500" style={{ left: `calc(${forecast.bestCase > 0 ? Math.min(99, Math.max(1, Math.round((forecast.commit / forecast.bestCase) * 100))) : 50}% - 1.5px)` }} />
+                  </div>
+                  {/* top stages by weighted value */}
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    {[...forecast.stages]
+                      .sort((a: any, b: any) => b.weightedValue - a.weightedValue)
+                      .slice(0, 3)
+                      .map((s: any) => (
+                        <div key={s.stage} className="rounded-lg bg-background/60 border px-2 py-1.5">
+                          <div className="text-[10px] text-muted-foreground truncate">{s.stage}</div>
+                          <div className="text-xs font-semibold tabular-nums">{formatMoney(s.weightedValue)}</div>
+                          <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden">
+                            <div className={cn("h-full rounded-full", s.empirical ? "bg-primary" : "bg-muted-foreground/40")} style={{ width: `${s.probability}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                  <div className="mt-2 flex items-center justify-end gap-1 text-[10px] text-muted-foreground group-hover:text-foreground transition">
+                    {t("common.actions")} <ArrowUpRight className="h-3 w-3" />
+                  </div>
+                </button>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Activity className="h-4 w-4" /> {t("dashboard.by_stage")}</CardTitle>
+              <CardDescription className="text-xs">{t("analytics.funnel.title")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2.5 pt-1">
+              {dash.isLoading && Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
+              {!dash.isLoading && byStage.map((s) => (
+                <MiniBar key={s.stage} value={s.count} max={stageMax} color={s.color ?? "#94a3b8"} label={s.stage} right={String(s.count)} />
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* attention + recent + tasks */}

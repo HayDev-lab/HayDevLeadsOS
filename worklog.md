@@ -1182,3 +1182,30 @@ Stage Summary:
 - i18n coverage now includes Team + Analytics + lead form; stage NAMES remain English by design (org-configurable data, consistent across locales).
 - Open risks: (a) OOM fragility on this 4.1GB sandbox — keep browser closed when idle; (b) forecast commit threshold hardcoded 60%; (c) forecast samples depend on stage history — CSV-imported leads without transitions undercount "reached" stages.
 - Next round suggestions: restart-safe server monitoring; consider localizing seeded stage names per-locale (needs stageName i18n overlay); dashboard mini-forecast widget; weekly-won run-rate in forecast card.
+
+---
+Task ID: round3-1
+Agent: main (Z.ai Code webDevReview)
+Task: Scheduled 15-min review: assess stability, then implement the worklog's "next round suggestion" — dashboard mini-forecast widget.
+
+Work Log:
+- STATUS CHECK: server healthy (auto-persisted since round 2 fix), forecast API intact (100% empirical coverage, weighted 18.4M), lint clean. QA screenshots: round3-qa/01–02.
+- WORK FOCUS (from round2 suggestions): dashboard mini-forecast widget + finishing dashboard i18n leftovers.
+- NEW FEATURE — Dashboard Revenue Forecast Widget (dashboard-view.tsx):
+  * Added useAnalytics() to DashboardView; widget renders next to the by-source chart (stacks with by-stage chart in a right column).
+  * Design: gradient headline (weighted forecast) + commit/best-case values, compact range bar with commit marker, top-3 stages by weighted value as mini chips (name, value, probability bar — solid for empirical, muted for estimates), empirical coverage badge in header, whole card clickable → navigates to #/analytics, "actions →" affordance on hover.
+  * Honest-data design preserved: estimate bars visually muted exactly like the full forecast card.
+- I18N FIXES (dashboard): "X active leads" → "{totalActive} · {t(team.active)}"; "Conversion funnel" → t(analytics.funnel.title). No new keys needed (reuse).
+- STYLING: widget card has gradient background wash (from-primary/5), border-primary/20, leados-lift hover; headline gradient animates opacity on hover; range bar has 700ms width transition.
+- VERIFY (agent-browser + VLM):
+  * Renders correctly — VLM: "Layout is clean... No overlaps or critical defects... integrates seamlessly".
+  * Click navigation works (clicked widget → URL #/analytics, title "Վերլուծություն").
+  * Mobile 390×844: no horizontal scroll, widget stacks cleanly, chips readable (VLM confirmed).
+  * Dark mode: gradient number and labels high contrast (VLM confirmed).
+  * lint PASS, dev.log 0 errors, browser console clean.
+
+Stage Summary:
+- Dashboard now surfaces the revenue forecast without navigating to Analytics — headline number + commit + best case + top stages in one glance.
+- All round-2 suggestions except stage-name i18n overlay are done.
+- Open risks: (a) dashboard now fires the analytics query (heavier — ~6 extra DB aggregate scans) on every dashboard visit; acceptable for demo scale, worth caching if orgs grow; (b) OOM fragility still present (browser closed when idle this round, no incidents); (c) stage names still English-by-design.
+- Next round suggestions: (1) API-level caching for analytics/dashboard (in-memory TTL cache — matches "local memory caching" stack rule); (2) weekly-won run-rate line in forecast card; (3) keyboard shortcut palette (⌘K search exists — verify and extend to actions); (4) lead detail: revenue-impact badge when lead stage changes.
