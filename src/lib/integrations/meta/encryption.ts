@@ -27,7 +27,11 @@ function deriveKey(secret: string): Buffer {
 export function resolveEncryptionKey(explicit?: string | null): Buffer {
   const secret = explicit?.trim() || process.env.INTEGRATION_ENCRYPTION_KEY?.trim() || undefined;
   if (secret) return deriveKey(secret);
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && process.env.LEADOS_DEMO !== "true") {
+    // Real production REQUIRES the key. The packaged public demo
+    // (LEADOS_DEMO=true) is the only production shape allowed to use the
+    // deterministic dev fallback — it is a demo, never a customer deployment
+    // (v0.19.2 hardening §25: same separation as the database policy).
     throw new Error("INTEGRATION_ENCRYPTION_KEY is required in production (no insecure default)");
   }
   // Dev/demo-only deterministic fallback. Explicitly NOT production.
