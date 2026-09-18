@@ -1244,3 +1244,47 @@ Stage Summary:
 - Cache is single-process by design (matches local-memory-caching stack rule); multi-instance deployments would need per-node or shared caching.
 - Open risks: (a) OOM fragility unchanged (browser closed when idle this round, no incidents); (b) forecast commit threshold still hardcoded 60%; (c) stage names still English-by-design; (d) settings/pipeline mutations are not cache-invalidated (bounded by TTL 45-90s, acceptable).
 - Next round suggestions: (1) recently-viewed leads section in the palette (localStorage history); (2) lead-detail revenue-impact badge when stage changes (round-3 leftover); (3) cache TTL/invalidation for /team and /inbox stats; (4) stage-name i18n overlay; (5) keyboard shortcut hints in sidebar tooltips.
+
+---
+Task ID: round5-1
+Agent: main (Z.ai Code webDevReview)
+Task: Scheduled 15-min review: assess stability, QA, then implement round-4 suggestions — recently-viewed leads in palette, lead-detail revenue-impact, /team + /inbox caching, sidebar ⌘K affordance + styling polish.
+
+Work Log:
+- STATUS CHECK: next-server RSS had grown to ~1.9GB (above the 1.5GB OOM threshold from round 2) → proactively restarted dev server via the (nohup bun run dev &) pattern BEFORE browser QA. During the round the server was OOM-killed once more (1.6GB anon-rss; dmesg confirmed) while stale agent-browser Chromium renderers (~15 processes) held memory — closed browser daemon, restarted, and closed it again after each test batch. LESSON REINFORCED: never leave agent-browser running between batches on this 4.1GB box.
+- QA ROUND: all 9 views + lead detail + ⌘K palette render with ZERO console errors. Found and deleted 1 leftover QA probe lead ("HTTP QA", 31→30 leads). Kanban/palette/dashboard/notifications all healthy. Screenshots round5-qa/01–03.
+- NEW FEATURE 1 — Recently-viewed leads in ⌘K palette (v0.20):
+  * src/lib/leados/recent-leads.ts: localStorage utility (key leados:recent-leads, max 5, most-recent-first, dedupe by id, corrupt-JSON-safe).
+  * LeadDetailView records every opened lead (ref-guarded effect; name/company/phone/avatarColor/stageName captured).
+  * Palette: "Recent" group (i18n'd, hy/ru/en) rendered above "Go to"; rows show avatar, name, company·phone, stage chip + History icon. Derived via useMemo on open (lint-clean: no setState-in-effect; recomputes exactly when palette opens). Client-side filterable like other static groups.
+- NEW FEATURE 2 — Revenue-impact stage changer (round-3 leftover):
+  * StageChanger now pulls the empirical forecast (useAnalytics → forecast.stages, matched by stage NAME) and renders: probability % chip on every open-stage button (solid emerald = empirical, dashed muted = position estimate — same honesty language as the Analytics forecast card), and for leads with estimatedValue a weighted-delta badge (+/−AMD, emerald/rose, TrendingUp/Down icons, lg+ only) vs the current stage.
+  * Stage-change success fires a localized toast: "Կշռված փայփայումը փոխվեց՝ +306K AMD" (hy) / "Взвешенный пайплайн: {delta}" (ru) / "Weighted pipeline {delta}" (en).
+  * Card footer hint line explains probability provenance (empirical vs estimate).
+  * VERIFIED MATH: Sergey Ivanov (1.8M AMD, Contacted 33%) → Qualified (50%) shows +306K = 1.8M×17pp; Meeting (67%) shows +612K = 1.8M×34pp. Toast verified live; demo lead reverted after test.
+- NEW FEATURE 3 — API caching for /team + /inbox stats:
+  * /team: cached(`team:<org>`, 60s) → measured 130ms → 11ms (11×) on repeat.
+  * /inbox?view=stats: cached(`inbox-stats:<org>`, 30s) — this endpoint feeds the sidebar badge poller; TTL-bounded staleness documented in route comments.
+- NEW FEATURE 4 — Sidebar ⌘K search affordance:
+  * New SidebarSearchButton under the sidebar nav (desktop): Search icon + localized placeholder + ⌘K kbd chip; dispatches leados:open-palette custom event (palette now listens for it). Makes the palette discoverable without knowing the shortcut. Mirrors the header trigger's visual style for consistency.
+- STYLING POLISH (mandatory):
+  * Probability chips + delta badges (feature 2) are themselves a major visual upgrade of the stage card.
+  * Command palette: elevated spotlight shadow on the dialog (deep drop + hairline ring), slim 6px custom scrollbar on the command list, footer breathing room py-2→py-2.5 (VLM suggestion).
+  * Sidebar: search button slot with space-y-3 rhythm above the EVERY LEAD tagline.
+- I18N: +7 keys ×3 locales (palette.group.recent, lead.impact.toast/samples/estimate/hint, sidebar.search_hint; hy wording proofread — գնահատական).
+- LINT FIX during QA: initial recent-leads state update in effect violated react-hooks/set-state-in-effect → refactored to useMemo-on-open derivation (cleaner semantics, zero lint suppressions).
+- VERIFY (agent-browser + VLM):
+  * ESLint PASS (0 issues), tsc --noEmit PASS (src/; only pre-existing examples/skills errors).
+  * All 9 views + lead detail: zero console errors, before and after changes; no horizontal overflow at 1280 and 390.
+  * Palette Recent group: ordering verified (Elena→Irina→Sergey after 3 lead visits), click navigates to lead detail, localStorage contents match UI.
+  * Stage card: chips + deltas + hint render (light + dark + EN + RU + hy); toast fires with correct amount; VLM review of scrolled stage card: "polished, functional, ready for production. No critical issues."
+  * Dark palette VLM review: AAA contrast, perfect alignment; only minor footer-padding note (fixed).
+  * Locale cookie switching verified EN ("Recently viewed", "Change stage", hint) and RU ("Недавние"); restored hy default.
+  * Screenshots round5-qa/01–12 (palette, lead detail, kanban, stage-impact light/dark/EN, sidebar button, mobile 390×844, final dashboard).
+
+Stage Summary:
+- Four round-4 suggestions implemented (recent-leads palette, revenue-impact badge, team/inbox caching, sidebar shortcut hint) + styling polish; all verified across locales/themes/viewports with zero console errors.
+- The lead-detail stage card is now revenue-aware: every stage button answers "what is this worth weighted?" before the user moves the lead.
+- Cache coverage now: analytics(90s), dashboard(45s), team(60s), inbox-stats(30s); mutation-driven invalidation still wired only for lead/task mutations (settings/pipeline bounded by TTL — acceptable).
+- Open risks: (a) OOM fragility remains the #1 operational risk — this round had one kill (1.6GB rss) despite precautions; recommend a periodic scheduled restart or NODE_OPTIONS=--max-old-space-size cap next round; (b) forecast stage matching is by stage NAME (unique per pipeline today, would need ID in forecast payload if orgs rename stages to duplicates across pipelines); (c) stage names still English-by-design.
+- Next round suggestions: (1) dev-server memory mitigation (max-old-space-size / scheduled restart / Turbopack memory flags); (2) stage-name i18n overlay or rename stage.name→id in forecast payload; (3) "Copy lead link" share action in lead header; (4) keyboard shortcut for new lead (e.g. ⌘⇧N) wired to the existing leados:new-lead event; (5) settings mutations → cache invalidation.

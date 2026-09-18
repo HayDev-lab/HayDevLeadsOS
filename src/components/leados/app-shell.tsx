@@ -12,6 +12,7 @@ import { LangSwitcher, NotificationsBell, ThemeToggle, UserSwitcher } from "./he
 import { CommandPalette } from "./command-palette";
 import { DemoBadge } from "./primitives";
 import { toast } from "sonner";
+import { Search, Command as CommandIcon } from "lucide-react";
 import { DashboardView } from "./dashboard-view";
 import { LeadsView } from "./leads-view";
 import { LeadDetailView } from "./lead-detail-view";
@@ -218,7 +219,8 @@ export function LeadOSApp() {
         <aside className="hidden md:flex w-60 shrink-0 flex-col border-r bg-card/30">
           <SidebarBrand org={org} />
           <NavList currentView={currentView} attentionCount={attentionCount} inboxUnassigned={inboxUnassigned} />
-          <div className="mt-auto p-3">
+          <div className="mt-auto p-3 space-y-3">
+            <SidebarSearchButton />
             <div className="rounded-lg border bg-muted/40 p-3">
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 <span className="font-semibold text-foreground">EVERY LEAD</span> has an owner. <span className="font-semibold text-foreground">NOTHING</span> gets lost.
@@ -285,6 +287,24 @@ function NavList({ currentView, attentionCount, inboxUnassigned, onNavigate }: {
 function BrandMark() {
   return (
     <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">H</span>
+  );
+}
+
+/** Sidebar search affordance (v0.20): a permanent, discoverable entry
+ *  point for the ⌘K palette — with the shortcut right on the button. */
+function SidebarSearchButton() {
+  const { t } = useLocale();
+  return (
+    <button
+      onClick={() => window.dispatchEvent(new CustomEvent("leados:open-palette"))}
+      className="group flex w-full items-center gap-2 rounded-lg border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground transition hover:bg-muted hover:border-border/80 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+    >
+      <Search className="h-3.5 w-3.5" />
+      <span className="truncate">{t("sidebar.search_hint")}</span>
+      <span className="ml-auto inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground/80 border rounded px-1 py-px group-hover:text-foreground transition">
+        <CommandIcon className="h-2.5 w-2.5" />K
+      </span>
+    </button>
   );
 }
 

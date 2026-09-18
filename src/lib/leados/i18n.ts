@@ -807,6 +807,12 @@ export const DICT = {
     "palette.searching": "Որոնում…",
     "palette.min_chars": "Գրեք առնվազն 2 նշան՝ լիդեր որոնելու համար",
     "palette.footer.hint": "↑↓ ընտրել · ↵ բացել · esc փակել",
+    "palette.group.recent": "Վերջին դիտված",
+    "lead.impact.toast": "Կշռված փայփայումը փոխվեց՝ {delta}",
+    "lead.impact.samples": "{p}% · պատմության {n} նմուշից",
+    "lead.impact.estimate": "{p}% · դիրքային գնահատական",
+    "lead.impact.hint": "Հավանականությունները ձեր փուլերի պատմությունից են · կետագծավոր = գնահատական",
+    "sidebar.search_hint": "Որոնել կամ անցնել…",
   },
   ru: {
     "app.name": "HAYDEV LEADOS",
@@ -1611,6 +1617,12 @@ export const DICT = {
     "palette.searching": "Поиск…",
     "palette.min_chars": "Введите минимум 2 символа для поиска лидов",
     "palette.footer.hint": "↑↓ выбор · ↵ открыть · esc закрыть",
+    "palette.group.recent": "Недавние",
+    "lead.impact.toast": "Взвешенный пайплайн: {delta}",
+    "lead.impact.samples": "{p}% · {n} наблюдений",
+    "lead.impact.estimate": "{p}% · оценка по позиции",
+    "lead.impact.hint": "Вероятности — из истории ваших переходов · пунктир = оценка",
+    "sidebar.search_hint": "Поиск или переход…",
   },
   en: {
     "app.name": "HAYDEV LEADOS",
@@ -2415,6 +2427,12 @@ export const DICT = {
     "palette.searching": "Searching…",
     "palette.min_chars": "Type at least 2 characters to search leads",
     "palette.footer.hint": "↑↓ navigate · ↵ open · esc close",
+    "palette.group.recent": "Recently viewed",
+    "lead.impact.toast": "Weighted pipeline {delta}",
+    "lead.impact.samples": "{p}% · from {n} samples",
+    "lead.impact.estimate": "{p}% · position estimate",
+    "lead.impact.hint": "Probabilities come from your stage history · dashed = estimate",
+    "sidebar.search_hint": "Search or jump to…",
   },
 } as const;
 

@@ -176,6 +176,19 @@ table.leados-table tbody tr { transition: background 0.12s ease; }
   border-radius: 999px;
   background: var(--primary);
 }
+/* Command palette — elevated spotlight look + slim scrollbar (v0.20) */
+[data-slot="dialog-content"]:has([cmdk-root]) {
+  box-shadow:
+    0 24px 64px -16px rgb(0 0 0 / 0.35),
+    0 0 0 1px color-mix(in oklch, var(--border) 60%, transparent);
+}
+[cmdk-list] { scrollbar-width: thin; }
+[cmdk-list]::-webkit-scrollbar { width: 6px; }
+[cmdk-list]::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
+  border-radius: 999px;
+}
+
 /* Hide horizontal scrollbar on kanban when not needed */
 .kanban-scroll { scrollbar-width: thin; }
 

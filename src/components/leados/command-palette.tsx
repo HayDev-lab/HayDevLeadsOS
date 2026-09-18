@@ -12,7 +12,7 @@
 // client-side (shouldFilter=false + manual match) so server-returned leads
 // are never hidden by cmdk's local fuzzy filter.
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "next-themes";
 import {
   Command,
@@ -25,12 +25,13 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   LayoutDashboard, Users, KanbanSquare, CheckSquare, Settings, Bell, Inbox as InboxIcon,
-  BarChart3, UserCircle, Zap, Plus, Moon, Languages, Search, Command as CommandIcon, Loader2, CornerDownLeft,
+  BarChart3, UserCircle, Zap, Plus, Moon, Languages, Search, Command as CommandIcon, Loader2, CornerDownLeft, History,
 } from "lucide-react";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { useSearch } from "@/hooks/leados/use-api";
 import { LeadAvatar } from "./primitives";
+import { getRecentLeads, type RecentLeadEntry } from "@/lib/leados/recent-leads";
 
 const PALETTE_NAV = [
   { view: "dashboard", icon: LayoutDashboard, key: "nav.dashboard" as const },
@@ -58,6 +59,18 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const search = useSearch(query.trim().length >= 2 ? query : "");
 
+  // RECENT LEADS (v0.20): derived from localStorage whenever the palette
+  // OPENS (open false→true re-runs the memo) — fresh history per session,
+  // no effect/state dance, and it stays empty while closed.
+  const recent = useMemo<RecentLeadEntry[]>(() => (open ? getRecentLeads() : []), [open]);
+
+  // External openers (sidebar hint button) fire this event.
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("leados:open-palette", onOpen);
+    return () => window.removeEventListener("leados:open-palette", onOpen);
+  }, []);
+
   // ⌘K / Ctrl+K toggles the palette from anywhere.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -78,6 +91,15 @@ export function CommandPalette() {
   const q = query.trim().toLowerCase();
   const match = (...fields: string[]) => q === "" || fields.some((f) => f.toLowerCase().includes(q));
 
+  const recentItems = recent.filter((r) =>
+    match(
+      [r.firstName, r.lastName].filter(Boolean).join(" "),
+      r.company ?? "",
+      r.phone ?? "",
+      r.stageName ?? "",
+      "recent history"
+    )
+  );
   const goItems = PALETTE_NAV.filter((n) => match(t(n.key), n.view));
   const showNotifications = match(t("notif.view_all"), "notifications bell");
   const showNewLead = match(t("palette.new_lead"), "new lead create");
@@ -88,7 +110,7 @@ export function CommandPalette() {
   const searchingLeads = q.length >= 2;
   const hasLeads = searchingLeads && leadRows.length > 0;
   const hasAny =
-    hasLeads || goItems.length > 0 || showNotifications || showNewLead || showTheme || langItems.length > 0;
+    hasLeads || recentItems.length > 0 || goItems.length > 0 || showNotifications || showNewLead || showTheme || langItems.length > 0;
 
   const go = (view: string, params?: Record<string, string>) => {
     close();
@@ -186,6 +208,34 @@ export function CommandPalette() {
                 </CommandGroup>
               )}
 
+              {/* recently viewed (localStorage) */}
+              {recentItems.length > 0 && (
+                <>
+                  {hasLeads && <CommandSeparator />}
+                  <CommandGroup heading={t("palette.group.recent")}>
+                    {recentItems.map((r) => (
+                      <CommandItem key={r.id} value={`recent-${r.id}`} onSelect={() => go("lead", { id: r.id })} className="py-2.5">
+                        <LeadAvatar first={r.firstName} last={r.lastName} color={r.avatarColor} size={26} />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate">
+                            {[r.firstName, r.lastName].filter(Boolean).join(" ") || "Unknown"}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            {[r.company, r.phone].filter(Boolean).join(" · ") || "—"}
+                          </div>
+                        </div>
+                        {r.stageName && (
+                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {r.stageName}
+                          </span>
+                        )}
+                        <History className="h-3 w-3 text-muted-foreground/40" />
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </>
+              )}
+
               {/* navigation */}
               {(goItems.length > 0 || showNotifications) && (
                 <CommandGroup heading={t("palette.group.go")}>
@@ -252,7 +302,7 @@ export function CommandPalette() {
             </CommandList>
 
             {/* footer hints */}
-            <div className="border-t px-3 py-2 flex items-center justify-between text-[10px] text-muted-foreground">
+            <div className="border-t px-3 py-2.5 flex items-center justify-between text-[10px] text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Kbd>↑</Kbd><Kbd>↓</Kbd>
                 <span className="mx-0.5">{t("palette.footer.hint")}</span>

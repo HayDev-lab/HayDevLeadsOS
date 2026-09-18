@@ -4,6 +4,7 @@ import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, apiError, notFound, validate, parseJson } from "@/lib/leados/api";
 import { z } from "zod";
 import { listMessages, getInboxStats, groupByConversation } from "@/lib/leados/inbox-service";
+import { cached } from "@/lib/leados/api-cache";
 
 export async function GET(req: Request) {
   try {
@@ -13,7 +14,11 @@ export async function GET(req: Request) {
     const unassigned = p.get("unassigned") === "1";
     const view = p.get("view"); // "conversations" | "stats"
     if (view === "stats") {
-      const stats = await getInboxStats(session.orgId);
+      // TTL-bounded (v0.20): sidebar badge + inbox counters poll this;
+      // 30s staleness for unread counts is fine at demo scale.
+      const stats = await cached(`inbox-stats:${session.orgId}`, 30_000, () =>
+        getInboxStats(session.orgId)
+      );
       return ok(stats);
     }
     const rows = await listMessages(session.orgId, { source, unassigned });

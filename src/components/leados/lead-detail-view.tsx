@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useLead, useLeadActivities, useLeadNotes, useLeadEvents, useLeadDuplicate, useLeadTasks, useUsers, useUpdateLead, useAssignLead, useArchiveLead, useChangeStage, useLogActivity, useAddNote, useCreateTask, useSyncErp, useMergeLead, useRecalcScore, usePipeline } from "@/hooks/leados/use-api";
+import { useLead, useLeadActivities, useLeadNotes, useLeadEvents, useLeadDuplicate, useLeadTasks, useUsers, useUpdateLead, useAssignLead, useArchiveLead, useChangeStage, useLogActivity, useAddNote, useCreateTask, useSyncErp, useMergeLead, useRecalcScore, usePipeline, useAnalytics } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain, Download } from "lucide-react";
+import { ArrowLeft, Phone, MessageSquare, Plus, StickyNote, Calendar, Archive, RefreshCw, GitMerge, ExternalLink, AlertTriangle, Zap, Send, CheckCircle2, Clock, FileText, ChevronRight, Sparkles, Brain, Download, TrendingUp, TrendingDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { LeadAvatar, OwnerChip, PriorityBadge, ScoreBadge, StageBadge, StatusPill, SourceBadge, TagChip, formatDate, formatDay, formatMoney, timeAgo } from "./primitives";
 import { SlaDetail } from "./sla/sla-detail";
@@ -30,6 +30,7 @@ import { toast } from "sonner";
 import { SCORE_THRESHOLDS } from "@/lib/leados/constants";
 import { CustomFieldsPanel } from "./custom-fields-panel";
 import { ActivityTimeline } from "./activity-timeline";
+import { pushRecentLead } from "@/lib/leados/recent-leads";
 
 export function LeadDetailView({ leadId }: { leadId: string | null }) {
   const { t } = useLocale();
@@ -39,6 +40,24 @@ export function LeadDetailView({ leadId }: { leadId: string | null }) {
   const [editOpen, setEditOpen] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const activityRef = useRef<HTMLDivElement>(null);
+
+  // RECENT-VIEW HISTORY (v0.20): every lead the user actually opens lands in
+  // the command palette's "Recent" group (client-side localStorage only).
+  const recordedLeadId = useRef<string | null>(null);
+  const loaded = lead.data?.lead;
+  useEffect(() => {
+    if (!loaded || recordedLeadId.current === loaded.id) return;
+    recordedLeadId.current = loaded.id;
+    pushRecentLead({
+      id: loaded.id,
+      firstName: loaded.firstName ?? null,
+      lastName: loaded.lastName ?? null,
+      company: loaded.company ?? null,
+      phone: loaded.phone ?? null,
+      avatarColor: loaded.owner?.avatarColor ?? null,
+      stageName: loaded.stage?.name ?? null,
+    });
+  }, [loaded]);
 
   // DEEP LINK FOCUS (event engine, Section 32): notification links arrive as
   // `#/lead/<id>?focus=activity|followup|stage`. The tab adjusts during render
@@ -597,23 +616,78 @@ function StageChanger({ lead: l }: { lead: any }) {
   const { t } = useLocale();
   const pipeline = usePipeline();
   const change = useChangeStage(l.id);
+  const analytics = useAnalytics();
   const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
+
+  // REVENUE-IMPACT (v0.20): win probability per open stage, taken from the
+  // same empirical forecast the Analytics view shows. Keys are stage NAMES
+  // (that's what the forecast returns); stage names are unique per pipeline.
+  const forecast = analytics.data?.forecast?.stages ?? [];
+  const byName = new Map(forecast.map((f: any) => [f.stage, f]));
+  const curProb = l.stage ? (byName.get(l.stage.name)?.probability ?? null) : null;
+  const value = typeof l.estimatedValue === "number" ? l.estimatedValue : null;
+  const delta = (prob: number) => (value != null && curProb != null ? Math.round((value * (prob - curProb)) / 100) : null);
+  const fmtDelta = (d: number) => `${d > 0 ? "+" : "−"}${formatMoney(Math.abs(d), l.currency ?? "AMD")}`;
+
+  const pick = (s: any) => {
+    const prob = byName.get(s.name)?.probability ?? null;
+    change.mutate(s.id, {
+      onSuccess: () => {
+        const d = prob != null ? delta(prob) : null;
+        if (d != null && d !== 0) {
+          toast.success(t("lead.impact.toast", { delta: fmtDelta(d) }));
+        }
+      },
+    });
+  };
+
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-sm">{t("lead.change_stage")}</CardTitle></CardHeader>
       <CardContent className="pt-0 grid grid-cols-2 gap-1.5">
-        {stages.map((s: any) => (
-          <button
-            key={s.id}
-            onClick={() => change.mutate(s.id)}
-            disabled={change.isPending || s.id === l.stageId}
-            className={cn("flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition", s.id === l.stageId ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent")}
-          >
-            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
-            {s.name}
-          </button>
-        ))}
+        {stages.map((s: any) => {
+          const f = byName.get(s.name);
+          const isCur = s.id === l.stageId;
+          const d = f ? delta(f.probability) : null;
+          return (
+            <button
+              key={s.id}
+              onClick={() => pick(s)}
+              disabled={change.isPending || isCur}
+              title={f ? t(f.empirical ? "lead.impact.samples" : "lead.impact.estimate", { p: f.probability, n: f.resolvedSamples }) : undefined}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition",
+                isCur ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"
+              )}
+            >
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
+              <span className="truncate">{s.name}</span>
+              {f && (
+                <span
+                  className={cn(
+                    "ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums",
+                    isCur ? "bg-primary-foreground/20 text-primary-foreground" : f.empirical ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" : "border border-dashed border-muted-foreground/40 text-muted-foreground"
+                  )}
+                >
+                  {f.probability}%
+                </span>
+              )}
+              {!isCur && f && d != null && d !== 0 && (
+                <span className={cn("shrink-0 hidden lg:inline-flex items-center gap-0.5 rounded-full px-1 py-px text-[9px] font-bold tabular-nums", d > 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300" : "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300")}>
+                  {d > 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
+                  {fmtDelta(d).replace(" AMD", "")}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </CardContent>
+      {forecast.length > 0 && (
+        <p className="px-4 pb-3 pt-0.5 text-[10px] text-muted-foreground flex items-center gap-1">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500/70" />
+          {t("lead.impact.hint")}
+        </p>
+      )}
     </Card>
   );
 }
