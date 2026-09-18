@@ -35,6 +35,16 @@ yarn-error.log*
 # .env.example is a placeholders-only template — safe and MEANT to be committed
 !.env.example
 
+# v0.19.2 §23 — RUNTIME DATABASES ARE NEVER VERSIONED.
+# The demo is reproducible from source: POST /api/v1/seed (or scripts/reseed-demo.ts)
+# + prisma/migrations/0_init. Local files stay on disk (git rm --cached only).
+db/*.db
+db/*.db-journal
+db/*.db-shm
+db/*.db-wal
+db/*.sqlite
+db/*.sqlite3
+
 # vercel
 .vercel
 
