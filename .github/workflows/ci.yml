@@ -23,6 +23,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Least privilege — this job never needs write access to the repo.
+    permissions:
+      contents: read
     env:
       DATABASE_URL: file:/tmp/leados-ci-${{ github.run_id }}.db
       LEADOS_DEMO: "true"
@@ -34,7 +37,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          # Pinned to the tested Bun version (v0.20 §5) — "latest" makes CI
+          # non-reproducible: a new Bun release could change behavior between
+          # two runs of the same commit. Bump deliberately via a PR.
+          bun-version: 1.3.14
 
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
