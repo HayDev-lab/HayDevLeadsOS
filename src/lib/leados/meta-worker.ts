@@ -7,8 +7,10 @@
 // ingestLead() → Lead → LEAD_INGESTED → (existing) SLA/Automation/Notification.
 //
 // RELIABILITY:
-//   • Crash recovery: PROCESSING rows older than STALE_MS are reclaimed to
-//     PENDING (a crash mid-FETCH can never wedge an event forever).
+//   • Crash recovery: PROCESSING rows whose CLAIM (claimedAt, v0.19.1) is
+//     older than STALE_MS are reclaimed to PENDING (a crash mid-FETCH can
+//     never wedge an event forever; legacy rows without claimedAt fall back
+//     to receivedAt).
 //   • Crash AFTER ingestLead() before COMPLETED → retry hits the externalId
 //     idempotency in ingestLead → same Lead returned → marked COMPLETED.
 //     NEVER a second Lead.
@@ -63,10 +65,18 @@ export async function runMetaLeadWorker(opts: { maxRunMs?: number } = {}): Promi
   };
 
   // CRASH RECOVERY: reclaim PROCESSING rows whose worker died mid-fetch.
+  // v0.19.1: keyed on claimedAt (CLAIM time), not receivedAt (arrival time) —
+  // an event queued for hours in PENDING must not be stolen from a live
+  // worker the instant it is claimed. Legacy rows (claimedAt null) fall back
+  // to receivedAt so nothing wedges after the migration.
+  const staleBefore = new Date(Date.now() - STALE_PROCESSING_MS);
   const reclaimed = await db.metaWebhookEvent.updateMany({
     where: {
       status: META_EVENT_STATUS.PROCESSING,
-      receivedAt: { lt: new Date(Date.now() - STALE_PROCESSING_MS) },
+      OR: [
+        { claimedAt: { lt: staleBefore } },
+        { claimedAt: null, receivedAt: { lt: staleBefore } },
+      ],
     },
     data: { status: META_EVENT_STATUS.PENDING, nextAttemptAt: new Date() },
   });
@@ -120,9 +130,10 @@ interface ProcessCtx {
 async function processEvent(eventId: string, ctx: ProcessCtx): Promise<void> {
   const { summary } = ctx;
   // Claim atomically: only PENDING → PROCESSING wins (concurrent workers safe).
+  // claimedAt (v0.19.1) marks the CLAIM time for the stale-reclaim above.
   const claimed = await db.metaWebhookEvent.updateMany({
     where: { id: eventId, status: META_EVENT_STATUS.PENDING },
-    data: { status: META_EVENT_STATUS.PROCESSING, attempts: { increment: 1 } },
+    data: { status: META_EVENT_STATUS.PROCESSING, attempts: { increment: 1 }, claimedAt: new Date() },
   });
   if (claimed.count !== 1) return;
   const ev = await db.metaWebhookEvent.findUnique({ where: { id: eventId } });

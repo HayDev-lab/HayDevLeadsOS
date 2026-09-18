@@ -395,6 +395,9 @@ model Lead {
   @@index([organizationId, nextActionAt])
   @@index([normalizedPhone])
   @@index([normalizedEmail])
+  /// v0.19.1: ingestLead() pre-checks externalId per org (crash-after-ingest
+  /// dedup) — index it so the pre-check is O(log n), not a per-org scan.
+  @@index([organizationId, externalId])
 }
 
 model LeadTag {
@@ -1303,6 +1306,11 @@ model MetaWebhookEvent {
   leadId         String?
   processedAt    DateTime?
   receivedAt     DateTime  @default(now())
+  /// v0.19.1: set when a worker claims the event (PENDING→PROCESSING). Stale
+  /// reclaim keys on THIS timestamp (claim time), so an event that queued for
+  /// a long time can no longer be stolen from a LIVE worker mid-fetch. Null
+  /// only on legacy rows (reclaim falls back to receivedAt for those).
+  claimedAt      DateTime?
 
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   lead         Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)

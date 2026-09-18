@@ -1,13 +1,15 @@
-// META LEAD ADS — configuration (v0.19).
+// META LEAD ADS — configuration (v0.19 / v0.19.1).
 //
 // ALL Meta Graph API calls go through the centralized client, and the client
 // reads its version ONLY from here (spec: "Версия только через
-// META_GRAPH_API_VERSION"). Default = v25.0, the current stable Graph API
-// version (released 2026-02-18, verified against Meta's changelog).
+// META_GRAPH_API_VERSION"). Default = v26.0, the current stable Graph API
+// version (released 2026-07-29; re-verified against Meta's developer changelog
+// on 2026-09-18). Older still-supported versions (e.g. v25.0, ~2-year support
+// window) can be pinned via META_GRAPH_API_VERSION without code changes.
 //
 // This module is PURE (no DB, no React) so tests can inject env values.
 
-export const DEFAULT_GRAPH_API_VERSION = "v25.0";
+export const DEFAULT_GRAPH_API_VERSION = "v26.0";
 export const GRAPH_BASE_URL = "https://graph.facebook.com";
 
 export interface MetaConfig {
@@ -28,7 +30,7 @@ function env(name: string): string | undefined {
 export function getMetaConfig(): MetaConfig {
   const version = env("META_GRAPH_API_VERSION") ?? DEFAULT_GRAPH_API_VERSION;
   if (!/^v\d+\.\d+$/.test(version)) {
-    throw new Error(`META_GRAPH_API_VERSION must look like "v25.0", got "${version}"`);
+    throw new Error(`META_GRAPH_API_VERSION must look like "v26.0", got "${version}"`);
   }
   return {
     appId: env("META_APP_ID") ?? null,

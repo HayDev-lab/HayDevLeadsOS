@@ -1,13 +1,14 @@
-// META — config + demo provider (v0.19). Required cases: version format
-// validation, default v25.0, OAuth scope list, demo provider behavior
+// META — config + demo provider (v0.19/v0.19.1). Required cases: version format
+// validation, default v26.0 (current stable per Meta changelog 2026-09-18),
+// OAuth scope list, demo provider behavior
 // (forms, sendDemoLead → getLead, zero-network by construction).
 import { describe, test, expect, beforeAll } from "bun:test";
 import { getMetaConfig, DEFAULT_GRAPH_API_VERSION, META_OAUTH_SCOPES, oauthConfigured } from "../config";
 import { getMetaProvider, DemoMetaProvider, DEMO_FORMS, DEMO_PAGE_ID } from "../provider";
 
 describe("meta config", () => {
-  test("default Graph version is v25.0 (current stable)", () => {
-    expect(DEFAULT_GRAPH_API_VERSION).toBe("v25.0");
+  test("default Graph version is v26.0 (current stable)", () => {
+    expect(DEFAULT_GRAPH_API_VERSION).toBe("v26.0");
   });
   test("invalid version format rejected", () => {
     const prev = process.env.META_GRAPH_API_VERSION;
