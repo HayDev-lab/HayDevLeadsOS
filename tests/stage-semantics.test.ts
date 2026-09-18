@@ -77,9 +77,10 @@ describe("stage → Lead.status derivation (current behavior — §41 P2 documen
   test("same-stage transition is a no-op (timer not reset)", async () => {
     const lead = await createLead(orgId, userId, { firstName: "Noop", email: `noop-${Date.now()}@t.dev` });
     const before = await db.lead.findUniqueOrThrow({ where: { id: lead.lead.id } });
+    const beforeTs = before.stageEnteredAt!.getTime();
     await new Promise((r) => setTimeout(r, 20));
     await changeStage(orgId, lead.lead.id, userId, before.stageId!);
     const after = await db.lead.findUniqueOrThrow({ where: { id: lead.lead.id } });
-    expect(after.stageEnteredAt.getTime()).toBe(before.stageEnteredAt.getTime());
+    expect(after.stageEnteredAt!.getTime()).toBe(beforeTs);
   });
 });
