@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, type DragEndEvent, type DragStartEvent, useDraggable, useDroppable } from "@dnd-kit/core";
 import { useKanban, useSetLeadStage, useLead, useAssignLead, useUsers, usePipeline } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -90,7 +91,7 @@ function Column({ stage, onClick, slaConfig, followUpConfig, stageInactivityConf
       <div className="flex items-center justify-between px-2.5 py-2 border-b">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color ?? "#94a3b8" }} />
-          <span className="text-xs font-semibold truncate">{stage.name}</span>
+          <span className="text-xs font-semibold truncate" title={stage.name}>{localizeStageName(t, stage.name)}</span>
           <span className="text-[10px] text-muted-foreground bg-muted rounded px-1">{leads.length}</span>
         </div>
       </div>

@@ -472,6 +472,14 @@ export const DICT = {
     "stage.stale": "Կանգնած է",
     "stage.not_applicable": "Հսկում չկա",
     "stage.on_stage": "փուլում",
+    "stage.name.new": "Նոր",
+    "stage.name.contacted": "Կապ հաստատված",
+    "stage.name.qualified": "Որակավորված",
+    "stage.name.meeting": "Հանդիպում",
+    "stage.name.proposal": "Առաջարկ",
+    "stage.name.negotiation": "Բանակցություն",
+    "stage.name.won": "Շահված",
+    "stage.name.lost": "Կորսված",
     "stage.entered_at": "Մուտք փուլ",
     "stage.stage_age": "Փուլում է",
     "stage.expected_max": "Առավելագույնը",
@@ -1292,6 +1300,14 @@ export const DICT = {
     "stage.stale": "Завис",
     "stage.not_applicable": "Не отслеживается",
     "stage.on_stage": "на этапе",
+    "stage.name.new": "Новый",
+    "stage.name.contacted": "Связались",
+    "stage.name.qualified": "Квалифицирован",
+    "stage.name.meeting": "Встреча",
+    "stage.name.proposal": "Предложение",
+    "stage.name.negotiation": "Переговоры",
+    "stage.name.won": "Выигран",
+    "stage.name.lost": "Проигран",
     "stage.entered_at": "Вошёл на этап",
     "stage.stage_age": "На этапе",
     "stage.expected_max": "Максимум",
@@ -2112,6 +2128,14 @@ export const DICT = {
     "stage.stale": "Stale",
     "stage.not_applicable": "Not monitored",
     "stage.on_stage": "on stage",
+    "stage.name.new": "New",
+    "stage.name.contacted": "Contacted",
+    "stage.name.qualified": "Qualified",
+    "stage.name.meeting": "Meeting",
+    "stage.name.proposal": "Proposal",
+    "stage.name.negotiation": "Negotiation",
+    "stage.name.won": "Won",
+    "stage.name.lost": "Lost",
     "stage.entered_at": "Entered stage",
     "stage.stage_age": "Stage age",
     "stage.expected_max": "Expected max",
@@ -2477,6 +2501,36 @@ export function t(locale: Locale, key: DictKey, vars?: Record<string, string | n
     }
   }
   return s;
+}
+
+// ---------------------------------------------------------------------------
+// STAGE-NAME OVERLAY (v0.22)
+//
+// Stages are org-configurable DATA (PipelineStage.name, canonical English as
+// seeded). This overlay localizes the DISPLAY of the canonical names only —
+// every matching / filtering / API / automation path keeps using the raw DB
+// name, and orgs that rename a stage keep seeing their custom name verbatim.
+// ---------------------------------------------------------------------------
+
+export const STAGE_NAME_OVERLAY_KEYS: Record<string, DictKey> = {
+  New: "stage.name.new",
+  Contacted: "stage.name.contacted",
+  Qualified: "stage.name.qualified",
+  Meeting: "stage.name.meeting",
+  Proposal: "stage.name.proposal",
+  Negotiation: "stage.name.negotiation",
+  Won: "stage.name.won",
+  Lost: "stage.name.lost",
+};
+
+/** Localized display name for a stage; custom names pass through verbatim. */
+export function localizeStageName(
+  translate: (key: DictKey) => string,
+  name?: string | null
+): string {
+  if (!name) return "—";
+  const key = STAGE_NAME_OVERLAY_KEYS[name];
+  return key ? translate(key) : name;
 }
 
 export function resolveLocale(input?: string | null): Locale {

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { PRIORITY, SCORE_CATEGORY, type ScoreCategory } from "@/lib/leados/constants";
 import { useT } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
 import { initials } from "@/lib/leados/normalize";
 import { useSession } from "@/hooks/leados/use-api";
 
@@ -66,10 +67,12 @@ export function ScoreBadge({ score, category, size = "sm" }: { score?: number | 
 // ---------- priority ----------
 
 const PRIORITY_COLOR: Record<string, string> = {
+  // v0.22: LOW/MEDIUM text darkened one step (light) and lightened one step
+  // (dark) — VLM flagged the washed-out look in both modes.
   URGENT: "bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 border-red-200 dark:border-red-900",
   HIGH: "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300 border-orange-200 dark:border-orange-900",
-  MEDIUM: "bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border-sky-200 dark:border-sky-900",
-  LOW: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+  MEDIUM: "bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-200 border-sky-200 dark:border-sky-900",
+  LOW: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700",
 };
 
 export function PriorityBadge({ priority }: { priority?: string | null }) {
@@ -83,16 +86,20 @@ export function PriorityBadge({ priority }: { priority?: string | null }) {
 // ---------- stage / status ----------
 
 export function StageBadge({ name, color, type }: { name?: string | null; color?: string | null; type?: string | null }) {
+  const t = useT();
   if (!name) return <span className="text-muted-foreground">—</span>;
   const isWon = type === "won";
   const isLost = type === "lost";
+  // v0.22: canonical English stage names localize for display; custom
+  // org-renamed names render verbatim. Raw name stays in the tooltip.
+  const display = localizeStageName(t, name);
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium" title={display !== name ? name : undefined}>
       <span
         className={cn("h-2 w-2 rounded-full", isWon && "ring-2 ring-emerald-400/30", isLost && "opacity-60")}
         style={{ backgroundColor: color ?? "#94a3b8" }}
       />
-      <span className={cn(isLost && "line-through text-muted-foreground")}>{name}</span>
+      <span className={cn(isLost && "line-through text-muted-foreground")}>{display}</span>
     </span>
   );
 }

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useLeads, useSources, useUsers, usePipeline, useTags, useArchiveLead, useBulkLeads, useRestoreLead, type LeadsQuery } from "@/hooks/leados/use-api";
 import { useSavedFilters } from "@/hooks/leados/use-saved-filters";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
+import { PRIORITY } from "@/lib/leados/constants";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -198,12 +200,12 @@ export function LeadsView() {
             <SelectTrigger className="w-36 h-9"><SelectValue placeholder={t("leads.filter.stage")} /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__all">{t("common.all")}</SelectItem>
-              {stages.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              {stages.map((s: any) => <SelectItem key={s.id} value={s.id} title={s.name}>{localizeStageName(t, s.name)}</SelectItem>)}
             </SelectContent>
           </Select>
           <div className="flex items-center gap-1">
-            {["LOW", "MEDIUM", "HIGH", "URGENT"].map((p) => (
-              <button key={p} onClick={() => { togglePriority(p); setPage(1); }} className={cn("h-9 px-2 rounded-md text-xs font-medium border transition", priority.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-accent")}>{p[0]}{p.slice(1).toLowerCase()}</button>
+            {(Object.keys(PRIORITY) as string[]).map((p) => (
+              <button key={p} onClick={() => { togglePriority(p); setPage(1); }} title={t(`priority.${p.toLowerCase()}` as Parameters<typeof t>[0])} className={cn("h-9 px-2 rounded-md text-xs font-medium border transition", priority.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-accent")}>{t(`priority.${p.toLowerCase()}` as Parameters<typeof t>[0])}</button>
             ))}
           </div>
           <Select value={slaFilter} onValueChange={(v) => { setSlaFilter(v === "__all" ? "" : v); setPage(1); }}>
@@ -347,17 +349,17 @@ export function LeadsView() {
               <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Move to stage…" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">—</SelectItem>
-                {stages.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                {stages.map((s: any) => <SelectItem key={s.id} value={s.id} title={s.name}>{localizeStageName(t, s.name)}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select onValueChange={(v) => v !== "__none" && bulkPriority(v)}>
               <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder="Priority…" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">—</SelectItem>
-                <SelectItem value="LOW">Low</SelectItem>
-                <SelectItem value="MEDIUM">Medium</SelectItem>
-                <SelectItem value="HIGH">High</SelectItem>
-                <SelectItem value="URGENT">Urgent</SelectItem>
+                <SelectItem value="LOW">{t("priority.low")}</SelectItem>
+                <SelectItem value="MEDIUM">{t("priority.medium")}</SelectItem>
+                <SelectItem value="HIGH">{t("priority.high")}</SelectItem>
+                <SelectItem value="URGENT">{t("priority.urgent")}</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={bulkArchive} disabled={bulk.isPending}><Archive className="h-3.5 w-3.5 mr-1.5" />{t("common.archive")}</Button>

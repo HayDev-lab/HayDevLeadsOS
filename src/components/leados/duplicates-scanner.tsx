@@ -2,6 +2,8 @@
 
 import { useDuplicatesScan, useMergeLead } from "@/hooks/leados/use-api";
 import { useHashRoute } from "@/lib/leados/hash-route";
+import { useT } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +15,7 @@ import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function DuplicatesScanner({ children }: { children?: ReactNode }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const scan = useDuplicatesScan();
 
@@ -67,6 +70,7 @@ export function DuplicatesScanner({ children }: { children?: ReactNode }) {
 }
 
 function DuplicateGroup({ group, onClose }: { group: any; onClose: () => void }) {
+  const t = useT();
   const [, navigate] = useHashRoute();
   const merge = useMergeLead(group.leads[0].id);
   const [busy, setBusy] = useState(false);
@@ -101,7 +105,7 @@ function DuplicateGroup({ group, onClose }: { group: any; onClose: () => void })
               <div className="text-sm font-medium truncate">{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</div>
               <div className="text-[11px] text-muted-foreground truncate">{l.company || l.email || l.phone || "—"}</div>
             </div>
-            {l.stage && <Badge variant="outline" className="text-[9px] px-1 py-0">{l.stage.name}</Badge>}
+            {l.stage && <Badge variant="outline" className="text-[9px] px-1 py-0" title={l.stage.name}>{localizeStageName(t, l.stage.name)}</Badge>}
             <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(l.createdAt)}</span>
             {i === 0 ? (
               <span className="text-[10px] font-semibold text-emerald-600 px-1.5">KEEP</span>

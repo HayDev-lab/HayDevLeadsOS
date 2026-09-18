@@ -2,6 +2,7 @@
 
 import { useAnalytics } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, PieChart, Pie } from "recharts";
@@ -116,7 +117,7 @@ export function AnalyticsView() {
             <div className="mt-2 space-y-1 text-xs">
               {data.funnel.map((s: any) => (
                 <div key={s.stage} className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />{s.stage}</span>
+                  <span className="flex items-center gap-1.5" title={s.stage}><span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />{localizeStageName(t, s.stage)}</span>
                   <span className="tabular-nums">{s.count} · {formatMoney(s.value)}</span>
                 </div>
               ))}
@@ -439,7 +440,7 @@ function ForecastCard({ forecast }: { forecast: Forecast }) {
                       {/* stage name */}
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-background" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
-                        <span className="text-xs font-medium truncate">{s.stage}</span>
+                        <span className="text-xs font-medium truncate" title={s.stage}>{localizeStageName(t, s.stage)}</span>
                         <span className="text-[10px] text-muted-foreground shrink-0">×{s.count}</span>
                       </div>
                       {/* value */}

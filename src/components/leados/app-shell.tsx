@@ -102,6 +102,30 @@ export function LeadOSApp() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
+  // Hash-route views beyond the sidebar NAV (notifications = bell → "View all").
+  // VIEW_ALIASES (v0.22): common alternative names resolve instead of
+  // silently falling back (kanban == the pipeline view's own title).
+  const EXTRA_VIEWS = ["notifications", "lead", "reset-password"];
+  const VIEW_ALIASES: Record<string, string> = { kanban: "pipeline" };
+  const aliasedView = VIEW_ALIASES[route.view] ?? route.view;
+  const knownView =
+    aliasedView === "lead" ||
+    aliasedView === "reset-password" ||
+    aliasedView === "invite" ||
+    NAV.some((n) => n.view === aliasedView) ||
+    EXTRA_VIEWS.includes(aliasedView);
+  const currentView = knownView ? aliasedView : "dashboard";
+
+  // Route hygiene (v0.22): an unknown hash (e.g. a typo or stale link) used
+  // to render the dashboard while the URL claimed something else —
+  // normalize the hash so the URL always matches the rendered view. Runs
+  // BEFORE any early return (rules-of-hooks).
+  useEffect(() => {
+    if (route.view && route.view !== "dashboard" && !knownView) {
+      navigate("dashboard");
+    }
+  }, [knownView, route.view, navigate]);
+
   if (!mounted) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
@@ -146,16 +170,6 @@ export function LeadOSApp() {
     );
   }
 
-  // Hash-route views beyond the sidebar NAV (notifications = bell → "View all").
-  const EXTRA_VIEWS = ["notifications", "lead", "reset-password"];
-  const currentView =
-    route.view === "lead"
-      ? "lead"
-      : route.view === "reset-password"
-      ? "reset-password"
-      : NAV.some((n) => n.view === route.view) || EXTRA_VIEWS.includes(route.view)
-      ? route.view
-      : "dashboard";
   const renderView = () => {
     switch (currentView) {
       case "leads":

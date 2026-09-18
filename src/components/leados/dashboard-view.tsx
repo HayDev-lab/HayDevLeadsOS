@@ -2,6 +2,7 @@
 
 import { useDashboard, useLostDetector, useRunLostDetector, useSession, useAnalytics } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -292,7 +293,7 @@ export function DashboardView() {
                       .slice(0, 3)
                       .map((s: any) => (
                         <div key={s.stage} className="rounded-lg bg-background/60 border px-2 py-1.5">
-                          <div className="text-[10px] text-muted-foreground truncate">{s.stage}</div>
+                          <div className="text-[10px] text-muted-foreground truncate" title={s.stage}>{localizeStageName(t, s.stage)}</div>
                           <div className="text-xs font-semibold tabular-nums">{formatMoney(s.weightedValue)}</div>
                           <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden">
                             <div className={cn("h-full rounded-full", s.empirical ? "bg-primary" : "bg-muted-foreground/40")} style={{ width: `${s.probability}%` }} />
@@ -316,7 +317,7 @@ export function DashboardView() {
             <CardContent className="space-y-2.5 pt-1">
               {dash.isLoading && Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
               {!dash.isLoading && byStage.map((s) => (
-                <MiniBar key={s.stage} value={s.count} max={stageMax} color={s.color ?? "#94a3b8"} label={s.stage} right={String(s.count)} />
+                <MiniBar key={s.stage} value={s.count} max={stageMax} color={s.color ?? "#94a3b8"} label={localizeStageName(t, s.stage)} right={String(s.count)} />
               ))}
             </CardContent>
           </Card>

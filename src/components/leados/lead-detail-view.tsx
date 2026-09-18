@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLead, useLeadActivities, useLeadNotes, useLeadEvents, useLeadDuplicate, useLeadTasks, useUsers, useUpdateLead, useAssignLead, useArchiveLead, useChangeStage, useLogActivity, useAddNote, useCreateTask, useSyncErp, useMergeLead, useRecalcScore, usePipeline, useAnalytics } from "@/hooks/leados/use-api";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -715,7 +716,7 @@ function StageChanger({ lead: l }: { lead: any }) {
               )}
             >
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
-              <span className="truncate">{s.name}</span>
+              <span className="truncate" title={s.name}>{localizeStageName(t, s.name)}</span>
               {f && (
                 <span
                   className={cn(

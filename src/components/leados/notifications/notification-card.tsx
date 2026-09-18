@@ -6,7 +6,7 @@
 
 import { AlertTriangle, BellRing, CheckCircle2, Clock, Info, OctagonAlert } from "lucide-react";
 import { humanizeDuration } from "@/lib/sla";
-import type { DictKey } from "@/lib/leados/i18n";
+import { localizeStageName, type DictKey } from "@/lib/leados/i18n";
 import { timeAgo } from "../primitives";
 import { cn } from "@/lib/utils";
 import type { NotificationRow } from "@/hooks/leados/use-api";
@@ -24,7 +24,8 @@ export function renderNotificationText(n: NotificationRow, t: TFunc): { title: s
   const leadPart = p.leadName ? ` · ${String(p.leadName)}` : "";
   const vars = {
     name: String(p.leadName ?? p.taskTitle ?? ""),
-    stage: String(p.stageName ?? ""),
+    // v0.22: canonical stage names localize inside messages too (display-only).
+    stage: p.stageName ? localizeStageName(t, String(p.stageName)) : "",
     task: String(p.taskTitle ?? ""),
     leadPart: leadPart || "",
     duration: humanizeDuration(Number(p.overdueMinutes ?? p.remainingMinutes ?? 0)),

@@ -28,6 +28,7 @@ import {
   BarChart3, UserCircle, Zap, Plus, Moon, Languages, Search, Command as CommandIcon, Loader2, CornerDownLeft, History, Keyboard,
 } from "lucide-react";
 import { useLocale } from "@/lib/leados/locale";
+import { localizeStageName } from "@/lib/leados/i18n";
 import { useHashRoute } from "@/lib/leados/hash-route";
 import { useSearch } from "@/hooks/leados/use-api";
 import { LeadAvatar } from "./primitives";
@@ -236,8 +237,8 @@ export function CommandPalette() {
                         </div>
                       </div>
                       {r.stage && (
-                        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          {r.stage.name}
+                        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" title={r.stage.name}>
+                          {localizeStageName(t, r.stage.name)}
                         </span>
                       )}
                       <CornerDownLeft className="h-3 w-3 text-muted-foreground/50" />
@@ -263,8 +264,8 @@ export function CommandPalette() {
                           </div>
                         </div>
                         {r.stageName && (
-                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            {r.stageName}
+                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground" title={r.stageName}>
+                            {localizeStageName(t, r.stageName)}
                           </span>
                         )}
                         <History className="h-3 w-3 text-muted-foreground/40" />
