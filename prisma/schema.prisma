@@ -299,15 +299,19 @@ model Pipeline {
 }
 
 model PipelineStage {
-  id         String   @id @default(cuid())
-  pipelineId String
-  name       String
-  position   Int
-  type       String   @default("open") // open | won | lost
-  color      String?
-  isWon      Boolean  @default(false)
-  isLost     Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  pipelineId   String
+  name         String
+  position     Int
+  type         String   @default("open") // open | won | lost
+  // v0.20 §12: STABLE SEMANTICS — business logic (status derivation, events,
+  // follow-up, SLA, detectors, scoring) reads semanticCode, NEVER the display
+  // name (names are user-renamable/localizable). See STAGE_SEMANTIC constants.
+  semanticCode String   @default("CUSTOM") // NEW | CONTACTED | QUALIFIED | MEETING | PROPOSAL | NEGOTIATION | OPEN | CUSTOM | WON | LOST
+  color        String?
+  isWon        Boolean  @default(false)
+  isLost       Boolean  @default(false)
+  createdAt    DateTime @default(now())
 
   pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   leads    Lead[]

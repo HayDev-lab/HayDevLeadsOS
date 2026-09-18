@@ -3,12 +3,16 @@ import { db } from "@/lib/db";
 import { getSession, canMutate } from "@/lib/leados/context";
 import { ok, badRequest, apiError, parseJson, validate } from "@/lib/leados/api";
 import { invalidateOrgCache } from "@/lib/leados/api-cache";
+import { STAGE_SEMANTIC_VALUES } from "@/lib/leados/constants";
 import { z } from "zod";
 
 const Create = z.object({
   pipelineId: z.string().min(1),
   name: z.string().min(1).max(60),
   type: z.enum(["open", "won", "lost"]).default("open"),
+  // v0.20 §12: explicit stable semantics for the new stage (defaults to
+  // CUSTOM — display name is free-form and never drives business logic).
+  semanticCode: z.enum(STAGE_SEMANTIC_VALUES).default("CUSTOM"),
   color: z.string().optional(),
   position: z.number().int().min(0).optional(),
 });
@@ -29,6 +33,7 @@ export async function POST(req: Request) {
         pipelineId: v.value.pipelineId,
         name: v.value.name,
         type: v.value.type,
+        semanticCode: v.value.semanticCode,
         color: v.value.color ?? "#94a3b8",
         position: v.value.position ?? count,
         isWon: v.value.type === "won",

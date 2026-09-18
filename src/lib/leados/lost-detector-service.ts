@@ -32,6 +32,7 @@ export async function runLostDetector(orgId: string): Promise<DetectorRunResult>
       status: l.status,
       stageType: l.stage?.type ?? "open",
       stageName: l.stage?.name ?? null,
+      stageSemanticCode: l.stage?.semanticCode ?? null,
       ownerId: l.ownerId,
       priority: l.priority,
       createdAt: l.createdAt,

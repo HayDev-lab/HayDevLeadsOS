@@ -66,7 +66,7 @@ function StageInactivityConfigCard() {
 
   // Real pipeline stages — Settings FOLLOWS the pipeline (Section 13): a new
   // stage appears here automatically until it gets its own threshold.
-  const stages: { id: string; name: string; type: string }[] =
+  const stages: { id: string; name: string; type: string; semanticCode?: string }[] =
     pipeline.data?.pipelines?.[0]?.stages ?? [];
   const openStages = stages.filter((s) => s.type === "open");
   const finalStages = stages.filter((s) => s.type !== "open");
@@ -149,7 +149,9 @@ function StageInactivityConfigCard() {
   const now = Date.now();
   const effectiveThresholds = Object.fromEntries(openStages.map((s) => [s.id, valueFor(s.id)]));
   const previewConfig = { warningBeforeHours: warning, thresholds: effectiveThresholds };
-  const previewStage = openStages.find((s) => s.name === "Proposal")?.id ?? openStages[0]?.id ?? "";
+  // §12: preview defaults to the PROPOSAL stage by SEMANTIC code — display
+  // names are renamable/localizable and must not drive selection logic.
+  const previewStage = openStages.find((s) => s.semanticCode === "PROPOSAL")?.id ?? openStages[0]?.id ?? "";
   const previewHours = effectiveThresholds[previewStage] ?? DEFAULT_STAGE_INACTIVITY_HOURS;
 
   return (

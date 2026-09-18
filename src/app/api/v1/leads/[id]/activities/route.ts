@@ -61,7 +61,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const existing = await db.lead.findUnique({ where: { id }, select: { nextActionAt: true } });
       const patch: Record<string, unknown> = { lastContactAt: new Date() };
       if (!existing?.nextActionAt && stage) {
-        const s = suggestNextAction(stage.name);
+        const s = suggestNextAction(stage.semanticCode);
         patch.nextActionAt = s.nextActionAt;
         patch.nextActionLabel = s.label;
       }

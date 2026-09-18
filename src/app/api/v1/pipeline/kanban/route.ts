@@ -53,6 +53,7 @@ export async function GET(req: Request) {
       name: s.name,
       position: s.position,
       type: s.type,
+      semanticCode: s.semanticCode,
       color: s.color,
       isWon: s.isWon,
       isLost: s.isLost,
