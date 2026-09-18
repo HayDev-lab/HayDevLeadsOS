@@ -1591,3 +1591,20 @@ Stage Summary:
 - ГИТСИНХРОНИЗАЦИЯ ПОЛНОСТЬЮ ЗАВЕРШЕНА: pull (merge) + push. Репозиторий GitHub HayDev-lab/HayDevLeadsOS теперь на v0.19.1 с полным тест-набором (372/372 pass).
 - ПАТ пользователя был передан в чате → настоятельно рекомендована РОТАЦИЯ токена (Settings → Developer settings → Tokens) после завершения работы: токен появился в открытом тексте переписки.
 - Открытые риски: (1) тестовые значения Meta в git-истории (низкий риск, см. выше); (2) live-сертификация Meta по-прежнему BLOCKED (внешние креденшалы Meta); (3) PAT в чате — ротация на стороне пользователя.
+
+---
+Task ID: git-sync-3 (post-push integrity check + env incident)
+Agent: Z.ai Code (main session, trace 1a0b4bad7309c591)
+Task: Пользователь спросил «локальные файлы на месте?» — полная проверка целостности после git pull/push.
+
+Work Log:
+- ЦЕЛОСТНОСТЬ ФАЙЛОВ ПОДТВЕРЖДЕНА: рабочее дерево чистое (кроме живых артефактов db/dev.pid); все ключевые файлы на месте (.env, .env.example, worklog.md 204K, db/custom.db 11M, package.json, next.config.ts, prisma/schema.prisma 52K, README.md); Meta-коннектор v0.19.1 полный (7 модулей + 5 тест-файлов), 12 Meta-роутов на месте, все 11 upstream-тестов восстановлены, 289 src-файлов (734 в git), 101 QA-папка в download/.
+- ИНЦИДЕНТ НАЙДЕН ПРИ ПРОВЕРКЕ: платформа при рецикле сессии (13:31:36) перезаписала .env своим минимальным вариантом (только DATABASE_URL, 50 байт) и перезапустила dev-сервер (новые PID, .zscripts/dev.pid=1081) → LEADOS_DEMO=true потерян → сервер в auth-режиме → /api/v1/auth/me 401 «Not authenticated». Это ПОВТОР инцидента из v0.19.1-сессии («deploy-time .env rewrite»). Причём /tmp-бэкапы .env (env.live.backup, env.stash.merge) были вычищены при том же рецикле.
+- УСТОЙЧИВОЕ РЕШЕНИЕ: создан .env.local (LEADOS_DEMO=true, NEXT_PUBLIC_DEMO_WORKER_TICK=true, WORKER_SCHEDULER_INTERVAL_MS=60000) — Next.js даёт .env.local ПРИОРИТЕТ над .env, а платформа перезаписывает только .env → demo-настройки теперь переживают рециклы платформы. .env.local в .gitignore (.env* правило) — секрет-гигиена сохранена. TEST-ONLY значения META_APP_SECRET/META_WEBHOOK_VERIFY_TOKEN из сертификации безвозвратно потеряны при вычистке /tmp; webhook-роут без них корректно фейлится закрыто (401) — безопасный дефолт; при необходимости повторных live curl-тестов webhook — сгенерировать новые TEST-значения по .env.example.
+- ВОССТАНОВЛЕНИЕ ПОДТВЕРЖДЕНО: Next.js подхватил .env.local graceful-рестартом (в dev.log видно «Reload env: .env.local», PID не менялся); /api/v1/auth/me → 200 (демо-сессия Aram Grigoryan OWNER); все API 200 (dashboard/workers/health/meta status/leads); scheduler SUCCESS; demo-регресс: 0 вызовов graph.facebook.com в логе.
+- BROWSER QA: скриншот download/git-sync-qa/05-after-env-restore.png — дашборд рендерится с демо-данными (бейдж уведомлений 20), console errors = 0, браузер закрыт (memory protocol).
+
+Stage Summary:
+- Ответ пользователю: ДА, все локальные файлы на месте — код v0.19.1, тесты (372), worklog, БД, QA-артефакты целы; найденная при проверке проблема .env устранена навсегда через .env.local-приоритет.
+- Новый операционный факт: платформа перезаписывает .env (только DATABASE_URL) на каждом рецикле сессии + чистит /tmp; .env.local — правильное место для персистентных настроек песочницы.
+- GitHub остаётся в синхроне: этот коммит (worklog + QA-скриншот) запушен сразу после записи.
