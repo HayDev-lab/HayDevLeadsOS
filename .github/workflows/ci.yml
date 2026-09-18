@@ -55,7 +55,11 @@ jobs:
         run: bunx prisma migrate deploy
 
       - name: Tests
-        run: bun test
+        # v0.20 §36 repair: per-test timeout 60s — the GitHub runner is much
+        # slower than local (the automation processor alone takes seconds on a
+        # cold empty DB); the default 5s killed healthy tests mid-flight and
+        # their background writes leaked into the next test's window.
+        run: bun test --timeout 60000
 
       - name: Typecheck
         run: bun run typecheck
@@ -67,7 +71,7 @@ jobs:
         run: bun run build
 
       - name: Deployment config guards (Caddy / preview-DB / boot policy)
-        run: bun test tests/deployment-config.test.ts
+        run: bun test --timeout 60000 tests/deployment-config.test.ts
 
       - name: Clean tree check (no runtime artifacts)
         run: |

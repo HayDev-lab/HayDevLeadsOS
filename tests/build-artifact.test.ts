@@ -85,6 +85,8 @@ describe("packaged-demo build script (§6 seed-only)", () => {
 });
 
 describe("fresh DB → migrate deploy → seed (§6 functional proof)", () => {
+  // 120s per test: the hermetic runner performs a full migrate+seed in a
+  // subprocess; CI runners are much slower than local (§36 repair).
   test("deterministic: two independent runs produce identical counts (runtime DB present is ignored)", () => {
     const dirA = mkdtempSync(join(tmpdir(), "leados-seed-a-"));
     const dirB = mkdtempSync(join(tmpdir(), "leados-seed-b-"));
@@ -94,7 +96,7 @@ describe("fresh DB → migrate deploy → seed (§6 functional proof)", () => {
     const { orgId: _orgIdA, ...restA } = a;
     const { orgId: _orgIdB, ...restB } = b;
     expect(restA).toEqual(restB);
-  });
+  }, 120_000);
 
   test("demo dataset shape is pinned (synthetic, Meta demo artifacts included)", () => {
     const dir = mkdtempSync(join(tmpdir(), "leados-seed-c-"));
@@ -112,5 +114,5 @@ describe("fresh DB → migrate deploy → seed (§6 functional proof)", () => {
     expect(c.metaConnections).toBe(1);
     expect(c.metaPages).toBe(1);
     expect(c.metaForms).toBe(3);
-  });
+  }, 120_000);
 });
