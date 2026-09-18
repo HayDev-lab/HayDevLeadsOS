@@ -121,3 +121,59 @@ describe("production database policy (§25)", () => {
     expect(boot).toContain("fail fast");
   });
 });
+
+describe("CSP hardening (v0.20 §13)", () => {
+  const proxy = read("src/proxy.ts");
+
+  /** The production and dev branches of the CSP ternary in src/proxy.ts. */
+  const cspUsage = proxy.indexOf("= isProduction"); // `const csp = isProduction ? [...] : [...]`
+  const prodStart = proxy.indexOf("[", cspUsage);
+  const prodJoin = proxy.indexOf("].join", prodStart);
+  const prodBranch = proxy.slice(prodStart, prodJoin);
+  const devStart = proxy.indexOf(": [", prodJoin);
+  const devJoin = proxy.indexOf("].join", devStart);
+  const devBranch = proxy.slice(devStart, devJoin);
+
+  test("PRODUCTION CSP: nonce + strict-dynamic, NO unsafe-eval/unsafe-inline for SCRIPTS (style-src residual is documented)", () => {
+    // Active (non-comment) directive lines of the production branch.
+    const activeProd = prodBranch
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith("//"));
+    const scriptSrc = activeProd.find((l) => l.includes("script-src"));
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc).toContain("'nonce-${nonce}'");
+    expect(scriptSrc).toContain("'strict-dynamic'");
+    expect(scriptSrc).not.toContain("unsafe-eval");
+    expect(scriptSrc).not.toContain("unsafe-inline");
+    // The ONLY residual 'unsafe-inline' in production is style-src (documented).
+    const styleSrc = activeProd.find((l) => l.includes("style-src"));
+    expect(styleSrc).toContain("'unsafe-inline'");
+  });
+
+  test("DEV CSP keeps unsafe-inline + unsafe-eval (React Refresh HMR — documented dev-only)", () => {
+    expect(devBranch).toContain("'unsafe-inline' 'unsafe-eval'");
+  });
+
+  test("style-src keeps 'unsafe-inline' in BOTH modes (documented residual: React inline styles + framework <style> blocks have no nonce support)", () => {
+    expect(proxy.match(/style-src 'self' 'unsafe-inline'/g)?.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("production Caddy does NOT set Content-Security-Policy (single CSP source of truth = the app; avoids double-CSP intersection)", () => {
+    const prodActive = active("Caddyfile.production").join("\n");
+    expect(prodActive).not.toContain("Content-Security-Policy");
+  });
+
+  test("app + edge headers are consistent (no contradictory policies)", () => {
+    // Both layers send the SAME X-Frame-Options / Referrer-Policy /
+    // Permissions-Policy / X-Content-Type-Options values — edge adds HSTS
+    // preload + hides Server, app adds CSP + HSTS. No conflicts.
+    const prod = active("Caddyfile.production").join("\n");
+    expect(prod).toContain('X-Frame-Options "SAMEORIGIN"');
+    expect(prod).toContain('Referrer-Policy "strict-origin-when-cross-origin"');
+    expect(proxy).toContain('"X-Frame-Options", "SAMEORIGIN"');
+    expect(proxy).toContain('"Referrer-Policy", "strict-origin-when-cross-origin"');
+    // Edge never sends a CSP header (app owns it).
+    expect(prod).not.toMatch(/Content-Security-Policy/);
+  });
+});
