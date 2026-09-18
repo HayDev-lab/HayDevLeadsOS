@@ -14,6 +14,7 @@ import { validateFollowUpConfig } from "@/lib/sla-followup";
 import { validateStageInactivityConfig } from "@/lib/sla-stage-inactivity";
 import { validateTaskEventConfig } from "@/lib/domain-events";
 import { TASK_EVENT_SETTING_KEY } from "@/lib/leados/event-reconciler";
+import { FORECAST_SETTING_KEY, validateForecastThreshold } from "@/lib/leados/forecast-config";
 import { invalidateOrgCache } from "@/lib/leados/api-cache";
 
 export async function GET() {
@@ -104,6 +105,16 @@ export async function POST(req: Request) {
         if (!v.ok) return badRequest(v.errors.join(" "), v.errors);
         await upsertSetting(session.orgId, TASK_EVENT_SETTING_KEY, v.config);
         return ok({ ok: true, value: v.config });
+      }
+      if (body.key === FORECAST_SETTING_KEY) {
+        // v0.23 FORECAST — commit probability floor: integer 1..99.
+        const v = validateForecastThreshold(body.value);
+        if (!v.ok) return badRequest(v.errors.join(" "), v.errors);
+        await upsertSetting(session.orgId, FORECAST_SETTING_KEY, v.threshold);
+        // Analytics (which exposes the forecast) is TTL-cached — drop it now
+        // so the new threshold is visible immediately.
+        invalidateOrgCache(session.orgId);
+        return ok({ ok: true, value: v.threshold });
       }
       await upsertSetting(session.orgId, body.key, body.value);
       return ok({ ok: true });

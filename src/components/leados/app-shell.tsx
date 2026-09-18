@@ -86,7 +86,7 @@ export function LeadOSApp() {
       seed.mutate(undefined, {
         onSuccess: (r) => {
           if (r.seeded) {
-            toast.success("Demo data loaded");
+            toast.success(t("toast.demo_loaded"));
             session.refetch();
           }
         },
@@ -161,10 +161,10 @@ export function LeadOSApp() {
           <Database className="h-7 w-7 text-primary" />
         </div>
         <h1 className="text-xl font-semibold">HayDev LeadOS</h1>
-        <p className="text-sm text-muted-foreground max-w-md">Initializing the workspace with demo data…</p>
+        <p className="text-sm text-muted-foreground max-w-md">{t("seed.wait")}</p>
         <Button onClick={() => seed.mutate()} disabled={seed.isPending}>
           <Sparkles className="h-4 w-4 mr-2" />
-          {seed.isPending ? "Loading…" : "Load demo data"}
+          {seed.isPending ? t("seed.loading") : t("seed.load")}
         </Button>
       </div>
     );
@@ -237,7 +237,7 @@ export function LeadOSApp() {
             <SidebarSearchButton />
             <div className="rounded-lg border bg-muted/40 p-3">
               <p className="text-[11px] leading-relaxed text-muted-foreground">
-                <span className="font-semibold text-foreground">EVERY LEAD</span> has an owner. <span className="font-semibold text-foreground">NOTHING</span> gets lost.
+                <span className="font-semibold text-foreground">{t("sidebar.motto_a")}</span> {t("sidebar.motto_b")}
               </p>
             </div>
           </div>

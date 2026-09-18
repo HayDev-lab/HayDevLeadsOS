@@ -125,6 +125,7 @@ function DraggableCard({ lead, onClick, slaConfig, followUpConfig, stageInactivi
 }
 
 function LeadQuickPreview({ leadId, onOpen }: { leadId: string; onOpen: () => void }) {
+  const { t } = useLocale();
   const lead = useLead(leadId);
   if (lead.isLoading) return <div className="p-4"><Skeleton className="h-20 w-full" /></div>;
   const l = lead.data?.lead;
@@ -154,18 +155,18 @@ function LeadQuickPreview({ leadId, onOpen }: { leadId: string; onOpen: () => vo
       {/* owner + next action */}
       <div className="space-y-1 pt-1.5 border-t text-xs">
         <div className="flex items-center justify-between">
-          <span className="text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3" />Owner</span>
-          <span className="font-medium">{l.owner?.name || "Unassigned"}</span>
+          <span className="text-muted-foreground flex items-center gap-1"><UserIcon className="h-3 w-3" />{t("pipeline.owner")}</span>
+          <span className="font-medium">{l.owner?.name || t("common.unassigned")}</span>
         </div>
         {l.nextActionAt && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />Next action</span>
+            <span className="text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" />{t("pipeline.next_action")}</span>
             <span className={cn("font-medium", new Date(l.nextActionAt).getTime() < Date.now() && "text-red-500")}>{timeAgo(l.nextActionAt)}</span>
           </div>
         )}
         {l.lastContactAt && (
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" />Last contact</span>
+            <span className="text-muted-foreground flex items-center gap-1"><Calendar className="h-3 w-3" />{t("pipeline.last_contact")}</span>
             <span>{timeAgo(l.lastContactAt)}</span>
           </div>
         )}
@@ -177,13 +178,14 @@ function LeadQuickPreview({ leadId, onOpen }: { leadId: string; onOpen: () => vo
         onClick={onOpen}
         className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium py-1.5 hover:bg-primary/90 transition"
       >
-        Open lead <ArrowRight className="h-3 w-3" />
+        {t("pipeline.open_lead")} <ArrowRight className="h-3 w-3" />
       </button>
     </div>
   );
 }
 
 function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig, stageInactivityConfig }: { lead: any; dragging?: boolean; onClick: (id: string) => void; slaConfig: SlaThresholds; followUpConfig: FollowUpSlaConfig; stageInactivityConfig: { warningBeforeHours: number; thresholds: Record<string, number>; usingDefault: string[] } | null }) {
+  const { t } = useLocale();
   const assign = useAssignLead(lead.id);
   const setStage = useSetLeadStage();
   const users = useUsers();
@@ -191,10 +193,10 @@ function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig, stageIna
   const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
 
   const doAssign = async (ownerId: string) => {
-    try { await assign.mutateAsync(ownerId); toast.success("Lead assigned"); } catch (e) { toast.error((e as Error).message); }
+    try { await assign.mutateAsync(ownerId); toast.success(t("toast.lead_assigned")); } catch (e) { toast.error((e as Error).message); }
   };
   const doStage = async (stageId: string) => {
-    try { await setStage.mutateAsync({ leadId: lead.id, stageId }); toast.success("Stage changed"); } catch (e) { toast.error((e as Error).message); }
+    try { await setStage.mutateAsync({ leadId: lead.id, stageId }); toast.success(t("toast.stage_changed")); } catch (e) { toast.error((e as Error).message); }
   };
 
   return (
@@ -215,23 +217,23 @@ function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig, stageIna
             <button
               onClick={(e) => e.stopPropagation()}
               className="opacity-0 group-hover:opacity-100 transition absolute top-1.5 right-1.5 h-5 w-5 rounded flex items-center justify-center hover:bg-accent text-muted-foreground"
-              title="Quick actions"
+              title={t("pipeline.quick_actions")}
             >
               <MoreVertical className="h-3 w-3" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
-            <DropdownMenuLabel className="text-xs text-muted-foreground">Quick actions</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">{t("pipeline.quick_actions")}</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1.5"><ArrowLeftRight className="h-3 w-3" />Move to stage</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1.5"><ArrowLeftRight className="h-3 w-3" />{t("pipeline.move_to_stage")}</DropdownMenuLabel>
             {stages.filter((s: any) => s.id !== lead.stageId).map((s: any) => (
-              <DropdownMenuItem key={s.id} onClick={() => doStage(s.id)} className="text-xs gap-2">
+              <DropdownMenuItem key={s.id} onClick={() => doStage(s.id)} className="text-xs gap-2" title={s.name}>
                 <span className="h-2 w-2 rounded-full" style={{ backgroundColor: s.color ?? "#94a3b8" }} />
-                {s.name}
+                {localizeStageName(t, s.name)}
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1.5"><UserPlus className="h-3 w-3" />Assign to</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-xs text-muted-foreground flex items-center gap-1.5"><UserPlus className="h-3 w-3" />{t("pipeline.assign_to")}</DropdownMenuLabel>
             {(users.data?.rows ?? []).map((u: any) => (
               <DropdownMenuItem key={u.id} onClick={() => doAssign(u.id)} className="text-xs gap-2">
                 <LeadAvatar first={u.name} color={u.avatarColor} size={16} />
@@ -241,7 +243,7 @@ function LeadCard({ lead, dragging, onClick, slaConfig, followUpConfig, stageIna
             ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onClick(lead.id)} className="text-xs gap-2">
-              <ArrowRight className="h-3 w-3" />Open lead detail
+              <ArrowRight className="h-3 w-3" />{t("pipeline.open_detail")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

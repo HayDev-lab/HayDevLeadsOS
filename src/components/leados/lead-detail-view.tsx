@@ -468,7 +468,7 @@ function DuplicateBanner({ leadId }: { leadId: string }) {
           <GitMerge className="h-4 w-4 text-amber-600" />
           <div className="flex-1 text-sm">
             <span className="font-semibold">{t("lead.duplicate_detected")}</span>
-            <span className="text-muted-foreground ml-2">{dup.data.matches.length} possible match(es) — matched by {match?.reason}</span>
+            <span className="text-muted-foreground ml-2">{t("dup.matches_count", { n: dup.data.matches.length, reason: t(`dup.reason.${match?.reason}` as Parameters<typeof t>[0]) })}</span>
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => navigate("lead", { id: match.id })}><ExternalLink className="h-3.5 w-3.5 mr-1" />{t("lead.merge.open_existing")}</Button>
@@ -479,7 +479,7 @@ function DuplicateBanner({ leadId }: { leadId: string }) {
         </CardContent>
       </Card>
       {showMergeDialog && (
-        <MergeDialog leadId={leadId} matchId={match.id} onClose={() => setShowMergeDialog(false)} onMerged={() => { toast.success("Leads merged"); navigate("lead", { id: leadId }); }} />
+        <MergeDialog leadId={leadId} matchId={match.id} onClose={() => setShowMergeDialog(false)} onMerged={() => { toast.success(t("toast.leads_merged")); navigate("lead", { id: leadId }); }} />
       )}
     </>
   );
@@ -498,15 +498,15 @@ function MergeDialog({ leadId, matchId, onClose, onMerged }: { leadId: string; m
   if (!tl || !sl) return null;
 
   const fields = [
-    { key: "firstName", label: "First name" },
-    { key: "lastName", label: "Last name" },
-    { key: "company", label: "Company" },
-    { key: "phone", label: "Phone" },
-    { key: "email", label: "Email" },
-    { key: "summary", label: "Summary" },
-    { key: "requirements", label: "Requirements" },
-    { key: "estimatedValue", label: "Est. value" },
-    { key: "priority", label: "Priority" },
+    { key: "firstName", label: t("common.name") },
+    { key: "lastName", label: t("common.surname") },
+    { key: "company", label: t("common.company") },
+    { key: "phone", label: t("common.phone") },
+    { key: "email", label: t("common.email") },
+    { key: "summary", label: t("common.summary") },
+    { key: "requirements", label: t("lead.requirements") },
+    { key: "estimatedValue", label: t("merge.est_value") },
+    { key: "priority", label: t("leads.col.priority") },
   ];
 
   const doMerge = async () => {
@@ -532,19 +532,19 @@ function MergeDialog({ leadId, matchId, onClose, onMerged }: { leadId: string; m
     <Dialog open onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2"><GitMerge className="h-5 w-5 text-amber-500" />Merge leads</DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><GitMerge className="h-5 w-5 text-amber-500" />{t("merge.title")}</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
-          <p className="text-xs text-muted-foreground">The duplicate (source) will be archived. Its activities, tasks, notes, events and tags are moved to this lead. Select fields to copy from the source before merging:</p>
+          <p className="text-xs text-muted-foreground">{t("merge.description")}</p>
           {/* comparison table */}
           <div className="rounded-lg border overflow-hidden">
             <table className="w-full text-xs">
               <thead className="bg-muted/50 text-muted-foreground">
                 <tr>
-                  <th className="text-left font-medium px-3 py-2">Field</th>
-                  <th className="text-left font-medium px-3 py-2">This lead (target)</th>
-                  <th className="text-left font-medium px-3 py-2">Duplicate (source)</th>
-                  <th className="text-center font-medium px-3 py-2 w-16">Use source</th>
+                  <th className="text-left font-medium px-3 py-2">{t("merge.field")}</th>
+                  <th className="text-left font-medium px-3 py-2">{t("merge.target")}</th>
+                  <th className="text-left font-medium px-3 py-2">{t("merge.source")}</th>
+                  <th className="text-center font-medium px-3 py-2 w-16">{t("merge.use_source")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -571,7 +571,7 @@ function MergeDialog({ leadId, matchId, onClose, onMerged }: { leadId: string; m
                             });
                           }}
                           className="accent-primary disabled:opacity-30"
-                          title={!hasDiff ? "Values are identical" : !sourceVal ? "Source has no value" : "Copy from source"}
+                          title={!hasDiff ? t("merge.identical") : !sourceVal ? t("merge.no_value") : t("merge.copy_from")}
                         />
                       </td>
                     </tr>
@@ -582,13 +582,13 @@ function MergeDialog({ leadId, matchId, onClose, onMerged }: { leadId: string; m
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center justify-center h-5 w-5 rounded bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-bold">{sourceFields.size}</span>
-            field(s) will be copied from source before merge
+            {t("merge.copied_count", { n: sourceFields.size })}
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
           <Button onClick={doMerge} disabled={merge.isPending} className="bg-amber-600 hover:bg-amber-700 text-white">
-            <GitMerge className="h-3.5 w-3.5 mr-1.5" />Merge & archive source
+            <GitMerge className="h-3.5 w-3.5 mr-1.5" />{t("merge.action")}
           </Button>
         </DialogFooter>
       </DialogContent>

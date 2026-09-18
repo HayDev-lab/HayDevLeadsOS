@@ -217,6 +217,18 @@ export async function getAnalytics(orgId: string) {
   for (const l of openLeads) if (l.stageId) addReached(l.id, l.stageId);
 
   const openStages = stages.filter((s) => !s.isWon && !s.isLost);
+  // v0.23: commit threshold is ORG-CONFIGURABLE (Setting row), default 60%.
+  // Read once per analytics request; the analytics route itself is cached.
+  let commitThreshold = 60;
+  try {
+    const row = await db.setting.findUnique({
+      where: { organizationId_key: { organizationId: orgId, key: "forecast_commit_threshold" } },
+    });
+    const v = row?.value;
+    if (typeof v === "number" && Number.isFinite(v)) commitThreshold = Math.min(99, Math.max(1, Math.round(v)));
+  } catch {
+    /* missing/invalid setting → default */
+  }
   const forecastStages = openStages.map((s, idx) => {
     const reachedCount = { won: 0, lost: 0 };
     for (const rl of resolvedLeads) {
@@ -247,7 +259,7 @@ export async function getAnalytics(orgId: string) {
   });
   const weightedTotal = forecastStages.reduce((a, x) => a + x.weightedValue, 0);
   const bestCase = forecastStages.reduce((a, x) => a + x.value, 0);
-  const commit = forecastStages.filter((x) => x.probability >= 60).reduce((a, x) => a + x.weightedValue, 0);
+  const commit = forecastStages.filter((x) => x.probability >= commitThreshold).reduce((a, x) => a + x.weightedValue, 0);
   const empiricalStages = forecastStages.filter((x) => x.empirical).length;
 
   // WEEKLY-WON RUN-RATE (v0.19): how fast revenue is actually landing.
@@ -282,6 +294,8 @@ export async function getAnalytics(orgId: string) {
     weightedTotal,
     bestCase,
     commit,
+    // v0.23: the org-configurable probability floor behind `commit`.
+    commitThreshold,
     // How much of the forecast rests on real history vs. position estimates.
     empiricalCoverage: openStages.length > 0 ? Math.round((empiricalStages / openStages.length) * 100) : 0,
     runRate,

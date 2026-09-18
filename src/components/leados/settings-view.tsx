@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useSettings, useTags, useSources, useUsers, usePipeline, useIngestAudit, useCustomFields, useCreateCustomField, useDeleteCustomField, useCreateStage, useUpdateStage, useDeleteStage, useAssignmentRules, useCreateAssignmentRule, useUpdateAssignmentRule, useDeleteAssignmentRule, useWebhookEvents, useWebhookEndpoints, useCreateWebhookEndpoint, useDeleteWebhookEndpoint, useTestWebhookEndpoint } from "@/hooks/leados/use-api";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocale } from "@/lib/leados/locale";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Slider } from "@/components/ui/slider";
+import { FORECAST_SETTING_KEY, readForecastThreshold } from "@/lib/leados/forecast-config";
 import { Badge } from "@/components/ui/badge";
 import { Brain, Check, Plus, RefreshCw, Save, Sparkles, Webhook, Trash2, Settings2, GripVertical, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -92,30 +95,82 @@ export function SettingsView({ initialTab }: { initialTab?: string }) {
 }
 
 function OrgTab() {
+  const { t } = useLocale();
+  const queryClient = useQueryClient();
   const settings = useSettings();
   const org = settings.data?.org;
   const [name, setName] = useState(org?.name ?? "");
   const [locale, setLocale] = useState(org?.locale ?? "hy");
   const [timezone, setTimezone] = useState(org?.timezone ?? "Asia/Yerevan");
   const [currency, setCurrency] = useState(org?.currency ?? "AMD");
+  // v0.23: org-configurable forecast commit threshold (Setting row, default 60).
+  // Derived-value pattern: `savedThreshold` comes straight from the settings
+  // query; `thresholdOverride` only exists while the slider is being dragged
+  // (or until save+refetch lands) — no effect/ref syncing needed.
+  const savedThreshold = settings.data ? readForecastThreshold(settings.data.settings) : 60;
+  const [thresholdOverride, setThresholdOverride] = useState<number | null>(null);
+  const commitThreshold = thresholdOverride ?? savedThreshold;
   const save = async () => {
     try {
       const res = await fetch("/api/v1/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ org: { name, locale, timezone, currency } }) });
-      if (res.ok) toast.success("Saved"); else toast.error("Save failed");
+      if (res.ok) toast.success(t("toast.saved")); else toast.error(t("toast.save_failed"));
       settings.refetch();
-    } catch { toast.error("Save failed"); }
+    } catch { toast.error(t("toast.save_failed")); }
+  };
+  const saveThreshold = async (value: number) => {
+    try {
+      const res = await fetch("/api/v1/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: FORECAST_SETTING_KEY, value }) });
+      if (res.ok) {
+        toast.success(t("toast.saved"));
+        // Analytics (forecast) is React-Query cached — refetch it so the new
+        // threshold shows up the next time the Analytics view opens.
+        queryClient.invalidateQueries({ queryKey: ["analytics"] });
+        // Refetch settings so `savedThreshold` absorbs the new value, then
+        // drop the override (no flicker: the override holds until data lands).
+        await settings.refetch();
+        setThresholdOverride(null);
+      } else {
+        // save rejected — snap the slider back to the persisted value
+        setThresholdOverride(null);
+        toast.error(t("toast.save_failed"));
+      }
+    } catch {
+      setThresholdOverride(null);
+      toast.error(t("toast.save_failed"));
+    }
   };
   if (settings.isLoading || !org) return <Skeleton className="h-48 w-full" />;
   return (
-    <Card><CardContent className="p-4 grid grid-cols-2 gap-3 max-w-xl">
-      <div className="space-y-1 col-span-2"><Label className="text-xs">Organization name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
-      <div className="space-y-1"><Label className="text-xs">Locale</Label>
-        <Select value={locale} onValueChange={setLocale}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["hy", "ru", "en"].map((l) => <SelectItem key={l} value={l}>{l === "hy" ? "Հայերեն" : l === "ru" ? "Русский" : "English"}</SelectItem>)}</SelectContent></Select>
-      </div>
-      <div className="space-y-1"><Label className="text-xs">Timezone</Label><Input value={timezone} onChange={(e) => setTimezone(e.target.value)} /></div>
-      <div className="space-y-1"><Label className="text-xs">Currency</Label><Input value={currency} onChange={(e) => setCurrency(e.target.value)} /></div>
-      <div className="col-span-2"><Button size="sm" onClick={save}><Save className="h-3.5 w-3.5 mr-1.5" />Save</Button></div>
-    </CardContent></Card>
+    <div className="space-y-4 max-w-xl">
+      <Card><CardContent className="p-4 grid grid-cols-2 gap-3">
+        <div className="space-y-1 col-span-2"><Label className="text-xs">{t("settings.org.name")}</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
+        <div className="space-y-1"><Label className="text-xs">{t("settings.org.locale")}</Label>
+          <Select value={locale} onValueChange={setLocale}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["hy", "ru", "en"].map((l) => <SelectItem key={l} value={l}>{l === "hy" ? "Հայերեն" : l === "ru" ? "Русский" : "English"}</SelectItem>)}</SelectContent></Select>
+        </div>
+        <div className="space-y-1"><Label className="text-xs">{t("settings.org.timezone")}</Label><Input value={timezone} onChange={(e) => setTimezone(e.target.value)} /></div>
+        <div className="space-y-1"><Label className="text-xs">{t("settings.org.currency")}</Label><Input value={currency} onChange={(e) => setCurrency(e.target.value)} /></div>
+        <div className="col-span-2"><Button size="sm" onClick={save}><Save className="h-3.5 w-3.5 mr-1.5" />{t("common.save")}</Button></div>
+      </CardContent></Card>
+      {/* v0.23: forecast commit threshold (was hardcoded 60% in analytics-service) */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <Label className="text-xs">{t("settings.org.forecast_commit")}</Label>
+            <span className="text-sm font-bold tabular-nums text-primary">{commitThreshold}%</span>
+          </div>
+          <Slider
+            value={[commitThreshold]}
+            min={10}
+            max={95}
+            step={5}
+            onValueChange={(v: number[]) => setThresholdOverride(v[0] ?? 60)}
+            onValueCommit={(v: number[]) => saveThreshold(v[0] ?? 60)}
+            aria-label={t("settings.org.forecast_commit")}
+          />
+          <p className="text-[11px] leading-relaxed text-muted-foreground">{t("settings.org.forecast_commit_hint")}</p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

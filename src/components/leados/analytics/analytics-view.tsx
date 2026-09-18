@@ -346,6 +346,7 @@ type Forecast = {
   weightedTotal: number;
   bestCase: number;
   commit: number;
+  commitThreshold?: number;
   empiricalCoverage: number;
   runRate?: { last7Wins: number; last7Value: number; weeklyValue: number; weeklyCount: number } | null;
 };
@@ -353,6 +354,7 @@ type Forecast = {
 function ForecastCard({ forecast }: { forecast: Forecast }) {
   const { t } = useLocale();
   const { weightedTotal, bestCase, commit, stages, empiricalCoverage } = forecast;
+  const commitThreshold = forecast.commitThreshold ?? 60;
   // Position markers for the range bar (0..100% of bestCase).
   const pct = (v: number) => (bestCase > 0 ? Math.min(100, Math.max(0, Math.round((v / bestCase) * 100))) : 0);
   const hasData = stages.some((s) => s.count > 0);
@@ -389,13 +391,13 @@ function ForecastCard({ forecast }: { forecast: Forecast }) {
                   <div className="relative h-3 rounded-full bg-muted overflow-visible">
                     <div className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 via-primary to-violet-400" style={{ width: `${pct(weightedTotal)}%` }} />
                     {[
-                      { v: commit, cls: "bg-emerald-500", lbl: t("analytics.forecast.commit") },
-                      { v: weightedTotal, cls: "bg-primary", lbl: t("analytics.forecast.weighted") },
-                      { v: bestCase, cls: "bg-violet-400", lbl: t("analytics.forecast.best") },
+                      { v: commit, cls: "bg-emerald-500", lbl: t("analytics.forecast.commit"), isCommit: true },
+                      { v: weightedTotal, cls: "bg-primary", lbl: t("analytics.forecast.weighted"), isCommit: false },
+                      { v: bestCase, cls: "bg-violet-400", lbl: t("analytics.forecast.best"), isCommit: false },
                     ].map((m) => (
-                      <div key={m.lbl} className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center" style={{ left: `${Math.max(2, Math.min(98, pct(m.v)))}%` }}>
+                      <div key={m.lbl} className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center" style={{ left: `${Math.max(2, Math.min(98, pct(m.v)))}%` }} title={m.isCommit ? t("analytics.forecast.commit_hint", { threshold: commitThreshold }) : undefined}>
                         <span className={cn("h-4 w-1 rounded-full", m.cls)} />
-                        <span className="mt-1 text-[9px] text-muted-foreground whitespace-nowrap hidden sm:block">{m.lbl}</span>
+                        <span className="mt-1 text-[9px] text-muted-foreground whitespace-nowrap hidden sm:block">{m.lbl}{m.isCommit && <span className="text-emerald-600/80 dark:text-emerald-400/80"> ≥{commitThreshold}%</span>}</span>
                       </div>
                     ))}
                   </div>

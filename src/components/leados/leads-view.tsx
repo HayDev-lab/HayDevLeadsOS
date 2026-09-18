@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLeads, useSources, useUsers, usePipeline, useTags, useArchiveLead, useBulkLeads, useRestoreLead, type LeadsQuery } from "@/hooks/leados/use-api";
 import { useSavedFilters } from "@/hooks/leados/use-saved-filters";
 import { useLocale } from "@/lib/leados/locale";
@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, Download, Filter, Plus, Search, X, Archive, Upload, Star, Bookmark } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Filter, Plus, Search, X, Archive, Upload, Star, Bookmark, UserX, Users } from "lucide-react";
 import { LeadFormDialog } from "./lead-form-dialog";
 import { DuplicatesScanner } from "./duplicates-scanner";
 import { ImportDialog } from "./import-dialog";
@@ -25,28 +25,37 @@ import { toast } from "sonner";
 import { DEFAULT_SLA_THRESHOLDS, SLA_STATUS, type SlaThresholds } from "@/lib/sla";
 import { DEFAULT_FOLLOWUP_SLA_CONFIG, FOLLOWUP_SLA_STATUS, type FollowUpSlaConfig } from "@/lib/sla-followup";
 import { STAGE_INACTIVITY_STATUS, humanizeDuration } from "@/lib/sla-stage-inactivity";
+import { loadLeadsState, saveLeadsState, clearLeadsState, type LeadsListState } from "@/lib/leados/list-state";
 
 const SLA_SORT_DEFAULT = "sla:priority";
 
 export function LeadsView() {
   const { t } = useLocale();
   const [route, navigate] = useHashRoute();
-  const [q, setQ] = useState("");
-  const [sourceId, setSourceId] = useState("");
-  const [ownerId, setOwnerId] = useState("");
-  const [stageId, setStageId] = useState("");
-  const [priority, setPriority] = useState<string[]>([]);
-  const [overdue, setOverdue] = useState(route.params.overdue === "1");
-  const [unassigned, setUnassigned] = useState(false);
-  const [slaFilter, setSlaFilter] = useState(route.params.sla === "BREACH" ? "BREACH" : "");
+  // v0.23 LIST-STATE RESTORE: filters/sort survive leads → detail → back.
+  // Route params (explicit deep links like #/leads?overdue=1) are applied
+  // AFTER the snapshot so navigation intent always wins.
+  const restoredRef = useRef<{ done: boolean; snap: Partial<LeadsListState> | null }>({ done: false, snap: null });
+  if (!restoredRef.current.done) {
+    restoredRef.current = { done: true, snap: loadLeadsState() };
+  }
+  const snap = restoredRef.current.snap;
+  const [q, setQ] = useState(snap?.q ?? "");
+  const [sourceId, setSourceId] = useState(snap?.sourceId ?? "");
+  const [ownerId, setOwnerId] = useState(snap?.ownerId ?? "");
+  const [stageId, setStageId] = useState(snap?.stageId ?? "");
+  const [priority, setPriority] = useState<string[]>(snap?.priority ?? []);
+  const [overdue, setOverdue] = useState(route.params.overdue === "1" ? true : snap?.overdue ?? false);
+  const [unassigned, setUnassigned] = useState(snap?.unassigned ?? false);
+  const [slaFilter, setSlaFilter] = useState(route.params.sla === "BREACH" ? "BREACH" : snap?.slaFilter ?? "");
   const [followUpFilter, setFollowUpFilter] = useState(
-    route.params.followUp ? String(route.params.followUp).toUpperCase() : ""
+    route.params.followUp ? String(route.params.followUp).toUpperCase() : snap?.followUpFilter ?? ""
   );
   const [stageHealthFilter, setStageHealthFilter] = useState(
-    route.params.stageHealth ? String(route.params.stageHealth).toUpperCase() : ""
+    route.params.stageHealth ? String(route.params.stageHealth).toUpperCase() : snap?.stageHealthFilter ?? ""
   );
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState(SLA_SORT_DEFAULT);
+  const [sort, setSort] = useState(snap?.sort ?? SLA_SORT_DEFAULT);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -63,6 +72,12 @@ export function LeadsView() {
     window.addEventListener("leados:new-lead", fn);
     return () => window.removeEventListener("leados:new-lead", fn);
   }, []);
+
+  // v0.23: persist the filter context (not page/selection — those are
+  // transient) so returning from a lead detail restores the working list.
+  useEffect(() => {
+    saveLeadsState({ q, sourceId, ownerId, stageId, priority, overdue, unassigned, slaFilter, followUpFilter, stageHealthFilter, sort, showArchived });
+  }, [q, sourceId, ownerId, stageId, priority, overdue, unassigned, slaFilter, followUpFilter, stageHealthFilter, sort, showArchived]);
 
   const sources = useSources();
   const users = useUsers();
@@ -97,7 +112,7 @@ export function LeadsView() {
   const stages = pipeline.data?.pipelines?.[0]?.stages ?? [];
 
   const togglePriority = (p: string) => setPriority((cur) => cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]);
-  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setSlaFilter(""); setFollowUpFilter(""); setStageHealthFilter(""); setPage(1); };
+  const reset = () => { setQ(""); setSourceId(""); setOwnerId(""); setStageId(""); setPriority([]); setOverdue(false); setUnassigned(false); setSlaFilter(""); setFollowUpFilter(""); setStageHealthFilter(""); setPage(1); clearLeadsState(); };
   const hasFilters = q || sourceId || ownerId || stageId || priority.length || overdue || unassigned || slaFilter || followUpFilter || stageHealthFilter;
 
   const toggleSelect = (id: string) => setSelected((cur) => {
@@ -113,28 +128,28 @@ export function LeadsView() {
   const bulkArchive = async () => {
     try {
       const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "archive" });
-      toast.success(`Archived ${res.updated} lead(s)`);
+      toast.success(t("toast.bulk_archived", { n: res.updated }));
       setSelected(new Set());
     } catch (e) { toast.error((e as Error).message); }
   };
   const bulkAssign = async (ownerId: string) => {
     try {
       const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "assign", ownerId });
-      toast.success(`Assigned ${res.updated} lead(s)`);
+      toast.success(t("toast.bulk_assigned", { n: res.updated }));
       setSelected(new Set());
     } catch (e) { toast.error((e as Error).message); }
   };
   const bulkStage = async (stageId: string) => {
     try {
       const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "stage", stageId });
-      toast.success(`Moved ${res.updated} lead(s)`);
+      toast.success(t("toast.bulk_moved", { n: res.updated }));
       setSelected(new Set());
     } catch (e) { toast.error((e as Error).message); }
   };
   const bulkPriority = async (priority: string) => {
     try {
       const res = await bulk.mutateAsync({ ids: Array.from(selected), action: "priority", priority });
-      toast.success(`Updated ${res.updated} lead(s)`);
+      toast.success(t("toast.bulk_priority", { n: res.updated }));
       setSelected(new Set());
     } catch (e) { toast.error((e as Error).message); }
   };
@@ -158,7 +173,7 @@ export function LeadsView() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t("leads.title")}</h1>
-          <p className="text-sm text-muted-foreground">{leads.data ? `${leads.data.total} total` : ""}</p>
+          <p className="text-sm text-muted-foreground">{leads.data ? t("leads.total_count", { n: leads.data.total }) : ""}</p>
         </div>
         <div className="flex items-center gap-2">
           <DuplicatesScanner />
@@ -205,7 +220,7 @@ export function LeadsView() {
           </Select>
           <div className="flex items-center gap-1">
             {(Object.keys(PRIORITY) as string[]).map((p) => (
-              <button key={p} onClick={() => { togglePriority(p); setPage(1); }} title={t(`priority.${p.toLowerCase()}` as Parameters<typeof t>[0])} className={cn("h-9 px-2 rounded-md text-xs font-medium border transition", priority.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-accent")}>{t(`priority.${p.toLowerCase()}` as Parameters<typeof t>[0])}</button>
+              <button key={p} onClick={() => { togglePriority(p); setPage(1); }} title={t(`priority.${p.toLowerCase()}` as Parameters<typeof t>[0])} className={cn("h-9 px-2 rounded-md text-xs font-medium border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60", priority.includes(p) ? "bg-primary text-primary-foreground border-primary" : "bg-background hover:bg-accent")}>{t(`priority.${p.toLowerCase()}` as Parameters<typeof t>[0])}</button>
             ))}
           </div>
           <Select value={slaFilter} onValueChange={(v) => { setSlaFilter(v === "__all" ? "" : v); setPage(1); }}>
@@ -252,7 +267,7 @@ export function LeadsView() {
             </SelectContent>
           </Select>
           <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
-            <SelectTrigger className="w-40 h-9 text-xs" aria-label="Sort">
+            <SelectTrigger className="w-40 h-9 text-xs" aria-label={t("common.sort_label")}>
               <SelectValue placeholder={t("sla.sort.priority")} />
             </SelectTrigger>
             <SelectContent>
@@ -265,8 +280,8 @@ export function LeadsView() {
               <SelectItem value="estimatedValue:desc">{t("common.sort.value")}</SelectItem>
             </SelectContent>
           </Select>
-          <button onClick={() => { setUnassigned((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", unassigned ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300" : "bg-background hover:bg-accent")}>👤 {t("leads.filter.unassigned")}</button>
-          <button onClick={() => { setShowArchived((v) => !v); setPage(1); }} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5", showArchived ? "bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300" : "bg-background hover:bg-accent")}>📦 Archived</button>
+          <button onClick={() => { setUnassigned((v) => !v); setPage(1); }} title={t("leads.filter.unassigned")} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60", unassigned ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300" : "bg-background hover:bg-accent")}><UserX className="h-3.5 w-3.5" />{t("leads.filter.unassigned")}</button>
+          <button onClick={() => { setShowArchived((v) => !v); setPage(1); }} title={t("leads.archived")} className={cn("h-9 px-3 rounded-md text-xs font-medium border transition flex items-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60", showArchived ? "bg-zinc-200 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300" : "bg-background hover:bg-accent")}><Archive className="h-3.5 w-3.5" />{t("leads.archived")}</button>
           {hasFilters && <Button variant="ghost" size="sm" onClick={reset}><X className="h-3.5 w-3.5 mr-1" />{t("common.clear")}</Button>}
         </div>
         {/* saved filters bar */}
@@ -308,11 +323,11 @@ export function LeadsView() {
                       if (e.key === "Enter" && saveName.trim()) {
                         savedFilters.add(saveName, { q, sourceId, ownerId, stageId, priority, overdue, unassigned });
                         setSaveName(""); setSavePromptOpen(false);
-                        toast.success("Filter saved");
+                        toast.success(t("toast.filter_saved"));
                       }
                       if (e.key === "Escape") { setSavePromptOpen(false); setSaveName(""); }
                     }}
-                    placeholder="Filter name…"
+                    placeholder={t("leads.filter_name")}
                     className="h-7 w-32 text-xs"
                   />
                   <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { setSavePromptOpen(false); setSaveName(""); }}>✕</Button>
@@ -322,7 +337,7 @@ export function LeadsView() {
                   onClick={() => setSavePromptOpen(true)}
                   className="inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent transition"
                 >
-                  <Plus className="h-3 w-3" />Save current
+                  <Plus className="h-3 w-3" />{t("leads.save_current")}
                 </button>
               )
             )}
@@ -332,28 +347,28 @@ export function LeadsView() {
 
       {/* bulk bar */}
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-primary/5 px-3 py-2.5 text-sm shadow-sm">
+        <div className="leados-bulk-in flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-sm shadow-sm">
           <span className="font-medium flex items-center gap-2">
             <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary text-primary-foreground text-xs font-bold">{selected.size}</span>
-            selected
+            {t("bulk.selected")}
           </span>
           <div className="flex flex-wrap gap-2">
             <Select onValueChange={(v) => v !== "__none" && bulkAssign(v)}>
-              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Assign to…" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder={t("bulk.assign_to")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">—</SelectItem>
                 {(users.data?.rows ?? []).map((u: any) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select onValueChange={(v) => v !== "__none" && bulkStage(v)}>
-              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Move to stage…" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder={t("bulk.move_to_stage")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">—</SelectItem>
                 {stages.map((s: any) => <SelectItem key={s.id} value={s.id} title={s.name}>{localizeStageName(t, s.name)}</SelectItem>)}
               </SelectContent>
             </Select>
             <Select onValueChange={(v) => v !== "__none" && bulkPriority(v)}>
-              <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder="Priority…" /></SelectTrigger>
+              <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder={t("bulk.priority")} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">—</SelectItem>
                 <SelectItem value="LOW">{t("priority.low")}</SelectItem>
@@ -386,7 +401,7 @@ export function LeadsView() {
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.owner")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("followup.label")}</th>
                 <th className="text-left font-medium px-3 py-2.5">{t("leads.col.created")}</th>
-                {showArchived && <th className="text-left font-medium px-3 py-2.5">Actions</th>}
+                {showArchived && <th className="text-left font-medium px-3 py-2.5">{t("common.actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -463,16 +478,28 @@ export function LeadsView() {
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs"
-                          onClick={(e) => { e.stopPropagation(); restore.mutate(l.id, { onSuccess: () => toast.success("Lead restored") }); }}
+                          onClick={(e) => { e.stopPropagation(); restore.mutate(l.id, { onSuccess: () => toast.success(t("toast.lead_restored")) }); }}
                           disabled={restore.isPending}
-                        >↩ Restore</Button>
+                        >{t("leads.restore")}</Button>
                       </td>
                     )}
                   </tr>
                 );
               })}
               {!leads.isLoading && (leads.data?.rows ?? []).length === 0 && (
-                <tr><td colSpan={showArchived ? 13 : 12} className="px-6 py-12 text-center text-sm text-muted-foreground">{hasFilters ? "No leads match your filters." : "No leads yet. Create one or import a CSV."}</td></tr>
+                <tr><td colSpan={showArchived ? 13 : 12} className="px-6 py-4">
+                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+                    <div className="rounded-full bg-muted p-3">
+                      <Users className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <p className="text-sm font-medium">{hasFilters ? t("leads.empty_filtered") : t("leads.empty")}</p>
+                    {hasFilters ? (
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={reset}><X className="h-3 w-3 mr-1" />{t("common.clear")}</Button>
+                    ) : (
+                      <Button size="sm" className="h-7 text-xs" onClick={() => setNewLeadOpen(true)}><Plus className="h-3 w-3 mr-1" />{t("leads.new")}</Button>
+                    )}
+                  </div>
+                </td></tr>
               )}
             </tbody>
           </table>
@@ -482,10 +509,11 @@ export function LeadsView() {
       {/* pagination */}
       {leads.data && leads.data.pages > 1 && (
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Page {leads.data.page} of {leads.data.pages} · {leads.data.total} leads</span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}><ChevronLeft className="h-4 w-4" /></Button>
-            <Button variant="outline" size="sm" disabled={page >= leads.data.pages} onClick={() => setPage((p) => p + 1)}><ChevronRight className="h-4 w-4" /></Button>
+          <span className="text-xs text-muted-foreground">{t("leads.pagination", { page: leads.data.page, pages: leads.data.pages, total: leads.data.total })}</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} title={t("common.prev") || "‹"} aria-label={t("common.prev")}><ChevronLeft className="h-4 w-4" /></Button>
+            <span className="text-xs font-medium tabular-nums text-muted-foreground md:hidden">{leads.data.page} / {leads.data.pages}</span>
+            <Button variant="outline" size="sm" disabled={page >= leads.data.pages} onClick={() => setPage((p) => p + 1)} aria-label={t("common.next") || "›"}><ChevronRight className="h-4 w-4" /></Button>
           </div>
         </div>
       )}

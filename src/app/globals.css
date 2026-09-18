@@ -150,6 +150,14 @@
 }
 .leados-fade-in { animation: leados-fade-in 0.28s ease-out both; }
 
+/* Bulk-action bar entrance (v0.23): slides down + fades so the appearance
+ * of the selection toolbar reads as a deliberate affordance, not a jump. */
+@keyframes leados-bulk-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.leados-bulk-in { animation: leados-bulk-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
 /* Card hover lift */
 .leados-lift { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
 .leados-lift:hover { transform: translateY(-2px); }

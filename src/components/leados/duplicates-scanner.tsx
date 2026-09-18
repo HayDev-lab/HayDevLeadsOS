@@ -25,7 +25,7 @@ export function DuplicatesScanner({ children }: { children?: ReactNode }) {
         {children ?? (
           <Button variant="outline" size="sm">
             <ScanSearch className="h-4 w-4 mr-1.5" />
-            Find duplicates
+            {t("dup.find")}
             {scan.data && scan.data.total > 0 && (
               <span className="ml-1.5 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold">
                 {scan.data.total}
@@ -38,7 +38,7 @@ export function DuplicatesScanner({ children }: { children?: ReactNode }) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ScanSearch className="h-5 w-5 text-amber-500" />
-            Duplicate Lead Scanner
+            {t("dup.title")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 py-2">
@@ -46,16 +46,15 @@ export function DuplicatesScanner({ children }: { children?: ReactNode }) {
           {!scan.isLoading && scan.data && (
             <>
               <p className="text-xs text-muted-foreground">
-                Scanned {scan.data.leadsScanned} active leads · found <span className="font-semibold text-foreground">{scan.data.total}</span> duplicate group(s).
-                Matches are based on normalized phone or email.
+                {t("dup.scan_summary", { scanned: scan.data.leadsScanned, total: scan.data.total })}{" "}{t("dup.scan_hint")}
               </p>
               {scan.data.total === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <div className="rounded-full bg-emerald-100 dark:bg-emerald-950/40 p-3 mb-3">
                     <AlertTriangle className="h-6 w-6 text-emerald-600" />
                   </div>
-                  <p className="text-sm font-medium">No duplicates found</p>
-                  <p className="text-xs text-muted-foreground mt-1">All leads have unique phone numbers and emails.</p>
+                  <p className="text-sm font-medium">{t("dup.none_title")}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t("dup.none_hint")}</p>
                 </div>
               )}
               {scan.data.groups.map((g: any) => (
@@ -79,7 +78,7 @@ function DuplicateGroup({ group, onClose }: { group: any; onClose: () => void })
     setBusy(true);
     try {
       await merge.mutateAsync(sourceId);
-      toast.success("Leads merged successfully");
+      toast.success(t("toast.leads_merged"));
       onClose();
       navigate("lead", { id: targetId });
     } catch (e) {
@@ -93,9 +92,9 @@ function DuplicateGroup({ group, onClose }: { group: any; onClose: () => void })
     <div className="rounded-xl border border-amber-300/40 dark:border-amber-900/50 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-amber-50/60 dark:bg-amber-950/20 border-b border-amber-200/50 dark:border-amber-900/50">
         <Copy className="h-3.5 w-3.5 text-amber-600" />
-        <span className="text-xs font-medium">Matched by {group.reason}</span>
+        <span className="text-xs font-medium">{t("dup.matched_by", { reason: t(`dup.reason.${group.reason}` as Parameters<typeof t>[0]) })}</span>
         <Badge variant="outline" className="text-[10px] font-mono px-1 py-0">{group.matchValue}</Badge>
-        <span className="text-[10px] text-muted-foreground ml-auto">{group.leads.length} leads</span>
+        <span className="text-[10px] text-muted-foreground ml-auto">{t("dup.leads_count", { n: group.leads.length })}</span>
       </div>
       <div className="divide-y">
         {group.leads.map((l: any, i: number) => (
@@ -108,7 +107,7 @@ function DuplicateGroup({ group, onClose }: { group: any; onClose: () => void })
             {l.stage && <Badge variant="outline" className="text-[9px] px-1 py-0" title={l.stage.name}>{localizeStageName(t, l.stage.name)}</Badge>}
             <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(l.createdAt)}</span>
             {i === 0 ? (
-              <span className="text-[10px] font-semibold text-emerald-600 px-1.5">KEEP</span>
+              <span className="text-[10px] font-semibold text-emerald-600 px-1.5">{t("dup.keep")}</span>
             ) : (
               <Button
                 size="sm"
@@ -117,7 +116,7 @@ function DuplicateGroup({ group, onClose }: { group: any; onClose: () => void })
                 onClick={() => doMerge(group.leads[0].id, l.id)}
                 disabled={busy}
               >
-                <GitMerge className="h-3 w-3 mr-1" />Merge into ↑
+                <GitMerge className="h-3 w-3 mr-1" />{t("dup.merge_into")}
               </Button>
             )}
           </div>

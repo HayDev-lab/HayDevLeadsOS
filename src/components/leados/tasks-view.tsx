@@ -44,7 +44,7 @@ export function TasksView() {
     } catch (e) { toast.error((e as Error).message); }
   };
   const remove = async (id: string) => {
-    try { await del.mutateAsync(id); toast.success("Task deleted"); } catch (e) { toast.error((e as Error).message); }
+    try { await del.mutateAsync(id); toast.success(t("toast.task_deleted")); } catch (e) { toast.error((e as Error).message); }
   };
 
   return (
