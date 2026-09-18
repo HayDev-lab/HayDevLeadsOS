@@ -1,0 +1,35 @@
+# HAYDEV LEADOS — PRODUCTION REVERSE PROXY (v0.19.2 hardening §21–22).
+#
+# FIXED upstream: the Next.js standalone server on localhost:3000.
+#   • NO user-controlled ports (no query-string port routing)
+#   • NO dynamic query-interpolated upstreams
+#   • NO generic localhost pivot that could proxy arbitrary local services
+# Those capabilities exist ONLY in Caddyfile.dev — the sandbox development
+# gateway used to route to local mini-services during development. They must
+# NEVER ship to production. A guard test (tests/deployment-config.test.ts)
+# (guard: tests/deployment-config.test.ts) keeps this file fixed.
+#
+# Deploy:
+#   1. Set LEADOS_DOMAIN (e.g. leads.example.com) and point DNS at this host.
+#   2. caddy run --config Caddyfile.production   (Caddy provisions TLS
+#      automatically for public domains; use `caddy fmt` to validate).
+#   3. The app itself: bun .next/standalone/server.js (see README Deploy).
+
+{$LEADOS_DOMAIN} {
+	encode zstd gzip
+
+	# Edge security headers (complement the in-app headers from src/proxy.ts).
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	reverse_proxy localhost:3000 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+}

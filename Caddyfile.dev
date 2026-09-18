@@ -1,0 +1,33 @@
+# HAYDEV LEADOS — DEVELOPMENT (SANDBOX) GATEWAY ONLY (v0.19.2 §21).
+#
+# ⚠️ DEVELOPMENT-ONLY — DO NOT SHIP TO PRODUCTION ⚠️
+# This is the sandbox platform's dev gateway: it routes ?XTransformPort=<port>
+# to local mini-services (websocket demos etc.) during development. The
+# user-controlled port pivot is UNACCEPTABLE in production — production uses
+# Caddyfile.production (fixed localhost:3000 upstream only). The guard test
+# tests/deployment-config.test.ts asserts the production file contains none
+# of: XTransformPort / {query. / localhost:{query
+
+:81 {
+	@transform_port_query {
+		query XTransformPort=*
+	}
+
+	handle @transform_port_query {
+		reverse_proxy localhost:{query.XTransformPort} {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy localhost:3000 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+}
