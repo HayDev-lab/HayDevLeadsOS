@@ -27,6 +27,20 @@ export async function register(): Promise<void> {
     );
   }
 
+  // v0.19.3 — DEMO ISOLATION INVARIANT (fail fast, never silently unsafe):
+  // demo mode issues anonymous OWNER sessions scoped to isDemo orgs. It must
+  // never boot against a database that also holds real (non-demo)
+  // organizations — that would mix a public demo with customer data.
+  if (process.env.LEADOS_DEMO === "true") {
+    const { checkDemoIsolation } = await import("./lib/leados/demo-policy");
+    const { db } = await import("./lib/db");
+    const nonDemoOrgs = await db.organization.count({ where: { isDemo: false } });
+    const check = checkDemoIsolation(nonDemoOrgs);
+    if (!check.ok) {
+      throw new Error(`[LEADOS-BOOT] fatal: ${check.reason}`);
+    }
+  }
+
   if (process.env.WORKER_SCHEDULER_ENABLED === "false") {
     console.log("[LEADOS-BOOT] scheduler disabled via WORKER_SCHEDULER_ENABLED=false");
     return;

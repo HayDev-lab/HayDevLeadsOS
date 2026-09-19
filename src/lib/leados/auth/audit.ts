@@ -9,6 +9,7 @@
 // actorType with actorUserId null.
 
 import { db } from "@/lib/db";
+import { clientIp } from "./rate-limit";
 
 export const AUDIT_ACTOR = {
   USER: "USER",
@@ -85,9 +86,10 @@ export async function recordAudit(input: AuditInput): Promise<void> {
 
 /** Standard request metadata for audit rows issued from route handlers. */
 export function requestMeta(req: Request): { ip: string; userAgent: string | null } {
-  const fwd = req.headers.get("x-forwarded-for");
+  // v0.19.3: same trust boundary as clientIp() — never trust the first
+  // client-supplied XFF hop for the audit identity.
   return {
-    ip: (fwd ? fwd.split(",")[0].trim() : null) ?? req.headers.get("x-real-ip") ?? "unknown",
+    ip: clientIp(req),
     userAgent: req.headers.get("user-agent"),
   };
 }

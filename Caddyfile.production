@@ -30,6 +30,11 @@
 
 	reverse_proxy localhost:3000 {
 		header_up X-Forwarded-Proto {scheme}
+		# TRUST BOUNDARY (v0.19.3): both identity headers are OVERWRITTEN with
+		# the real remote host. A client-supplied X-Forwarded-For / X-Real-IP
+		# never survives the proxy, so the app's clientIp() (rate limiting,
+		# audit metadata) cannot be spoofed via forged headers.
+		header_up X-Forwarded-For {remote_host}
 		header_up X-Real-IP {remote_host}
 	}
 }

@@ -189,7 +189,9 @@ export function signWebhookBody(body: string, secret: string): string {
   return createHmac("sha256", secret).update(body, "utf8").digest("hex");
 }
 
-const realWebhookProvider: WebhookProvider = {
+// Exported for security regression tests: prove the send-time SSRF guard
+// runs even when demo mode would otherwise swap in the demo provider.
+export const realWebhookProvider: WebhookProvider = {
   mode: "REAL",
   async send(input) {
     // DEFENSE IN DEPTH (spec 54): re-validate right before the fetch — even a

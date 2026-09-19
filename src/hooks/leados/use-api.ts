@@ -852,31 +852,34 @@ export function useWebhookEvents(event?: string, limit?: number) {
     queryFn: () => api.get<{ rows: any[]; byEvent: Record<string, number>; total: number }>(`/webhooks/events?${p.toString()}`),
   });
 }
+// v0.19.3 security hotfix: all webhook-endpoint management goes through the
+// canonical /integrations/webhooks API (SSRF-validated, org-scoped, audited,
+// secrets never echoed — the removed legacy endpoints API is gone for good).
 export function useWebhookEndpoints() {
   return useQuery({
     queryKey: ["webhook-endpoints"],
-    queryFn: () => api.get<{ rows: any[] }>("/webhooks/endpoints"),
+    queryFn: () => api.get<{ rows: any[] }>("/integrations/webhooks"),
   });
 }
 export function useCreateWebhookEndpoint() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { name: string; url: string; secret?: string; events?: string; enabled?: boolean }) =>
-      api.post<{ endpoint: any }>("/webhooks/endpoints", body),
+      api.post<{ endpoint: any }>("/integrations/webhooks", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-endpoints"] }),
   });
 }
 export function useDeleteWebhookEndpoint() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/webhooks/endpoints/${id}`),
+    mutationFn: (id: string) => api.del<{ ok: boolean }>(`/integrations/webhooks/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-endpoints"] }),
   });
 }
 export function useTestWebhookEndpoint() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ ok: boolean; status?: number; error?: string }>(`/webhooks/endpoints/${id}/test`, {}),
+    mutationFn: (id: string) => api.post<{ ok: boolean; status?: number; error?: string }>(`/integrations/webhooks/${id}/test`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-endpoints"] }),
   });
 }

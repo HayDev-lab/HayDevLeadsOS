@@ -9,6 +9,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { ok, forbidden, badRequest, tooMany, apiError, validate, parseJson } from "@/lib/leados/api";
+import { isDemoMode } from "@/lib/leados/context";
 import { hashPassword, validatePasswordPolicy } from "@/lib/leados/auth/password";
 import { createSession, setSessionCookie } from "@/lib/leados/auth/session-store";
 import { actionLimiter, clientIp } from "@/lib/leados/auth/rate-limit";
@@ -34,6 +35,13 @@ function slugify(input: string): string {
 export async function POST(req: Request) {
   const meta = requestMeta(req);
   try {
+    // v0.19.3 DEMO ISOLATION: bootstrap mints a REAL (isDemo=false)
+    // organization with an OWNER account. Under LEADOS_DEMO=true that would
+    // create a real org beside anonymous demo-owner sessions — the exact
+    // mixed deployment the boot invariant refuses. Fail closed here too.
+    if (isDemoMode()) {
+      return forbidden("Bootstrap is disabled while the app runs in demo mode (LEADOS_DEMO=true).");
+    }
     if (!actionLimiter.checkRateLimit(`bootstrap:${clientIp(req)}`)) {
       return tooMany("Too many attempts. Try again later.");
     }

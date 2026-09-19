@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { ok, tooMany, apiError, validate, parseJson } from "@/lib/leados/api";
+import { isDemoMode } from "@/lib/leados/context";
 import { generateToken, hashToken } from "@/lib/leados/auth/tokens";
 import { actionLimiter, clientIp } from "@/lib/leados/auth/rate-limit";
 import { recordAudit, requestMeta, AUDIT_ACTIONS, AUDIT_ACTOR } from "@/lib/leados/auth/audit";
@@ -48,9 +49,17 @@ export async function POST(req: Request) {
           subject: "LeadOS password reset",
           text: `Reset your LeadOS password (link valid 1 hour, one-time use):\n${link}\n\nIf you did not request this, ignore this email.`,
         });
-      } else {
-        // No real email provider configured — self-hosted recovery path.
+      } else if (isDemoMode() || process.env.NODE_ENV !== "production") {
+        // No real email provider — self-hosted recovery path. SECURITY
+        // (v0.19.3): the one-time link may only reach the console in demo /
+        // development, where the log is the documented recovery mechanism.
         console.log(`[LEADOS][AUTH] password reset link for ${user.email}: ${link}`);
+      } else {
+        // Production without an email provider: log a pointer, NEVER the token.
+        console.log(
+          "[LEADOS][AUTH] password reset requested but no email provider is configured; " +
+            "use scripts/set-password.ts to set a password out-of-band."
+        );
       }
       await recordAudit({
         organizationId: user.organizationId,
