@@ -1,6 +1,7 @@
 // API helpers: typed JSON responses, zod validation, error handling, org-scoped helpers.
 
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { AuthRequiredError, ForbiddenError } from "./context";
 import { TenantGuardError } from "./tenant-guard";
@@ -40,9 +41,20 @@ export function tooMany(message = "Too many requests", retryAfterSec?: number) {
   );
 }
 
+/**
+ * SECURITY (v0.19.3 hotfix): the 5xx body NEVER carries internal error data
+ * (raw Error.message, Prisma/SQL internals, stack traces, file paths,
+ * provider internals). The client receives the canonical safe shape
+ * `{ error, requestId }`; the full internal error goes to server logs only,
+ * correlated by the same requestId.
+ */
 export function serverError(message: string, details?: unknown) {
-  console.error("[LEADOS] serverError", message, details);
-  return NextResponse.json({ error: message, details }, { status: 500 });
+  const requestId = randomUUID();
+  console.error(
+    `[LEADOS] serverError requestId=${requestId} code=${message}`,
+    details instanceof Error ? { name: details.name, message: details.message, stack: details.stack } : details
+  );
+  return NextResponse.json({ error: message, requestId }, { status: 500 });
 }
 
 /**
