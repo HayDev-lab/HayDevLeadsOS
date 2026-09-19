@@ -14,6 +14,13 @@
 export const DEFAULT_GRAPH_API_VERSION = "v26.0";
 export const GRAPH_BASE_URL = "https://graph.facebook.com";
 
+// BASIC DoS GUARD (v0.19.3 hotfix): Meta leadgen webhooks are tiny JSON
+// documents (< a few KB). Anything materially larger is not a legitimate
+// delivery — reject it BEFORE buffering the body. Signature verification
+// still runs on every accepted body, and the endpoint fast-ACKs; this limit
+// only bounds memory, it never throttles legitimate delivery frequency.
+export const META_WEBHOOK_MAX_BODY_BYTES = 1_000_000; // 1 MB
+
 export interface MetaConfig {
   appId: string | null;
   appSecret: string | null;

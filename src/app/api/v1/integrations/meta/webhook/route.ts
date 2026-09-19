@@ -11,7 +11,7 @@
 // connections; the payload NEVER supplies an org id.
 
 import { NextResponse } from "next/server";
-import { getMetaConfig } from "@/lib/integrations/meta/config";
+import { getMetaConfig, META_WEBHOOK_MAX_BODY_BYTES } from "@/lib/integrations/meta/config";
 import { verifyWebhookChallenge, verifyWebhookSignature, parseLeadgenChanges } from "@/lib/integrations/meta/webhook";
 import { persistLeadgenEvents } from "@/lib/leados/meta-service";
 
@@ -27,7 +27,21 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const cfg = getMetaConfig();
+
+  // 0) BASIC DoS GUARD (v0.19.3): reject oversized bodies before buffering.
+  //    Small body limit + signature verification + fast ACK + async worker —
+  //    no per-IP throttling that could block legitimate Meta delivery.
+  const lenHeader = req.headers.get("content-length");
+  if (lenHeader) {
+    const len = Number(lenHeader);
+    if (Number.isFinite(len) && len > META_WEBHOOK_MAX_BODY_BYTES) {
+      return NextResponse.json({ ok: false }, { status: 413 });
+    }
+  }
   const raw = await req.text();
+  if (Buffer.byteLength(raw, "utf8") > META_WEBHOOK_MAX_BODY_BYTES) {
+    return NextResponse.json({ ok: false }, { status: 413 });
+  }
 
   // 1) CURRENT authenticity verification — signature over the RAW body.
   try {
