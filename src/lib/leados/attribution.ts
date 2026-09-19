@@ -49,62 +49,8 @@ export async function recordAttribution(leadId: string, source: string | null, u
 }
 
 // --- CSV ---------------------------------------------------------------------
+// Moved to ./csv (v0.19.3 security hotfix): centralized formula-injection
+// defense (sanitizeCsvCell) + bounded import limits. Re-exported here so all
+// existing import sites keep working.
 
-export function parseCsv(text: string): { headers: string[]; rows: Record<string, string>[] } {
-  const lines = text.replace(/\r\n/g, "\n").split("\n").filter((l) => l.trim().length);
-  if (!lines.length) return { headers: [], rows: [] };
-  const headers = splitCsvLine(lines[0]);
-  const rows: Record<string, string>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitCsvLine(lines[i]);
-    const row: Record<string, string> = {};
-    headers.forEach((h, idx) => {
-      row[h] = (cells[idx] ?? "").trim();
-    });
-    rows.push(row);
-  }
-  return { headers, rows };
-}
-
-function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  let inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQ) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else inQ = false;
-      } else cur += ch;
-    } else {
-      if (ch === '"') inQ = true;
-      else if (ch === ",") {
-        out.push(cur);
-        cur = "";
-      } else cur += ch;
-    }
-  }
-  out.push(cur);
-  return out;
-}
-
-export function toCsv(rows: Record<string, unknown>[]): string {
-  if (!rows.length) return "";
-  const headers = Array.from(
-    rows.reduce((s, r) => {
-      Object.keys(r).forEach((k) => s.add(k));
-      return s;
-    }, new Set<string>())
-  );
-  const esc = (v: unknown) => {
-    const s = v == null ? "" : String(v);
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const lines = [headers.join(",")];
-  for (const r of rows) lines.push(headers.map((h) => esc(r[h])).join(","));
-  return lines.join("\n");
-}
+export { toCsv, parseCsv, sanitizeCsvCell } from "./csv";
