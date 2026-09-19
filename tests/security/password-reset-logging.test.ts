@@ -48,6 +48,11 @@ async function callForgotPassword(ip: string): Promise<Response> {
   );
 }
 
+/** process.env.NODE_ENV is typed read-only; runtime assignment still works. */
+function setNodeEnv(value: string | undefined) {
+  Object.assign(process.env, { NODE_ENV: value });
+}
+
 beforeAll(async () => {
   // never let a REAL provider intercept the flow under test
   delete process.env.EMAIL_PROVIDER;
@@ -71,8 +76,8 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  process.env.NODE_ENV = savedEnv.NODE_ENV;
-  process.env.LEADOS_DEMO = savedEnv.LEADOS_DEMO;
+  setNodeEnv(savedEnv.NODE_ENV);
+  Object.assign(process.env, { LEADOS_DEMO: savedEnv.LEADOS_DEMO });
 });
 
 afterAll(async () => {
@@ -99,8 +104,8 @@ describe("forgot-password — reset link logging policy", () => {
   });
 
   test("production: the token NEVER reaches the log — a safe pointer does", async () => {
-    process.env.NODE_ENV = "production";
-    process.env.LEADOS_DEMO = "";
+    setNodeEnv("production");
+    Object.assign(process.env, { LEADOS_DEMO: "" });
     const spy = spyConsoleLog();
     try {
       const res = await callForgotPassword(`198.51.100.${Math.floor(Math.random() * 200)}`);
@@ -115,8 +120,8 @@ describe("forgot-password — reset link logging policy", () => {
   });
 
   test("a fresh hashed token row exists either way (flow unaffected)", async () => {
-    process.env.NODE_ENV = "production";
-    process.env.LEADOS_DEMO = "";
+    setNodeEnv("production");
+    Object.assign(process.env, { LEADOS_DEMO: "" });
     await callForgotPassword("198.51.100.77");
     const rows = await db.passwordResetToken.findMany({
       where: { user: { email: EMAIL } },
