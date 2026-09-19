@@ -65,7 +65,7 @@ describe("toCsv — exported cells cannot execute as formulas", () => {
       for (const cell of line.split(",")) {
         const t = cell.trim().replace(/^"|"$/g, "").trimStart();
         if (t.startsWith("'")) continue; // neutralized — good
-        expect([">", "+", "-", "@"]).not.toContain(t[0]);
+        expect(["=", "+", "-", "@"]).not.toContain(t[0]);
       }
     }
     expect(csv).toContain("'=HYPERLINK");
