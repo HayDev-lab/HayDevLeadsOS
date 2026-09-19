@@ -119,8 +119,22 @@ export const actionLimiter = new RateLimiter({
   maxLockMs: 30 * 60_000,
 });
 
+/**
+ * TRUST BOUNDARY (v0.19.3 security hotfix): production runs behind Caddy
+ * (Caddyfile.production), which OVERWRITES both `x-real-ip` and
+ * `x-forwarded-for` with the real remote host before the request reaches
+ * this process. Inside that boundary `x-real-ip` is authoritative; the LAST
+ * `x-forwarded-for` entry is the hop added by the nearest trusted proxy.
+ * The FIRST XFF entry is client-controlled — trusting it let an attacker
+ * rotate its per-IP rate-limit identity at will (audit finding #4).
+ */
 export function clientIp(req: Request): string {
+  const real = req.headers.get("x-real-ip")?.trim();
+  if (real) return real;
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return req.headers.get("x-real-ip") ?? "unknown";
+  if (fwd) {
+    const hops = fwd.split(",").map((s) => s.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1];
+  }
+  return "unknown";
 }
